@@ -1,0 +1,14 @@
+services:
+  jvm:
+    build:
+      context: ${ROOT_DIR}/docker/
+      dockerfile: literp.dockerfile
+    image: literp:latest
+    container_name: literp
+    restart: always
+    ports:
+      - 8010:8010
+    volumes:
+      - ${ROOT_DIR}/build/libs/literp.jar:/app/literp.jar
+      - ${ROOT_DIR}/docker/env:/app/env.properties
+    tty: true

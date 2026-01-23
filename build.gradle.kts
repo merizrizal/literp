@@ -85,6 +85,18 @@ tasks.register<Jar>("kotlinJar") {
     dependsOn(tasks.classes)
 }
 
+tasks.register<Copy>("copyKotlinJar") {
+    group = "build"
+    description = "Copy jar"
+
+    val jarPath = layout.buildDirectory.file("libs/$appReleaseName.jar").get().asFile.path
+    from(jarPath)
+    into(layout.buildDirectory.dir("libs").get().asFile.path)
+    rename("${appReleaseName}.jar", "${rootProject.name}.jar")
+
+    dependsOn(tasks["kotlinJar"])
+}
+
 tasks.register<JavaExec>("runJar") {
     group = "build"
     description = "Run the jar file"
@@ -94,7 +106,7 @@ tasks.register<JavaExec>("runJar") {
 }
 
 tasks.register<JavaCompile>("annotationProcessing") {
-    group = "other"
+    group = "build"
     description = "Generate vertx codegen"
     source = sourceSets.main.get().java
 
@@ -110,13 +122,20 @@ tasks.register<JavaCompile>("annotationProcessing") {
 }
 
 tasks.register<Copy>("copyNativeCompile") {
-    group = "other"
+    group = "build"
     description = "Copy native image into project root directory"
 
     val nativeImagePath = layout.buildDirectory.file("native/nativeCompile/${appReleaseName}.run").get().asFile.path
     from(nativeImagePath)
     into(projectDir.absolutePath)
     rename("${appReleaseName}.run", "${rootProject.name}.release.run")
+}
+
+tasks.register<Exec>("migrateDatabase") {
+    group = "build"
+    description = "Run migrate database"
+
+    commandLine("bash", "-c", "echo \"Running migrate database\"")
 }
 
 tasks.compileKotlin {
