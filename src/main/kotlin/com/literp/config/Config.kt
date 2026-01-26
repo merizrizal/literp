@@ -8,7 +8,7 @@ class Config {
 
     init {
         val props = Properties()
-        props.load(FileInputStream("env.properties"))
+        props.load(FileInputStream("cfg.properties"))
 
         httpPort = props.getProperty("http.port").toInt()
     }

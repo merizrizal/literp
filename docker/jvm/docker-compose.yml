@@ -1,0 +1,21 @@
+services:
+  jvm:
+    build:
+      context: ${ROOT_DIR}/docker/jvm
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    image: literp_jvm
+    container_name: literp_jvm
+    restart: always
+    networks:
+      - project_network
+    ports:
+      - 8010:8010
+    volumes:
+      - ${ROOT_DIR}/build/libs/literp.jar:/app/app.jar
+      - ${ROOT_DIR}/docker/jvm/cfg.properties:/app/cfg.properties
+    tty: true
+networks:
+  project_network:
+    name: ${DOCKER_NETWORK}
+    external: true

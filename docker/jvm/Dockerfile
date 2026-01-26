@@ -12,4 +12,4 @@ RUN useradd -ms /bin/bash ${USER} -u ${USER_ID} -g ${GROUP_ID}
 USER ${USER}
 WORKDIR /app
 
-ENTRYPOINT ["/bin/bash", "-c", "java -jar /app/literp.jar"]
+ENTRYPOINT ["/bin/bash", "-c", "java -jar /app/app.jar"]
