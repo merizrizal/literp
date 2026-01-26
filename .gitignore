@@ -49,4 +49,4 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-cfg.properties
+/cfg.properties
