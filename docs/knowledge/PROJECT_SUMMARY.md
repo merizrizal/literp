@@ -1,4 +1,4 @@
-## Summary of the Project
+## Summary of the Literp Project - Lightweight ERP core with POS as a channel
 
 This is a **Kotlin/Java backend application** with the following characteristics:
 
