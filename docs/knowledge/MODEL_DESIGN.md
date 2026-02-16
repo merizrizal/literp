@@ -24,7 +24,7 @@ The base product entity. Supports SKU variants and multiple UOM.
 - `sku` (unique, indexed) – primary SKU for the product
 - `name` (string)
 - `product_type` (ENUM: STOCK | SERVICE) – determines if inventory applies
-- `base_uom` (FK to unit_of_measure) – default unit for quantities
+- `base_uom` (FK → `unit_of_measure.uom_id`) – default unit for quantities
 - `active` (boolean, default=true)
 - `metadata` (JSONB, optional) – extensible attributes
 - `created_at`, `updated_at`
@@ -34,7 +34,7 @@ Represents product variants (sizes, colors, etc.). Each variant has its own SKU.
 
 **Fields:**
 - `variant_id` (UUID, PK)
-- `product_id` (FK, cascade delete)
+- `product_id` (FK → `product.product_id`, cascade delete)
 - `sku` (unique, indexed)
 - `name` (string)
 - `attributes` (JSONB) – variant-specific data (e.g., size, color)
@@ -49,6 +49,7 @@ Standard units (EA, KG, LTR, etc.).
 - `code` (string, unique) – EA, KG, etc.
 - `name` (string)
 - `base_unit` (string, optional) – for conversions
+- `created_at`, `updated_at`
 
 ---
 
@@ -71,18 +72,18 @@ Immutable log of all stock movements. Stock levels are derived by summing moveme
 
 **Fields:**
 - `movement_id` (UUID, PK)
-- `product_id` (FK) – relates to product or variant SKU
+- `product_id` (FK → `product.product_id`) – relates to product or variant SKU
 - `sku` (string, indexed) – denormalized for performance
 - `movement_type` (ENUM: IN | OUT | TRANSFER | ADJUSTMENT)
   - IN: goods arrival, work order completion
   - OUT: sales fulfillment, consumption
   - TRANSFER: between locations
   - ADJUSTMENT: inventory correction
-- `from_location_id` (FK, nullable) – source location
-- `to_location_id` (FK) – destination location
+- `from_location_id` (FK → `location.location_id`, nullable) – source location
+- `to_location_id` (FK → `location.location_id`) – destination location
 - `quantity` (decimal)
 - `reference_type` (ENUM: SALES_ORDER | WORK_ORDER | PURCHASE_ORDER | ADJUSTMENT | TRANSFER)
-- `reference_id` (string) – FK to order/work-order/etc.
+- `reference_id` (string) – reference to order/work-order/etc. (not FK due to polymorphic nature)
 - `notes` (text, optional)
 - `created_by` (string, optional) – user/system identifier
 - `created_at` (timestamp, immutable)
@@ -94,11 +95,11 @@ Tracks stock reserved for sales orders. Decouples sales intent from fulfillment.
 
 **Fields:**
 - `reservation_id` (UUID, PK)
-- `sales_order_id` (FK)
-- `sales_order_line_id` (FK)
-- `product_id` (FK)
+- `sales_order_id` (FK → `sales_order.sales_order_id`, cascade delete)
+- `sales_order_line_id` (FK → `sales_order_line.line_id`, cascade delete)
+- `product_id` (FK → `product.product_id`)
 - `sku` (string, indexed)
-- `location_id` (FK) – where stock is reserved from
+- `location_id` (FK → `location.location_id`) – where stock is reserved from
 - `quantity` (decimal)
 - `status` (ENUM: RESERVED | FULFILLED | CANCELLED)
 - `created_at`, `updated_at`
@@ -115,8 +116,8 @@ Represents customer orders (POS, online, B2B). Captures sales intent.
 - `order_number` (string, unique, indexed) – human-readable ID
 - `order_date` (timestamp)
 - `sales_channel` (ENUM: POS | ONLINE | B2B | OTHER) – which channel created this
-- `customer_id` (string, nullable) – FK to customer (external CRM integration)
-- `location_id` (FK) – which location this order is for
+- `customer_id` (string, nullable) – external customer identifier (no FK intentional for flexibility)
+- `location_id` (FK → `location.location_id`) – which location this order is for
 - `status` (ENUM: DRAFT | CONFIRMED | FULFILLED | CANCELLED)
 - `total_amount` (decimal)
 - `currency` (string, default USD)
@@ -128,8 +129,8 @@ Individual line items in a sales order.
 
 **Fields:**
 - `line_id` (UUID, PK)
-- `sales_order_id` (FK, cascade delete)
-- `product_id` (FK)
+- `sales_order_id` (FK → `sales_order.sales_order_id`, cascade delete)
+- `product_id` (FK → `product.product_id`)
 - `sku` (string, indexed)
 - `quantity_ordered` (decimal)
 - `quantity_fulfilled` (decimal, default=0)
@@ -143,7 +144,7 @@ Payment records for orders.
 
 **Fields:**
 - `payment_id` (UUID, PK)
-- `sales_order_id` (FK)
+- `sales_order_id` (FK → `sales_order.sales_order_id`)
 - `payment_method` (ENUM: CASH | CARD | DIGITAL | GIFT_CARD | OTHER)
 - `amount` (decimal)
 - `status` (ENUM: PENDING | AUTHORIZED | CAPTURED | REFUNDED)
@@ -159,7 +160,7 @@ Tracks POS registers/devices.
 
 **Fields:**
 - `terminal_id` (UUID, PK)
-- `location_id` (FK)
+- `location_id` (FK → `location.location_id`)
 - `terminal_code` (string, unique)
 - `device_name` (string)
 - `is_active` (boolean)
@@ -170,7 +171,7 @@ Shift management for cashiers/operators.
 
 **Fields:**
 - `shift_id` (UUID, PK)
-- `terminal_id` (FK)
+- `terminal_id` (FK → `pos_terminal.terminal_id`)
 - `operator_id` (string) – user identifier
 - `shift_date` (date)
 - `shift_number` (int) – 1st, 2nd, 3rd shift
@@ -186,8 +187,8 @@ Receipt/Invoice records. Denormalized copy of order for offline storage.
 
 **Fields:**
 - `receipt_id` (UUID, PK)
-- `sales_order_id` (FK)
-- `shift_id` (FK)
+- `sales_order_id` (FK → `sales_order.sales_order_id`)
+- `shift_id` (FK → `pos_shift.shift_id`, nullable)
 - `receipt_number` (string, unique) – sequential
 - `receipt_date` (timestamp)
 - `total_items` (int)
@@ -206,7 +207,7 @@ Recipe for assembled or manufactured products.
 
 **Fields:**
 - `bom_id` (UUID, PK)
-- `product_id` (FK) – finished good
+- `product_id` (FK → `product.product_id`) – finished good
 - `bom_version` (int)
 - `status` (ENUM: DRAFT | ACTIVE | DEPRECATED)
 - `created_at`, `updated_at`
@@ -216,8 +217,8 @@ Components in a BOM.
 
 **Fields:**
 - `bom_line_id` (UUID, PK)
-- `bom_id` (FK, cascade delete)
-- `component_product_id` (FK)
+- `bom_id` (FK → `bill_of_material.bom_id`, cascade delete)
+- `component_product_id` (FK → `product.product_id`)
 - `component_sku` (string)
 - `quantity_per_unit` (decimal) – how many of this component per finished good
 - `scrap_percentage` (decimal, default=0)
@@ -230,9 +231,9 @@ Production order to manufacture goods.
 **Fields:**
 - `work_order_id` (UUID, PK)
 - `work_order_number` (string, unique, indexed)
-- `product_id` (FK) – what to produce
-- `bom_id` (FK)
-- `location_id` (FK) – where to produce
+- `product_id` (FK → `product.product_id`) – what to produce
+- `bom_id` (FK → `bill_of_material.bom_id`)
+- `location_id` (FK → `location.location_id`) – where to produce
 - `planned_quantity` (decimal)
 - `actual_quantity` (decimal, nullable)
 - `status` (ENUM: PLANNED | IN_PROGRESS | COMPLETED | CANCELLED)
@@ -248,7 +249,7 @@ Execution details of a work order (batch/lot tracking).
 
 **Fields:**
 - `run_id` (UUID, PK)
-- `work_order_id` (FK)
+- `work_order_id` (FK → `work_order.work_order_id`)
 - `run_date` (date)
 - `operator_id` (string, optional)
 - `material_consumed` (JSONB) – detailed component usage
@@ -259,7 +260,55 @@ Execution details of a work order (batch/lot tracking).
 
 ---
 
-## Key Design Decisions
+## Foreign Key Relationships Summary
+
+This section provides a complete reference of all foreign key constraints in the system.
+
+### Product Catalog
+| From | To | Cascade Delete |
+|------|-----|---|---|
+| `product.base_uom` | `unit_of_measure.uom_id` | No |
+| `product_variant.product_id` | `product.product_id` | Yes |
+
+### Inventory System
+| From | To | Cascade Delete |
+|------|-----|---|
+| `inventory_movement.product_id` | `product.product_id` | No |
+| `inventory_movement.from_location_id` | `location.location_id` | No |
+| `inventory_movement.to_location_id` | `location.location_id` | No |
+| `inventory_reservation.sales_order_id` | `sales_order.sales_order_id` | Yes |
+| `inventory_reservation.sales_order_line_id` | `sales_order_line.line_id` | Yes |
+| `inventory_reservation.product_id` | `product.product_id` | No |
+| `inventory_reservation.location_id` | `location.location_id` | No |
+
+### Sales & Orders
+| From | To | Cascade Delete |
+|------|-----|---|
+| `sales_order.location_id` | `location.location_id` | No |
+| `sales_order_line.sales_order_id` | `sales_order.sales_order_id` | Yes |
+| `sales_order_line.product_id` | `product.product_id` | No |
+| `payment.sales_order_id` | `sales_order.sales_order_id` | No |
+
+### POS Operations
+| From | To | Cascade Delete |
+|------|-----|---|
+| `pos_terminal.location_id` | `location.location_id` | No |
+| `pos_shift.terminal_id` | `pos_terminal.terminal_id` | No |
+| `receipt.sales_order_id` | `sales_order.sales_order_id` | No |
+| `receipt.shift_id` | `pos_shift.shift_id` | No |
+
+### Manufacturing
+| From | To | Cascade Delete |
+|------|-----|---|
+| `bill_of_material.product_id` | `product.product_id` | No |
+| `bom_line.bom_id` | `bill_of_material.bom_id` | Yes |
+| `bom_line.component_product_id` | `product.product_id` | No |
+| `work_order.product_id` | `product.product_id` | No |
+| `work_order.bom_id` | `bill_of_material.bom_id` | No |
+| `work_order.location_id` | `location.location_id` | No |
+| `production_run.work_order_id` | `work_order.work_order_id` | No |
+
+---
 
 ### Inventory as Immutable Ledger
 - **Why:** Full auditability, supports offline POS, manufacturing-friendly
