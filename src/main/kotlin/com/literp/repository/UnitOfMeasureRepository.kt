@@ -1,12 +1,26 @@
 package com.literp.repository
 
 import io.reactivex.rxjava3.core.Single
+import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.util.*
 
 class UnitOfMeasureRepository(private val pool: Pool) {
+    private val logger = LoggerFactory.getLogger(this@UnitOfMeasureRepository.javaClass)
+
+    init {
+        pool.rxGetConnection()
+            .subscribe(
+                { conn ->
+                    logger.info("API unit_of_measure: DB Connection established!")
+                },
+                { error ->
+                    logger.error("Error in API unit_of_measure", error)
+                }
+            )
+    }
 
     fun listUnitOfMeasures(page: Int, size: Int, sort: String): Single<JsonObject> {
         val offset = page * size

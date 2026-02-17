@@ -1,0 +1,16 @@
+meta {
+  name: UOM
+  type: http
+  seq: 5
+}
+
+get {
+  url: http://{{host}}:8010/api/v1/uom
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
