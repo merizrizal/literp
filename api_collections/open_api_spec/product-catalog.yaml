@@ -3,17 +3,17 @@ info:
   title: Literp Product Catalog API
   description: |
     Product Catalog CRUD API for managing products, variants, and units of measure.
-    
+
     This API provides endpoints to manage:
     - **Products**: Core product entities with SKU, pricing, and type (STOCK/SERVICE)
     - **Product Variants**: Size, color, or other variant combinations of products
     - **Units of Measure**: Standard unit codes (EA, KG, LTR, etc.)
-    
+
     The product catalog is the foundation of the Literp lightweight ERP system.
   version: 1.0.0
   contact:
     name: Literp Development
-    url: https://github.com/literp
+    url: https://github.com/merizrizal
 
 servers:
   - url: http://localhost:8010/api/v1
