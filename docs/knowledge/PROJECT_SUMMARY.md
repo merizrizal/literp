@@ -4,8 +4,8 @@ This is a **Kotlin/Java backend application** with the following characteristi
 
 ### **Core Technology Stack**
 
-- **Language**: Kotlin (Kotlin 2.3.0) running on Java 25
-- **Framework**: Vert.x 5.0.7 (reactive, event-driven framework)
+- **Language**: Kotlin (Kotlin 2.3.10) running on Java 25
+- **Framework**: Vert.x 5.0.8 (reactive, event-driven framework)
 - **Build System**: Gradle (Kotlin DSL)
 - **Native Compilation**: GraalVM native image support
 

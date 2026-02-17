@@ -17,8 +17,8 @@ import sys
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
-from sqlalchemy.dialects.postgresql import UUID
 
 sys.path.insert(0, os.getenv('ROOT_DIR'))
 from python.database.migration.alembic.resources import \

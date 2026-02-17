@@ -1,8 +1,8 @@
 import org.gradle.jvm.tasks.Jar
 
 buildscript {
-    System.setProperty("kotlinVersion", "2.3.0")
-    System.setProperty("vertxVersion", "5.0.7")
+    System.setProperty("kotlinVersion", "2.3.10")
+    System.setProperty("vertxVersion", "5.0.8")
 }
 
 group = "com.literp"
@@ -40,6 +40,10 @@ dependencies {
 
     // Vertx Web
     implementation("io.vertx:vertx-web:$vertxVersion")
+
+    // Vertx OpenAPI
+    implementation("io.vertx:vertx-openapi:${vertxVersion}")
+    implementation("io.vertx:vertx-web-openapi-router:${vertxVersion}")
 
     // Vertx Rxjava
     implementation("io.vertx:vertx-rx-java3:$vertxVersion")
