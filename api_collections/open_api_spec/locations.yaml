@@ -1,0 +1,509 @@
+openapi: 3.0.3
+info:
+  title: Literp Inventory Location API
+  description: |
+    Inventory Location CRUD API for managing warehouses, stores, and production facilities.
+
+    This API provides endpoints to manage:
+    - **Locations**: Physical warehouses, retail stores, or production facilities
+    - **Location Types**: WAREHOUSE, STORE, or PRODUCTION
+    - **Address Information**: Flexible address storage via JSONB
+    - **Location Status**: Active/inactive management
+
+    Locations are fundamental to the multi-location inventory system in Literp.
+  version: 1.0.0
+  contact:
+    name: Literp Development
+    url: https://github.com/literp
+
+servers:
+  - url: http://localhost:8010/api/v1
+    description: Local development server
+  - url: https://api.literp.example.com/api/v1
+    description: Production server
+
+paths:
+  /locations:
+    get:
+      tags:
+        - Location
+      summary: List all locations
+      description: Retrieve a paginated list of all inventory locations with optional filtering.
+      operationId: listLocations
+      parameters:
+        - name: page
+          in: query
+          description: Page number (starting from 0)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: Sort field and order (e.g., "code,asc" or "name,desc")
+          schema:
+            type: string
+            default: code,asc
+        - name: code
+          in: query
+          description: Filter by location code (wildcard search)
+          schema:
+            type: string
+        - name: name
+          in: query
+          description: Filter by location name (wildcard search)
+          schema:
+            type: string
+        - name: locationType
+          in: query
+          description: Filter by location type
+          schema:
+            type: string
+            enum:
+              - WAREHOUSE
+              - STORE
+              - PRODUCTION
+        - name: activeOnly
+          in: query
+          description: Return only active locations
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of locations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Location'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Location
+      summary: Create a new location
+      description: Create a new inventory location (warehouse, store, or production facility).
+      operationId: createLocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLocationRequest'
+      responses:
+        '201':
+          description: Location created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflict - Location code already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /locations/{locationId}:
+    get:
+      tags:
+        - Location
+      summary: Get location details
+      description: Retrieve complete details for a specific inventory location.
+      operationId: getLocation
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: Location ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Location retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Location
+      summary: Update location
+      description: Update an existing inventory location. Note that the code is immutable.
+      operationId: updateLocation
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: Location ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        '200':
+          description: Location updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Location
+      summary: Delete location
+      description: Delete an inventory location. Only allowed if no inventory movements, sales orders, or work orders reference it.
+      operationId: deleteLocation
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: Location ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Location deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Location has active relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /locations/by-code/{code}:
+    get:
+      tags:
+        - Location
+      summary: Get location by code
+      description: Retrieve a location by its unique code (convenience endpoint).
+      operationId: getLocationByCode
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Location code
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Location retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Location'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    # ==================== LOCATION SCHEMAS ====================
+    Location:
+      type: object
+      description: Represents a physical inventory location (warehouse, store, or production facility).
+      required:
+        - locationId
+        - code
+        - name
+        - locationType
+        - isActive
+        - createdAt
+        - updatedAt
+      properties:
+        locationId:
+          type: string
+          format: uuid
+          description: Unique identifier for the location
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        code:
+          type: string
+          maxLength: 50
+          description: Unique location code for identification (immutable)
+          example: "WH-001"
+        name:
+          type: string
+          maxLength: 255
+          description: Human-readable location name
+          example: "Main Warehouse"
+        locationType:
+          type: string
+          enum:
+            - WAREHOUSE
+            - STORE
+            - PRODUCTION
+          description: Type of location
+          example: "WAREHOUSE"
+        isActive:
+          type: boolean
+          description: Whether the location is currently active
+          example: true
+        address:
+          type: object
+          nullable: true
+          description: Flexible address information (street, city, postal_code, country, etc.)
+          example:
+            street: "123 Industrial Way"
+            city: "Springfield"
+            state: "IL"
+            postal_code: "62701"
+            country: "USA"
+            latitude: 39.7817
+            longitude: -89.6501
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when location was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp of last update
+
+    CreateLocationRequest:
+      type: object
+      description: Request body to create a new inventory location.
+      required:
+        - code
+        - name
+        - locationType
+      properties:
+        code:
+          type: string
+          maxLength: 50
+          pattern: '^[A-Z0-9\-]+$'
+          description: Unique location code (uppercase, alphanumeric, hyphens)
+          example: "WH-001"
+        name:
+          type: string
+          maxLength: 255
+          description: Full name of the location
+          example: "Main Warehouse"
+        locationType:
+          type: string
+          enum:
+            - WAREHOUSE
+            - STORE
+            - PRODUCTION
+          description: Type of location
+          example: "WAREHOUSE"
+        isActive:
+          type: boolean
+          default: true
+          description: Whether the location is active from creation
+        address:
+          type: object
+          nullable: true
+          description: Address information as flexible JSON object
+          example:
+            street: "123 Industrial Way"
+            city: "Springfield"
+            state: "IL"
+            postal_code: "62701"
+            country: "USA"
+            latitude: 39.7817
+            longitude: -89.6501
+
+    UpdateLocationRequest:
+      type: object
+      description: Request body to update an inventory location. Code is immutable.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Updated location name
+          example: "Main Warehouse - Updated"
+        locationType:
+          type: string
+          enum:
+            - WAREHOUSE
+            - STORE
+            - PRODUCTION
+          description: Location type can be changed
+          example: "WAREHOUSE"
+        isActive:
+          type: boolean
+          description: Update active status (soft delete via this field)
+          example: true
+        address:
+          type: object
+          nullable: true
+          description: Updated address information
+          example:
+            street: "456 New Industrial Blvd"
+            city: "Springfield"
+            state: "IL"
+            postal_code: "62702"
+            country: "USA"
+
+    # ==================== PAGINATION & ERROR SCHEMAS ====================
+    PaginationInfo:
+      type: object
+      description: Pagination metadata for list responses.
+      required:
+        - page
+        - size
+        - total
+        - totalPages
+        - hasNext
+        - hasPrevious
+      properties:
+        page:
+          type: integer
+          description: Current page number (0-indexed)
+          example: 0
+        size:
+          type: integer
+          description: Number of items per page
+          example: 20
+        total:
+          type: integer
+          description: Total number of items
+          example: 45
+        totalPages:
+          type: integer
+          description: Total number of pages
+          example: 3
+        hasNext:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        hasPrevious:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+
+    ErrorResponse:
+      type: object
+      description: Standard error response.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "LOCATION_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Location with ID 550e8400-e29b-41d4-a716-446655440000 not found"
+        details:
+          type: object
+          nullable: true
+          description: Additional error context
+          example:
+            field: "locationId"
+            value: "550e8400-e29b-41d4-a716-446655440000"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+        path:
+          type: string
+          description: API path where error occurred
+          example: "/api/v1/locations/550e8400-e29b-41d4-a716-446655440000"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "INVALID_INPUT"
+            message: "Validation failed"
+            details:
+              field: "code"
+              message: "Code is required and must be unique"
+            timestamp: "2026-02-17T10:30:00Z"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "NOT_FOUND"
+            message: "Location not found"
+            timestamp: "2026-02-17T10:30:00Z"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"
+            timestamp: "2026-02-17T10:30:00Z"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer token for authentication (future implementation)
+
+tags:
+  - name: Location
+    description: Manage inventory locations (warehouses, stores, production facilities)

@@ -1,0 +1,1075 @@
+openapi: 3.0.3
+info:
+  title: Literp Product Catalog API
+  description: |
+    Product Catalog CRUD API for managing products, variants, and units of measure.
+    
+    This API provides endpoints to manage:
+    - **Products**: Core product entities with SKU, pricing, and type (STOCK/SERVICE)
+    - **Product Variants**: Size, color, or other variant combinations of products
+    - **Units of Measure**: Standard unit codes (EA, KG, LTR, etc.)
+    
+    The product catalog is the foundation of the Literp lightweight ERP system.
+  version: 1.0.0
+  contact:
+    name: Literp Development
+    url: https://github.com/literp
+
+servers:
+  - url: http://localhost:8010/api/v1
+    description: Local development server
+  - url: https://api.literp.example.com/api/v1
+    description: Production server
+
+paths:
+  # ==================== UNIT OF MEASURE ENDPOINTS ====================
+  /uom:
+    get:
+      tags:
+        - Unit of Measure
+      summary: List all units of measure
+      description: Retrieve a paginated list of all available units of measure.
+      operationId: listUnitOfMeasures
+      parameters:
+        - name: page
+          in: query
+          description: Page number (starting from 0)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: Sort field and order (e.g., "code,asc" or "name,desc")
+          schema:
+            type: string
+            default: code,asc
+      responses:
+        '200':
+          description: List of units of measure retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UnitOfMeasure'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Unit of Measure
+      summary: Create a new unit of measure
+      description: Create a new unit of measure (e.g., EA for Each, KG for Kilogram).
+      operationId: createUnitOfMeasure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUnitOfMeasureRequest'
+      responses:
+        '201':
+          description: Unit of measure created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UnitOfMeasure'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflict - UOM code already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /uom/{uomId}:
+    get:
+      tags:
+        - Unit of Measure
+      summary: Get unit of measure details
+      description: Retrieve details for a specific unit of measure by ID.
+      operationId: getUnitOfMeasure
+      parameters:
+        - name: uomId
+          in: path
+          required: true
+          description: Unit of Measure ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Unit of measure retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UnitOfMeasure'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Unit of Measure
+      summary: Update unit of measure
+      description: Update an existing unit of measure. Note that the code is immutable.
+      operationId: updateUnitOfMeasure
+      parameters:
+        - name: uomId
+          in: path
+          required: true
+          description: Unit of Measure ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUnitOfMeasureRequest'
+      responses:
+        '200':
+          description: Unit of measure updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UnitOfMeasure'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Unit of Measure
+      summary: Delete unit of measure
+      description: Delete a unit of measure. Only remove if not referenced by products.
+      operationId: deleteUnitOfMeasure
+      parameters:
+        - name: uomId
+          in: path
+          required: true
+          description: Unit of Measure ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Unit of measure deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - UOM is referenced by products
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== PRODUCT ENDPOINTS ====================
+  /products:
+    get:
+      tags:
+        - Product
+      summary: List all products
+      description: Retrieve a paginated list of all products with optional filtering.
+      operationId: listProducts
+      parameters:
+        - name: page
+          in: query
+          description: Page number (starting from 0)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: sort
+          in: query
+          description: Sort field and order (e.g., "sku,asc" or "name,desc")
+          schema:
+            type: string
+            default: sku,asc
+        - name: sku
+          in: query
+          description: Filter by SKU (wildcard search)
+          schema:
+            type: string
+        - name: productType
+          in: query
+          description: Filter by product type
+          schema:
+            type: string
+            enum:
+              - STOCK
+              - SERVICE
+        - name: activeOnly
+          in: query
+          description: Return only active products
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of products retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Product'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Product
+      summary: Create a new product
+      description: Create a new product in the catalog.
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflict - SKU already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /products/{productId}:
+    get:
+      tags:
+        - Product
+      summary: Get product details
+      description: Retrieve complete details for a specific product including variants if available.
+      operationId: getProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+        - name: includeVariants
+          in: query
+          description: Include product variants in response
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Product retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProductDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Product
+      summary: Update product
+      description: Update an existing product. Note that SKU is immutable.
+      operationId: updateProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Product'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Product
+      summary: Delete product
+      description: Delete a product and all its variants. Only allowed if no inventory movements or sales orders exist.
+      operationId: deleteProduct
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Product has active relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ==================== PRODUCT VARIANT ENDPOINTS ====================
+  /products/{productId}/variants:
+    get:
+      tags:
+        - Product Variant
+      summary: List product variants
+      description: Retrieve all variants for a specific product.
+      operationId: listProductVariants
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          description: Page number (starting from 0)
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+        - name: size
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: activeOnly
+          in: query
+          description: Return only active variants
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of product variants retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductVariant'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Product Variant
+      summary: Create a product variant
+      description: Create a new variant for a product (e.g., size S, M, L for a shirt).
+      operationId: createProductVariant
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductVariantRequest'
+      responses:
+        '201':
+          description: Product variant created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProductVariant'
+        '404':
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Conflict - Variant SKU already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /products/{productId}/variants/{variantId}:
+    get:
+      tags:
+        - Product Variant
+      summary: Get product variant details
+      description: Retrieve details for a specific product variant.
+      operationId: getProductVariant
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          description: Variant ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Product variant retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProductVariant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      tags:
+        - Product Variant
+      summary: Update product variant
+      description: Update an existing product variant. Note that SKU is immutable.
+      operationId: updateProductVariant
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          description: Variant ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductVariantRequest'
+      responses:
+        '200':
+          description: Product variant updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProductVariant'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Product Variant
+      summary: Delete product variant
+      description: Delete a product variant. Only allowed if no inventory movements or sales orders exist.
+      operationId: deleteProductVariant
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          description: Product ID
+          schema:
+            type: string
+            format: uuid
+        - name: variantId
+          in: path
+          required: true
+          description: Variant ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product variant deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Conflict - Variant has active relationships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    # ==================== UNIT OF MEASURE SCHEMAS ====================
+    UnitOfMeasure:
+      type: object
+      description: Standard unit of measure for product quantities.
+      required:
+        - uomId
+        - code
+        - name
+        - createdAt
+        - updatedAt
+      properties:
+        uomId:
+          type: string
+          format: uuid
+          description: Unique identifier for the unit of measure
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        code:
+          type: string
+          maxLength: 50
+          description: Standardized code (EA, KG, LTR, etc.)
+          example: "KG"
+        name:
+          type: string
+          maxLength: 255
+          description: Full name of the unit
+          example: "Kilogram"
+        baseUnit:
+          type: string
+          maxLength: 50
+          nullable: true
+          description: Base unit for conversion (e.g., KG for grams)
+          example: "g"
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when UOM was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp of last update
+
+    CreateUnitOfMeasureRequest:
+      type: object
+      description: Request body to create a new unit of measure.
+      required:
+        - code
+        - name
+      properties:
+        code:
+          type: string
+          maxLength: 50
+          pattern: '^[A-Z0-9]{1,50}$'
+          description: Unique code for the unit (uppercase, alphanumeric)
+          example: "KG"
+        name:
+          type: string
+          maxLength: 255
+          description: Full descriptive name
+          example: "Kilogram"
+        baseUnit:
+          type: string
+          maxLength: 50
+          nullable: true
+          description: Base unit for conversion purposes
+          example: "g"
+
+    UpdateUnitOfMeasureRequest:
+      type: object
+      description: Request body to update a unit of measure. Code is immutable.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Full descriptive name
+          example: "Kilogram"
+        baseUnit:
+          type: string
+          maxLength: 50
+          nullable: true
+          description: Base unit for conversion purposes
+          example: "g"
+
+    # ==================== PRODUCT SCHEMAS ====================
+    Product:
+      type: object
+      description: Core product entity in the catalog.
+      required:
+        - productId
+        - sku
+        - name
+        - productType
+        - baseUom
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        productId:
+          type: string
+          format: uuid
+          description: Unique product identifier
+          example: "660e8400-e29b-41d4-a716-446655440000"
+        sku:
+          type: string
+          maxLength: 255
+          description: Unique stock keeping unit (immutable)
+          example: "PROD-001"
+        name:
+          type: string
+          maxLength: 255
+          description: Product name
+          example: "Widget A"
+        productType:
+          type: string
+          enum:
+            - STOCK
+            - SERVICE
+          description: Type of product
+          example: "STOCK"
+        baseUom:
+          type: string
+          format: uuid
+          description: Default unit of measure ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        baseUomCode:
+          type: string
+          description: Base UOM code (denormalized for convenience)
+          example: "EA"
+        active:
+          type: boolean
+          description: Whether the product is currently active
+          example: true
+        metadata:
+          type: object
+          nullable: true
+          description: Extensible JSON attributes (e.g., dimensions, weight)
+          example:
+            weight: 2.5
+            weight_unit: "kg"
+            color: "blue"
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when product was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp of last update
+
+    ProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/Product'
+        - type: object
+          properties:
+            variants:
+              type: array
+              description: List of product variants (if requested)
+              items:
+                $ref: '#/components/schemas/ProductVariant'
+
+    CreateProductRequest:
+      type: object
+      description: Request body to create a new product.
+      required:
+        - sku
+        - name
+        - productType
+        - baseUom
+      properties:
+        sku:
+          type: string
+          maxLength: 255
+          pattern: '^[A-Z0-9\-]+$'
+          description: Unique SKU (alphanumeric and hyphens)
+          example: "PROD-001"
+        name:
+          type: string
+          maxLength: 255
+          description: Product name
+          example: "Widget A"
+        productType:
+          type: string
+          enum:
+            - STOCK
+            - SERVICE
+          description: Type of product
+          example: "STOCK"
+        baseUom:
+          type: string
+          format: uuid
+          description: Default unit of measure ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        active:
+          type: boolean
+          default: true
+          description: Whether product is active
+        metadata:
+          type: object
+          nullable: true
+          description: Extensible JSON attributes
+          example:
+            weight: 2.5
+            weight_unit: "kg"
+
+    UpdateProductRequest:
+      type: object
+      description: Request body to update a product. SKU cannot be changed.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Product name
+          example: "Widget A Updated"
+        productType:
+          type: string
+          enum:
+            - STOCK
+            - SERVICE
+          description: Type of product
+        baseUom:
+          type: string
+          format: uuid
+          description: Default unit of measure ID
+        active:
+          type: boolean
+          description: Whether product is active
+        metadata:
+          type: object
+          nullable: true
+          description: Extensible JSON attributes
+
+    # ==================== PRODUCT VARIANT SCHEMAS ====================
+    ProductVariant:
+      type: object
+      description: Variant of a product (e.g., size, color combinations).
+      required:
+        - variantId
+        - productId
+        - sku
+        - name
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        variantId:
+          type: string
+          format: uuid
+          description: Unique variant identifier
+          example: "770e8400-e29b-41d4-a716-446655440000"
+        productId:
+          type: string
+          format: uuid
+          description: Parent product ID
+          example: "660e8400-e29b-41d4-a716-446655440000"
+        sku:
+          type: string
+          maxLength: 255
+          description: Unique SKU for this variant (immutable)
+          example: "PROD-001-S"
+        name:
+          type: string
+          maxLength: 255
+          description: Variant name (e.g., "Size S")
+          example: "Widget A - Small"
+        attributes:
+          type: object
+          nullable: true
+          description: Variant-specific attributes (size, color, etc.)
+          example:
+            size: "S"
+            color: "blue"
+        active:
+          type: boolean
+          description: Whether the variant is active
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when variant was created
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp of last update
+
+    CreateProductVariantRequest:
+      type: object
+      description: Request body to create a new product variant.
+      required:
+        - sku
+        - name
+      properties:
+        sku:
+          type: string
+          maxLength: 255
+          pattern: '^[A-Z0-9\-]+$'
+          description: Unique SKU for variant
+          example: "PROD-001-S"
+        name:
+          type: string
+          maxLength: 255
+          description: Variant name
+          example: "Widget A - Small"
+        attributes:
+          type: object
+          nullable: true
+          description: Variant-specific attributes
+          example:
+            size: "S"
+            color: "blue"
+        active:
+          type: boolean
+          default: true
+          description: Whether variant is active
+
+    UpdateProductVariantRequest:
+      type: object
+      description: Request body to update a product variant. SKU cannot be changed.
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Variant name
+          example: "Widget A - Small (Updated)"
+        attributes:
+          type: object
+          nullable: true
+          description: Variant-specific attributes
+        active:
+          type: boolean
+          description: Whether variant is active
+
+    # ==================== PAGINATION & ERROR SCHEMAS ====================
+    PaginationInfo:
+      type: object
+      description: Pagination metadata for list responses.
+      required:
+        - page
+        - size
+        - total
+        - totalPages
+        - hasNext
+        - hasPrevious
+      properties:
+        page:
+          type: integer
+          description: Current page number (0-indexed)
+          example: 0
+        size:
+          type: integer
+          description: Number of items per page
+          example: 20
+        total:
+          type: integer
+          description: Total number of items
+          example: 150
+        totalPages:
+          type: integer
+          description: Total number of pages
+          example: 8
+        hasNext:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        hasPrevious:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+
+    ErrorResponse:
+      type: object
+      description: Standard error response.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "PRODUCT_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Product with ID 660e8400-e29b-41d4-a716-446655440000 not found"
+        details:
+          type: object
+          nullable: true
+          description: Additional error context
+          example:
+            field: "productId"
+            value: "660e8400-e29b-41d4-a716-446655440000"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+        path:
+          type: string
+          description: API path where error occurred
+          example: "/api/v1/products/660e8400-e29b-41d4-a716-446655440000"
+
+  responses:
+    BadRequest:
+      description: Bad request - invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "INVALID_INPUT"
+            message: "Validation failed"
+            details:
+              field: "sku"
+              message: "SKU is required and must be unique"
+            timestamp: "2026-02-17T10:30:00Z"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "NOT_FOUND"
+            message: "Resource not found"
+            timestamp: "2026-02-17T10:30:00Z"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"
+            timestamp: "2026-02-17T10:30:00Z"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer token for authentication (future implementation)
+
+tags:
+  - name: Unit of Measure
+    description: Manage units of measure (EA, KG, LTR, etc.)
+  - name: Product
+    description: Manage product catalog entries
+  - name: Product Variant
+    description: Manage product variants (sizes, colors, etc.)

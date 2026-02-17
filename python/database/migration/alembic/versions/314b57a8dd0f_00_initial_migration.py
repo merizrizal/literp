@@ -119,20 +119,6 @@ def upgrade() -> None:
         sa.Index('idx_inventory_movement_product_location_date', 'product_id', 'to_location_id', 'created_at'),
     )
 
-    create_table_if_not_exists(
-        'inventory_reservation',
-        sa.Column('reservation_id', sa.String(36), primary_key=True, nullable=False),
-        sa.Column('sales_order_id', sa.String(36), sa.ForeignKey('sales_order.sales_order_id', ondelete='CASCADE'), nullable=False),
-        sa.Column('sales_order_line_id', sa.String(36), sa.ForeignKey('sales_order_line.line_id', ondelete='CASCADE'), nullable=False),
-        sa.Column('product_id', sa.String(36), sa.ForeignKey('product.product_id'), nullable=False),
-        sa.Column('sku', sa.String(255), nullable=False, index=True),
-        sa.Column('location_id', sa.String(36), sa.ForeignKey('location.location_id'), nullable=False),
-        sa.Column('quantity', sa.Numeric(12, 3), nullable=False),
-        sa.Column('status', reservation_status_enum, nullable=False),
-        sa.Column('created_at', sa.DateTime, server_default=sa.func.now(), nullable=False),
-        sa.Column('updated_at', sa.DateTime, server_default=sa.func.now(), nullable=False),
-    )
-
     # ==================== 5. SALES ORDERS ====================
     create_table_if_not_exists(
         'sales_order',
@@ -161,6 +147,23 @@ def upgrade() -> None:
         sa.Column('unit_price', sa.Numeric(12, 2), nullable=False),
         sa.Column('line_total', sa.Numeric(14, 2), nullable=False),
         sa.Column('status', line_status_enum, nullable=False),
+        sa.Column('created_at', sa.DateTime, server_default=sa.func.now(), nullable=False),
+        sa.Column('updated_at', sa.DateTime, server_default=sa.func.now(), nullable=False),
+    )
+
+    # ==================== 4.1. INVENTORY RESERVATION  ====================
+    # ================ depends on sales_order and sales_order_line, so created after them ================
+
+    create_table_if_not_exists(
+        'inventory_reservation',
+        sa.Column('reservation_id', sa.String(36), primary_key=True, nullable=False),
+        sa.Column('sales_order_id', sa.String(36), sa.ForeignKey('sales_order.sales_order_id', ondelete='CASCADE'), nullable=False),
+        sa.Column('sales_order_line_id', sa.String(36), sa.ForeignKey('sales_order_line.line_id', ondelete='CASCADE'), nullable=False),
+        sa.Column('product_id', sa.String(36), sa.ForeignKey('product.product_id'), nullable=False),
+        sa.Column('sku', sa.String(255), nullable=False, index=True),
+        sa.Column('location_id', sa.String(36), sa.ForeignKey('location.location_id'), nullable=False),
+        sa.Column('quantity', sa.Numeric(12, 3), nullable=False),
+        sa.Column('status', reservation_status_enum, nullable=False),
         sa.Column('created_at', sa.DateTime, server_default=sa.func.now(), nullable=False),
         sa.Column('updated_at', sa.DateTime, server_default=sa.func.now(), nullable=False),
     )
@@ -289,9 +292,9 @@ def downgrade() -> None:
     op.drop_table('pos_shift')
     op.drop_table('pos_terminal')
     op.drop_table('payment')
+    op.drop_table('inventory_reservation')
     op.drop_table('sales_order_line')
     op.drop_table('sales_order')
-    op.drop_table('inventory_reservation')
     op.drop_table('inventory_movement')
     op.drop_table('location')
     op.drop_table('product_variant')
