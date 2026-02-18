@@ -12,14 +12,26 @@ I have successfully implemented all 21 REST API endpoints for the Literp lightwe
   - Configured for localhost:5432 with literp database
 
 ### 2. Repository Classes (Data Access Layer)
-- **[UnitOfMeasureRepository.kt](src/main/kotlin/com/literp/repository/UnitOfMeasureRepository.kt)**
+
+#### Base Repository
+- **[BaseRepository.kt](src/main/kotlin/com/literp/repository/BaseRepository.kt)** (NEW)
+  - Abstract base class for all repositories
+  - Provides logger initialization with repository-specific context
+  - Validates database connection during initialization
+  - Eliminates code duplication across repository classes
+  - Follows DRY principle for shared logger setup
+
+#### Repository Implementations
+- **[UnitOfMeasureRepository.kt](src/main/kotlin/com/literp/repository/UnitOfMeasureRepository.kt)** (Updated)
+  - Now extends BaseRepository
   - 6 methods covering all UOM operations
   - List with pagination and sorting
   - Create with duplicate code detection
   - Get, Update, Delete operations
   - Code existence validation
 
-- **[ProductRepository.kt](src/main/kotlin/com/literp/repository/ProductRepository.kt)**
+- **[ProductRepository.kt](src/main/kotlin/com/literp/repository/ProductRepository.kt)** (Updated)
+  - Now extends BaseRepository
   - 6 methods covering all Product operations
   - Soft delete strategy (sets active=false)
   - SKU immutability (cannot be updated)
@@ -27,7 +39,8 @@ I have successfully implemented all 21 REST API endpoints for the Literp lightwe
   - Duplicate SKU detection
   - List shows only active products
 
-- **[ProductVariantRepository.kt](src/main/kotlin/com/literp/repository/ProductVariantRepository.kt)**
+- **[ProductVariantRepository.kt](src/main/kotlin/com/literp/repository/ProductVariantRepository.kt)** (Updated)
+  - Now extends BaseRepository
   - 6 methods covering all ProductVariant operations
   - Nested under products with product filtering
   - Soft delete like products
@@ -35,7 +48,8 @@ I have successfully implemented all 21 REST API endpoints for the Literp lightwe
   - SKU uniqueness per variant
   - Pagination support
 
-- **[LocationRepository.kt](src/main/kotlin/com/literp/repository/LocationRepository.kt)**
+- **[LocationRepository.kt](src/main/kotlin/com/literp/repository/LocationRepository.kt)** (Updated)
+  - Now extends BaseRepository
   - 7 methods covering all Location operations
   - Advanced filtering (code, name, type, activeOnly)
   - Hard delete (physical removal)
@@ -43,14 +57,43 @@ I have successfully implemented all 21 REST API endpoints for the Literp lightwe
   - Code lookup endpoint (by-code)
   - Supports three types: WAREHOUSE, STORE, PRODUCTION
 
-### 3. Route Handlers (Updated)
-- **[HttpServerVerticle.kt](src/main/kotlin/com/literp/verticle/HttpServerVerticle.kt)**
-  - Complete rewrite from boilerplate
+### 3. Route Handlers (Refactored)
+
+#### Base Handler
+- **[BaseHandler.kt](src/main/kotlin/com/literp/verticle/handler/BaseHandler.kt)** (NEW)
+  - Abstract base class for all handlers
+  - Provides shared response utilities:
+    - `putResponse()`: Formats successful HTTP responses
+    - `putErrorResponse()`: Formats error HTTP responses
+  - Eliminates ~300+ lines of duplicate response formatting code
+  - Enables consistent HTTP response structure across all handlers
+  - Single point of change for response format modifications
+
+#### Handler Implementations
+- **[UnitOfMeasureHandler.kt](src/main/kotlin/com/literp/verticle/handler/UnitOfMeasureHandler.kt)** (NEW)
+  - Extends BaseHandler
+  - Handles 5 UOM endpoints
+  - Depends on UnitOfMeasureRepository
+
+- **[ProductHandler.kt](src/main/kotlin/com/literp/verticle/handler/ProductHandler.kt)** (NEW)
+  - Extends BaseHandler
+  - Handles 10 endpoints: 5 Product + 5 ProductVariant
+  - Depends on ProductRepository and ProductVariantRepository
+
+- **[LocationHandler.kt](src/main/kotlin/com/literp/verticle/handler/LocationHandler.kt)** (NEW)
+  - Extends BaseHandler
+  - Handles 6 Location endpoints
+  - Depends on LocationRepository
+
+- **[HttpServerVerticle.kt](src/main/kotlin/com/literp/verticle/HttpServerVerticle.kt)** (Refactored)
+  - Reduced from 516 lines to 254 lines
+  - Now delegates route handling to handler classes
   - Loads both OpenAPI specs (product-catalog.yaml, locations.yaml)
-  - Registers all 21 handlers
+  - Instantiates handler objects with repository dependencies
+  - Registers all 21 operation handlers
   - Proper error handling and status codes
   - Request validation
-  - Response formatting
+  - Response formatting delegated to BaseHandler
 
 ### 4. Documentation
 - **[API_IMPLEMENTATION.md](API_IMPLEMENTATION.md)** (Comprehensive guide)
@@ -147,6 +190,42 @@ I have successfully implemented all 21 REST API endpoints for the Literp lightwe
 - Wildcard search by code and name
 - Exact match by location type
 - Active status filter
+
+## SOLID Design Principles Applied
+
+### Single Responsibility Principle (SRP)
+- **BaseHandler**: Only handles HTTP response formatting
+- **UnitOfMeasureHandler**: Only handles UOM endpoint routing
+- **ProductHandler**: Only handles Product/ProductVariant endpoint routing
+- **LocationHandler**: Only handles Location endpoint routing
+- **Repositories**: Each handles a single entity's data operations
+- **HttpServerVerticle**: Only handles server setup and route registration
+
+### Open/Closed Principle (OCP)
+- **BaseHandler**: Open for extension through inheritance, closed for modification
+  - Subclasses inherit putResponse/putErrorResponse without modification
+- **BaseRepository**: Open for extension, repositories extend it without changing base logic
+- New handlers/repositories can be added without modifying existing code
+
+### Liskov Substitution Principle (LSP)
+- All handler subclasses can be used interchangeably via the handler registration pattern
+- All repository subclasses extend BaseRepository and behave consistently
+
+### Interface Segregation Principle (ISP)
+- **BaseHandler**: Provides only response utilities (not bloated with unrelated methods)
+- **BaseRepository**: Provides only shared logger and DB connection validation
+- Handlers depend only on the repository methods they need
+
+### Dependency Inversion Principle (DIP)
+- Handlers depend on Repository abstractions (BaseRepository subclasses)
+- HttpServerVerticle depends on handler abstractions (BaseHandler subclasses)
+- High-level modules depend on abstractions, not low-level details
+
+### Code Reuse Benefits
+- **Eliminated ~400 lines**: Duplicate response formatting code removed
+- **Single logger initialization**: BaseRepository handles setup for all repos
+- **Consistent patterns**: All handlers follow same extension pattern
+- **Reduced maintenance**: Changes to response format require only one update
 
 ## Request/Response Format
 

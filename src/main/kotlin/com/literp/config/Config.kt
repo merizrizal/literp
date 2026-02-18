@@ -4,6 +4,7 @@ import java.io.FileInputStream
 import java.util.*
 
 class Config {
+
     val httpPort: Int
     val pgHost: String
     val pgPort: Int

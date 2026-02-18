@@ -65,9 +65,23 @@ literp/
 │   └── main/kotlin/com/literp/
 │       ├── App.kt
 │       ├── config/
+│       │   └── Config.kt
 │       ├── db/
-│       ├── repository/
-│       └── verticle/
+│       │   └── DatabaseConnection.kt
+│       ├── repository/          # Data Access Layer
+│       │   ├── BaseRepository.kt (shared base class)
+│       │   ├── UnitOfMeasureRepository.kt
+│       │   ├── ProductRepository.kt
+│       │   ├── ProductVariantRepository.kt
+│       │   └── LocationRepository.kt
+│       └── verticle/            # HTTP & Reactive Components
+│           ├── MainVerticle.kt
+│           ├── HttpServerVerticle.kt
+│           └── handler/         # Request Handlers (SOLID)
+│               ├── BaseHandler.kt (shared response utilities)
+│               ├── UnitOfMeasureHandler.kt
+│               ├── ProductHandler.kt
+│               └── LocationHandler.kt
 ├── python/
 │   └── database/migration/  # Alembic migrations
 ├── docker/                  # Docker configuration
@@ -152,11 +166,79 @@ Future enhancements:
 ✅ Connection pooling
 ✅ Comprehensive error handling
 ✅ Complete API documentation
+✅ SOLID design principles applied
+
+## 🏗️ Architecture & Design Patterns
+
+### Layered Architecture
+```
+┌─────────────────────────────────────────┐
+│  HTTP Layer (HttpServerVerticle)        │
+│  - OpenAPI spec loading & routing       │
+│  - Route registration                   │
+└──────────────────┬──────────────────────┘
+                   │
+┌──────────────────▼──────────────────────┐
+│  Handler Layer (Request Processing)     │
+│  - UnitOfMeasureHandler                 │
+│  - ProductHandler                       │
+│  - LocationHandler                      │
+│  - BaseHandler (shared utilities)       │
+└──────────────────┬──────────────────────┘
+                   │
+┌──────────────────▼──────────────────────┐
+│  Repository Layer (Data Access)         │
+│  - UnitOfMeasureRepository              │
+│  - ProductRepository                    │
+│  - ProductVariantRepository             │
+│  - LocationRepository                   │
+│  - BaseRepository (shared logic)        │
+└──────────────────┬──────────────────────┘
+                   │
+┌──────────────────▼──────────────────────┐
+│  Database Layer (PostgreSQL)            │
+└─────────────────────────────────────────┘
+```
+
+### SOLID Principles Applied
+
+**Single Responsibility (SRP)**
+- Each handler manages one resource domain
+- BaseHandler handles only HTTP response formatting
+- Each repository focuses on single entity operations
+
+**Open/Closed (OCP)**
+- BaseHandler and BaseRepository open for extension, closed for modification
+- New resources can be added without modifying existing code
+
+**Liskov Substitution (LSP)**
+- All handlers inherit from BaseHandler
+- All repositories extend BaseRepository
+- Subclasses maintain behavioral contracts
+
+**Interface Segregation (ISP)**
+- BaseHandler provides only necessary response utilities
+- BaseRepository provides only shared logger/connection setup
+- No bloated abstract classes
+
+**Dependency Inversion (DIP)**
+- Handlers depend on repository abstractions
+- HttpServerVerticle depends on handler abstractions
+- High-level modules don't depend on low-level details
+
+### Benefits
+- ✅ ~400 lines of duplicate code eliminated
+- ✅ Single point of change for response formatting
+- ✅ Consistent logger initialization across repos
+- ✅ Improved testability through separation
+- ✅ Easier to add new resources
+- ✅ Better code maintainability
 
 ## 🛠️ Development
 
 The implementation includes:
-- Repository pattern for data access
+- Repository pattern for data access with inheritance-based code reuse
+- Handler pattern for request processing with shared utilities
 - Vert.x OpenAPI router integration
 - RxJava3 for reactive operations
 - Kotlin null-safety features
@@ -166,6 +248,7 @@ The implementation includes:
 
 For implementation details, architecture guidance, and technical questions, refer to:
 - [docs/API_IMPLEMENTATION.md](docs/API_IMPLEMENTATION.md) - Technical architecture
+- [docs/IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md) - Design patterns and principles
 - [docs/ENDPOINTS_OVERVIEW.md](docs/ENDPOINTS_OVERVIEW.md) - Visual diagrams
 - [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md) - Validation checklist
 

@@ -59,13 +59,19 @@ src/main/kotlin/com/literp/
 ├── db/
 │   └── DatabaseConnection.kt           # PostgreSQL connection pool
 ├── repository/                         # Data Access Layer
+│   ├── BaseRepository.kt               # Base class for all repositories
 │   ├── UnitOfMeasureRepository.kt      # UOM CRUD
 │   ├── ProductRepository.kt            # Product CRUD
 │   ├── ProductVariantRepository.kt     # ProductVariant CRUD
 │   └── LocationRepository.kt           # Location CRUD
 └── verticle/
     ├── MainVerticle.kt                 # Main verticle
-    └── HttpServerVerticle.kt           # HTTP server with 21 handlers
+    ├── HttpServerVerticle.kt           # HTTP server setup and routing
+    └── handler/                        # Request Handlers (SOLID pattern)
+        ├── BaseHandler.kt              # Base class for shared response utilities
+        ├── UnitOfMeasureHandler.kt     # UOM endpoint handlers
+        ├── ProductHandler.kt           # Product and variant handlers
+        └── LocationHandler.kt          # Location endpoint handlers
 ```
 
 ## 🔧 Implementation Overview

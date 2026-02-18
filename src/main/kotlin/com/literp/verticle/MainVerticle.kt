@@ -7,6 +7,7 @@ import io.vertx.rxjava3.core.RxHelper
 import io.vertx.rxjava3.core.Vertx
 
 class MainVerticle : CoroutineVerticle() {
+
     private val logger = LoggerFactory.getLogger(this@MainVerticle.javaClass)
     val vertx = Vertx.vertx()
 

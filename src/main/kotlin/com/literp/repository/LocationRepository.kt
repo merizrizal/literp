@@ -6,7 +6,7 @@ import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.util.*
 
-class LocationRepository(private val pool: Pool) {
+class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::class.java) {
 
     fun listLocations(
         page: Int,

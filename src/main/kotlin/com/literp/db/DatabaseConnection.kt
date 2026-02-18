@@ -9,6 +9,7 @@ import io.vertx.sqlclient.Pool
 import io.vertx.sqlclient.PoolOptions
 
 object DatabaseConnection {
+
     private val logger = LoggerFactory.getLogger(this.javaClass)
 
     fun createPool(vertx: Vertx): RxPool {

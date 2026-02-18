@@ -24,13 +24,19 @@ src/main/kotlin/com/literp/
 ├── db/
 │   └── DatabaseConnection.kt       # Database pool initialization
 ├── repository/
+│   ├── BaseRepository.kt           # Base class with logger & DB connection
 │   ├── UnitOfMeasureRepository.kt  # UOM CRUD operations
 │   ├── ProductRepository.kt        # Product CRUD operations
 │   ├── ProductVariantRepository.kt # Product Variant CRUD operations
 │   └── LocationRepository.kt       # Location CRUD operations
 └── verticle/
     ├── MainVerticle.kt             # Main verticle entry point
-    └── HttpServerVerticle.kt       # HTTP server with route handlers
+    ├── HttpServerVerticle.kt       # HTTP server with route handlers
+    └── handler/
+        ├── BaseHandler.kt          # Base class with shared response utilities
+        ├── UnitOfMeasureHandler.kt # UOM endpoint handlers
+        ├── ProductHandler.kt       # Product & variant endpoint handlers
+        └── LocationHandler.kt      # Location endpoint handlers
 ```
 
 ## Implementation Details
@@ -50,7 +56,26 @@ val pool = DatabaseConnection.createPool()
 
 ### 2. Repository Pattern
 
-Four repository classes handle all database operations using parameterized queries:
+Four repository classes handle all database operations using parameterized queries. All repositories extend `BaseRepository` which provides shared logger initialization and database connection validation.
+
+#### BaseRepository (Base Class)
+
+Provides common functionality for all repositories:
+- **Logger Initialization**: Each repository gets an automatically initialized logger
+- **Database Connection Check**: Validates DB connection during initialization
+- **Generic Constructor**: Accepts pool and class reference for logging context
+
+```kotlin
+abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
+    protected val logger = LoggerFactory.getLogger(clazz)
+    // DB connection validation in init block
+}
+```
+
+**Benefits:**
+- Eliminates code duplication across repositories
+- Consistent logging setup across all data layers
+- Single point of change for base repository logic
 
 #### UnitOfMeasureRepository
 - `listUnitOfMeasures(page, size, sort)` - Paginated list with sorting
@@ -90,36 +115,59 @@ Four repository classes handle all database operations using parameterized queri
 **Key Features:**
 - Loads both OpenAPI specs (product-catalog.yaml and locations.yaml)
 - Creates RouterBuilders for each spec
-- Registers handlers for all 21 operation IDs
+- Delegates request handling to specialized handler classes
 - Mounts routers under `/api/v1` path
 - Returns proper HTTP status codes (200, 201, 204, 400, 404, 409, 500)
 - Comprehensive error handling with descriptive messages
 - JSON request/response bodies
 
+#### Handler Architecture (SOLID Principles)
+
+The handler layer follows the **Single Responsibility Principle** by separating handlers into domain-specific classes. All handlers extend `BaseHandler` which provides shared response utilities.
+
+**BaseHandler (Base Class)**
+
+Provides common response formatting for all handlers:
+- `putResponse()`: Sends successful responses with status code
+- `putErrorResponse()`: Sends error responses with message and status
+
+```kotlin
+open class BaseHandler {
+    protected fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject)
+    protected fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String)
+}
+```
+
+**Benefits:**
+- Eliminates duplicate response formatting code across handlers
+- Consistent HTTP response structure
+- Easier to modify response format (single location)
+- Natural extensibility for subclass handlers
+
 **Handler Organization:**
 
-1. **Unit of Measure Handlers** (5 endpoints)
+1. **UnitOfMeasureHandler** - Extends BaseHandler (5 endpoints)
    - `listUnitOfMeasures()` - GET /uom
    - `createUnitOfMeasure()` - POST /uom
    - `getUnitOfMeasure()` - GET /uom/{uomId}
    - `updateUnitOfMeasure()` - PUT /uom/{uomId}
    - `deleteUnitOfMeasure()` - DELETE /uom/{uomId}
 
-2. **Product Handlers** (5 endpoints)
-   - `listProducts()` - GET /products
-   - `createProduct()` - POST /products
-   - `getProduct()` - GET /products/{productId}
-   - `updateProduct()` - PUT /products/{productId}
-   - `deleteProduct()` - DELETE /products/{productId}
+2. **ProductHandler** - Extends BaseHandler (10 endpoints)
+   - **Product operations** (5):
+     - `listProducts()` - GET /products
+     - `createProduct()` - POST /products
+     - `getProduct()` - GET /products/{productId}
+     - `updateProduct()` - PUT /products/{productId}
+     - `deleteProduct()` - DELETE /products/{productId}
+   - **Product Variant operations** (5):
+     - `listProductVariants()` - GET /products/{productId}/variants
+     - `createProductVariant()` - POST /products/{productId}/variants
+     - `getProductVariant()` - GET /products/{productId}/variants/{variantId}
+     - `updateProductVariant()` - PUT /products/{productId}/variants/{variantId}
+     - `deleteProductVariant()` - DELETE /products/{productId}/variants/{variantId}
 
-3. **Product Variant Handlers** (5 endpoints)
-   - `listProductVariants()` - GET /products/{productId}/variants
-   - `createProductVariant()` - POST /products/{productId}/variants
-   - `getProductVariant()` - GET /products/{productId}/variants/{variantId}
-   - `updateProductVariant()` - PUT /products/{productId}/variants/{variantId}
-   - `deleteProductVariant()` - DELETE /products/{productId}/variants/{variantId}
-
-4. **Location Handlers** (6 endpoints)
+3. **LocationHandler** - Extends BaseHandler (6 endpoints)
    - `listLocations()` - GET /locations
    - `createLocation()` - POST /locations
    - `getLocation()` - GET /locations/{locationId}

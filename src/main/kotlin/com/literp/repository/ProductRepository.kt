@@ -6,7 +6,7 @@ import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.util.*
 
-class ProductRepository(private val pool: Pool) {
+class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::class.java) {
 
     fun listProducts(page: Int, size: Int, sort: String): Single<JsonObject> {
         val offset = page * size

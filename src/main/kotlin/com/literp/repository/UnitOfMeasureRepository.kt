@@ -7,20 +7,7 @@ import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.util.*
 
-class UnitOfMeasureRepository(private val pool: Pool) {
-    private val logger = LoggerFactory.getLogger(this@UnitOfMeasureRepository.javaClass)
-
-    init {
-        pool.rxGetConnection()
-            .subscribe(
-                { conn ->
-                    logger.info("API unit_of_measure: DB Connection established!")
-                },
-                { error ->
-                    logger.error("Error in API unit_of_measure", error)
-                }
-            )
-    }
+class UnitOfMeasureRepository(pool: Pool) : BaseRepository(pool, UnitOfMeasureRepository::class.java) {
 
     fun listUnitOfMeasures(page: Int, size: Int, sort: String): Single<JsonObject> {
         val offset = page * size
