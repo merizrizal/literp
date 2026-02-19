@@ -124,7 +124,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                     Single.error(Exception("Location not found"))
                 } else {
                     val row = result.first()
-                    val address = row.getJsonObject("address") ?: JsonObject()
+                    val address = JsonObject(row.getString("address"))
                     Single.just(
                         JsonObject()
                             .put("locationId", row.getString("location_id"))
@@ -154,7 +154,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                     Single.error(Exception("Location not found"))
                 } else {
                     val row = result.first()
-                    val address = row.getJsonObject("address") ?: JsonObject()
+                    val address = JsonObject(row.getString("address"))
                     Single.just(
                         JsonObject()
                             .put("locationId", row.getString("location_id"))
@@ -190,7 +190,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                     Single.error(Exception("Location not found"))
                 } else {
                     val row = result.first()
-                    val addr = row.getJsonObject("address") ?: JsonObject()
+                    val address = JsonObject(row.getString("address"))
                     Single.just(
                         JsonObject()
                             .put("locationId", row.getString("location_id"))
@@ -198,7 +198,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                             .put("name", row.getString("name"))
                             .put("locationType", row.getString("location_type"))
                             .put("isActive", row.getBoolean("is_active"))
-                            .put("address", addr)
+                            .put("address", address)
                             .put("createdAt", row.getLocalDateTime("created_at").toString())
                             .put("updatedAt", row.getLocalDateTime("updated_at").toString())
                     )

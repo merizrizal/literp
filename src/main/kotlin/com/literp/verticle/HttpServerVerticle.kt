@@ -79,10 +79,12 @@ class HttpServerVerticle(
                     val locationRouter = locationRouterBuilder.createRouter()
 
                     val router = Router.router(vertx).apply {
+                        route().handler(HSTSHandler.create())
+
+                        get("/").handler(this@HttpServerVerticle::getIndex)
+
                         route("/api/v1/*").subRouter(productRouter)
                         route("/api/v1/*").subRouter(locationRouter)
-                        get("/").handler(this@HttpServerVerticle::getIndex)
-                        route().handler(HSTSHandler.create())
                     }
 
                     val config = Config()

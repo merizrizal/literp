@@ -1,7 +1,6 @@
 package com.literp.repository
 
 import io.reactivex.rxjava3.core.Single
-import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple

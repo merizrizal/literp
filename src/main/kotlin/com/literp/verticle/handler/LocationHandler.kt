@@ -3,9 +3,12 @@ package com.literp.verticle.handler
 import com.literp.repository.LocationRepository
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
+import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
+import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 
-class LocationHandler(private val locationRepository: LocationRepository) : BaseHandler() {
+
+class LocationHandler(private val locationRepository: LocationRepository) : BaseHandler(LocationHandler::class.java) {
 
     fun listLocations(context: RoutingContext) {
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
@@ -24,7 +27,8 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
     }
 
     fun createLocation(context: RoutingContext) {
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val code = body.getString("code")
         val name = body.getString("name")
         val locationType = body.getString("locationType")
@@ -36,7 +40,10 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
         }
 
         locationRepository.checkCodeExists(code)
-            .flatMap { exists -> if (exists) Single.error(Exception("Location code already exists")) else locationRepository.createLocation(code, name, locationType, address) }
+            .flatMap { exists ->
+                if (exists) Single.error(Exception("Location code already exists"))
+                else locationRepository.createLocation(code, name, locationType, address)
+            }
             .subscribe(
                 { result -> putResponse(context, 201, JsonObject().put("data", result)) },
                 { error ->
@@ -71,7 +78,8 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
 
     fun updateLocation(context: RoutingContext) {
         val locationId = context.pathParam("locationId")
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val name = body.getString("name")
         val locationType = body.getString("locationType")
         val address = body.getJsonObject("address")

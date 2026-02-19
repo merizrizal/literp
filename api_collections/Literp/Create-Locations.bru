@@ -1,0 +1,35 @@
+meta {
+  name: Create-Locations
+  type: http
+  seq: 6
+}
+
+post {
+  url: http://{{host}}:8010/api/v1/locations
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "code": "WH-001",
+    "name": "Main Warehouse",
+    "locationType": "WAREHOUSE",
+    "isActive": true,
+    "address": {
+      "street": "123 Industrial Way",
+      "city": "Springfield",
+      "state": "IL",
+      "postal_code": "62701",
+      "country": "USA",
+      "latitude": 39.7817,
+      "longitude": -89.6501
+    }
+  }
+  
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

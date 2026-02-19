@@ -34,7 +34,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             }
             .map { result ->
                 val data = result.map { row ->
-                    val attributes = row.getJsonObject("attributes") ?: JsonObject()
+                    val attributes = JsonObject(row.getString("attributes"))
                     JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -102,7 +102,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     Single.error(Exception("Product variant not found"))
                 } else {
                     val row = result.first()
-                    val attributes = row.getJsonObject("attributes") ?: JsonObject()
+                    val attributes = JsonObject(row.getString("attributes"))
                     Single.just(JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -136,13 +136,13 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     Single.error(Exception("Product variant not found"))
                 } else {
                     val row = result.first()
-                    val attrs = row.getJsonObject("attributes") ?: JsonObject()
+                    val attributes = JsonObject(row.getString("attributes"))
                     Single.just(JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))
                         .put("name", row.getString("name"))
-                        .put("attributes", attrs)
+                        .put("attributes", attributes)
                         .put("active", row.getBoolean("active"))
                         .put("createdAt", row.getLocalDateTime("created_at").toString())
                         .put("updatedAt", row.getLocalDateTime("updated_at").toString())

@@ -3,9 +3,11 @@ package com.literp.verticle.handler
 import com.literp.repository.UnitOfMeasureRepository
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
+import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
+import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 
-class UnitOfMeasureHandler(private val uomRepository: UnitOfMeasureRepository) : BaseHandler() {
+class UnitOfMeasureHandler(private val uomRepository: UnitOfMeasureRepository) : BaseHandler(UnitOfMeasureHandler::class.java) {
 
     fun listUnitOfMeasures(context: RoutingContext) {
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
@@ -20,7 +22,8 @@ class UnitOfMeasureHandler(private val uomRepository: UnitOfMeasureRepository) :
     }
 
     fun createUnitOfMeasure(context: RoutingContext) {
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val code = body.getString("code")
         val name = body.getString("name")
         val baseUnit = body.getString("baseUnit")
@@ -59,7 +62,8 @@ class UnitOfMeasureHandler(private val uomRepository: UnitOfMeasureRepository) :
 
     fun updateUnitOfMeasure(context: RoutingContext) {
         val uomId = context.pathParam("uomId")
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val name = body.getString("name")
         val baseUnit = body.getString("baseUnit")
 

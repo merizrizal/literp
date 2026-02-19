@@ -34,7 +34,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
             }
             .map { result ->
                 val data = result.map { row ->
-                    val metadata = row.getJsonObject("metadata") ?: JsonObject()
+                    val metadata = JsonObject(row.getString("metadata"))
                     JsonObject()
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))
@@ -106,7 +106,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                     Single.error(Exception("Product not found"))
                 } else {
                     val row = result.first()
-                    val metadata = row.getJsonObject("metadata") ?: JsonObject()
+                    val metadata = JsonObject(row.getString("metadata"))
                     Single.just(JsonObject()
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))
@@ -142,7 +142,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                     Single.error(Exception("Product not found"))
                 } else {
                     val row = result.first()
-                    val meta = row.getJsonObject("metadata") ?: JsonObject()
+                    val metadata = JsonObject(row.getString("metadata"))
                     Single.just(JsonObject()
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))
@@ -150,7 +150,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                         .put("productType", row.getString("product_type"))
                         .put("baseUom", row.getString("base_uom"))
                         .put("active", row.getBoolean("active"))
-                        .put("metadata", meta)
+                        .put("metadata", metadata)
                         .put("createdAt", row.getLocalDateTime("created_at").toString())
                         .put("updatedAt", row.getLocalDateTime("updated_at").toString())
                     )

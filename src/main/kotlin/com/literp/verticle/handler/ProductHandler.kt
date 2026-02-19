@@ -4,12 +4,14 @@ import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
+import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
+import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 
 class ProductHandler(
     private val productRepository: ProductRepository,
     private val variantRepository: ProductVariantRepository
-) : BaseHandler() {
+) : BaseHandler(ProductHandler::class.java) {
 
     fun listProducts(context: RoutingContext) {
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
@@ -24,7 +26,8 @@ class ProductHandler(
     }
 
     fun createProduct(context: RoutingContext) {
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val sku = body.getString("sku")
         val name = body.getString("name")
         val productType = body.getString("productType")
@@ -37,7 +40,10 @@ class ProductHandler(
         }
 
         productRepository.checkSkuExists(sku)
-            .flatMap { exists -> if (exists) Single.error(Exception("Product SKU already exists")) else productRepository.createProduct(sku, name, productType, baseUom, metadata) }
+            .flatMap { exists ->
+                if (exists) Single.error(Exception("Product SKU already exists"))
+                else productRepository.createProduct(sku, name, productType, baseUom, metadata)
+            }
             .subscribe(
                 { result -> putResponse(context, 201, JsonObject().put("data", result)) },
                 { error ->
@@ -62,7 +68,8 @@ class ProductHandler(
 
     fun updateProduct(context: RoutingContext) {
         val productId = context.pathParam("productId")
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val name = body.getString("name")
         val productType = body.getString("productType")
         val metadata = body.getJsonObject("metadata")
@@ -105,7 +112,8 @@ class ProductHandler(
 
     fun createProductVariant(context: RoutingContext) {
         val productId = context.pathParam("productId")
-        val body = context.body().asJsonObject()
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
         val sku = body.getString("sku")
         val name = body.getString("name")
         val attributes = body.getJsonObject("attributes")
@@ -116,7 +124,10 @@ class ProductHandler(
         }
 
         variantRepository.checkSkuExists(sku)
-            .flatMap { exists -> if (exists) Single.error(Exception("Variant SKU already exists")) else variantRepository.createProductVariant(productId, sku, name, attributes) }
+            .flatMap { exists ->
+                if (exists) Single.error(Exception("Variant SKU already exists"))
+                else variantRepository.createProductVariant(productId, sku, name, attributes)
+            }
             .subscribe(
                 { result -> putResponse(context, 201, JsonObject().put("data", result)) },
                 { error ->

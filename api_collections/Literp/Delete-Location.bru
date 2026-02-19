@@ -1,0 +1,16 @@
+meta {
+  name: Delete-Location
+  type: http
+  seq: 9
+}
+
+delete {
+  url: http://{{host}}:8010/api/v1/locations/d18c385f-dda3-43fb-ab52-8f741d77450e
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
