@@ -6,6 +6,14 @@ import com.literp.repository.LocationRepository
 import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
 import com.literp.repository.UnitOfMeasureRepository
+import com.literp.service.LocationService
+import com.literp.service.ProductService
+import com.literp.service.ProductVariantService
+import com.literp.service.UnitOfMeasureService
+import com.literp.service.impl.LocationServiceImpl
+import com.literp.service.impl.ProductServiceImpl
+import com.literp.service.impl.ProductVariantServiceImpl
+import com.literp.service.impl.UnitOfMeasureServiceImpl
 import com.literp.verticle.handler.LocationHandler
 import com.literp.verticle.handler.ProductHandler
 import com.literp.verticle.handler.UnitOfMeasureHandler
@@ -34,20 +42,36 @@ class HttpServerVerticle(
     private lateinit var variantRepository: ProductVariantRepository
     private lateinit var locationRepository: LocationRepository
 
+    private lateinit var uomService: UnitOfMeasureService
+    private lateinit var productService: ProductService
+    private lateinit var variantService: ProductVariantService
+    private lateinit var locationService: LocationService
+
     private lateinit var productHandler: ProductHandler
     private lateinit var locationHandler: LocationHandler
     private lateinit var uomHandler: UnitOfMeasureHandler
 
     override fun start(startFuture: Promise<Void>?) {
+        val coreVertx = vertx.delegate
         val pool = DatabaseConnection.createPool(vertx)
         uomRepository = UnitOfMeasureRepository(pool)
         productRepository = ProductRepository(pool)
         variantRepository = ProductVariantRepository(pool)
         locationRepository = LocationRepository(pool)
 
-        productHandler = ProductHandler(productRepository, variantRepository)
-        locationHandler = LocationHandler(locationRepository)
-        uomHandler = UnitOfMeasureHandler(uomRepository)
+        UnitOfMeasureService.register(coreVertx, UnitOfMeasureServiceImpl(uomRepository))
+        ProductService.register(coreVertx, ProductServiceImpl(productRepository))
+        ProductVariantService.register(coreVertx, ProductVariantServiceImpl(variantRepository))
+        LocationService.register(coreVertx, LocationServiceImpl(locationRepository))
+
+        uomService = UnitOfMeasureService.createProxy(coreVertx)
+        productService = ProductService.createProxy(coreVertx)
+        variantService = ProductVariantService.createProxy(coreVertx)
+        locationService = LocationService.createProxy(coreVertx)
+
+        productHandler = ProductHandler(productService, variantService)
+        locationHandler = LocationHandler(locationService)
+        uomHandler = UnitOfMeasureHandler(uomService)
 
         loadProductCatalogAndLocations(startFuture)
     }

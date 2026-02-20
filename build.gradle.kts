@@ -35,6 +35,7 @@ dependencies {
 
     // Vertx Codegen and Proxy
     implementation("io.vertx:vertx-service-proxy:$vertxVersion")
+    compileOnly("io.vertx:vertx-codegen:$vertxVersion")
     annotationProcessor("io.vertx:vertx-codegen:$vertxVersion:processor")
     annotationProcessor("io.vertx:vertx-service-proxy:$vertxVersion")
 

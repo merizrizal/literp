@@ -1,14 +1,14 @@
 package com.literp.verticle.handler
 
-import com.literp.repository.LocationRepository
-import io.reactivex.rxjava3.core.Single
+import com.literp.service.LocationService
+import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 
 
-class LocationHandler(private val locationRepository: LocationRepository) : BaseHandler(LocationHandler::class.java) {
+class LocationHandler(private val locationService: LocationService) : BaseHandler(LocationHandler::class.java) {
 
     fun listLocations(context: RoutingContext) {
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
@@ -19,11 +19,9 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
         val locationType = context.queryParam("locationType").firstOrNull()
         val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
 
-        locationRepository.listLocations(page, size, sort, code, name, locationType, activeOnly)
-            .subscribe(
-                { result -> putResponse(context, 200, result) },
-                { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}") }
-            )
+        locationService.listLocations(page, size, sort, code, name, locationType, activeOnly)
+            .onSuccess { result -> putResponse(context, 200, result) }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}") }
     }
 
     fun createLocation(context: RoutingContext) {
@@ -39,41 +37,38 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
             return
         }
 
-        locationRepository.checkCodeExists(code)
-            .flatMap { exists ->
-                if (exists) Single.error(Exception("Location code already exists"))
-                else locationRepository.createLocation(code, name, locationType, address)
-            }
-            .subscribe(
-                { result -> putResponse(context, 201, JsonObject().put("data", result)) },
-                { error ->
-                    if (error.message?.contains("already exists") == true) {
-                        putErrorResponse(context, 409, error.message ?: "Conflict")
-                    } else {
-                        putErrorResponse(context, 500, "Failed to create location: ${error.message}")
-                    }
+        locationService.checkCodeExists(code)
+            .compose { exists ->
+                if (exists) {
+                    Future.failedFuture(Exception("Location code already exists"))
+                } else {
+                    locationService.createLocation(code, name, locationType, address)
                 }
-            )
+            }
+            .onSuccess { result -> putResponse(context, 201, JsonObject().put("data", result)) }
+            .onFailure { error ->
+                if (error.message?.contains("already exists") == true) {
+                    putErrorResponse(context, 409, error.message ?: "Conflict")
+                } else {
+                    putErrorResponse(context, 500, "Failed to create location: ${error.message}")
+                }
+            }
     }
 
     fun getLocation(context: RoutingContext) {
         val locationId = context.pathParam("locationId")
 
-        locationRepository.getLocation(locationId)
-            .subscribe(
-                { result -> putResponse(context, 200, JsonObject().put("data", result)) },
-                { _ -> putErrorResponse(context, 404, "Location not found") }
-            )
+        locationService.getLocation(locationId)
+            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
     }
 
     fun getLocationByCode(context: RoutingContext) {
         val code = context.pathParam("code")
 
-        locationRepository.getLocationByCode(code)
-            .subscribe(
-                { result -> putResponse(context, 200, JsonObject().put("data", result)) },
-                { _ -> putErrorResponse(context, 404, "Location not found") }
-            )
+        locationService.getLocationByCode(code)
+            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
     }
 
     fun updateLocation(context: RoutingContext) {
@@ -89,21 +84,17 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
             return
         }
 
-        locationRepository.updateLocation(locationId, name, locationType, address)
-            .subscribe(
-                { result -> putResponse(context, 200, JsonObject().put("data", result)) },
-                { _ -> putErrorResponse(context, 404, "Location not found") }
-            )
+        locationService.updateLocation(locationId, name, locationType, address)
+            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
     }
 
     fun deleteLocation(context: RoutingContext) {
         val locationId = context.pathParam("locationId")
 
-        locationRepository.deleteLocation(locationId)
-            .subscribe(
-                { context.response().setStatusCode(204).end() },
-                { error -> putErrorResponse(context, 500, "Failed to delete location: ${error.message}") }
-            )
+        locationService.deleteLocation(locationId)
+            .onSuccess { context.response().setStatusCode(204).end() }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to delete location: ${error.message}") }
     }
 
 }
