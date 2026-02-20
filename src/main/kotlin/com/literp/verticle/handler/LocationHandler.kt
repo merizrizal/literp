@@ -101,7 +101,7 @@ class LocationHandler(private val locationRepository: LocationRepository) : Base
 
         locationRepository.deleteLocation(locationId)
             .subscribe(
-                { putResponse(context, 204, JsonObject()) },
+                { context.response().setStatusCode(204).end() },
                 { error -> putErrorResponse(context, 500, "Failed to delete location: ${error.message}") }
             )
     }

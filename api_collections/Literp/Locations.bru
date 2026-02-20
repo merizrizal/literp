@@ -5,13 +5,9 @@ meta {
 }
 
 get {
-  url: http://{{host}}:8010/api/v1/locations?page=1
+  url: http://{{host}}:8010/api/v1/locations
   body: none
   auth: inherit
-}
-
-params:query {
-  page: 1
 }
 
 settings {

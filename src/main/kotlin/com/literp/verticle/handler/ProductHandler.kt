@@ -91,7 +91,7 @@ class ProductHandler(
 
         productRepository.deleteProduct(productId)
             .subscribe(
-                { putResponse(context, 204, JsonObject()) },
+                { context.response().setStatusCode(204).end() },
                 { error -> putErrorResponse(context, 500, "Failed to delete product: ${error.message}" ) }
             )
     }
@@ -174,7 +174,7 @@ class ProductHandler(
 
         variantRepository.deleteProductVariant(variantId)
             .subscribe(
-                { putResponse(context, 204, JsonObject()) },
+                { context.response().setStatusCode(204).end() },
                 { error -> putErrorResponse(context, 500, "Failed to delete variant: ${error.message}") }
             )
     }

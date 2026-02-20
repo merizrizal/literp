@@ -19,8 +19,20 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
     ): Single<JsonObject> {
         val offset = page * size
         val parts = sort.split(",")
-        val sortField = parts.getOrNull(0) ?: "code"
-        val sortOrder = parts.getOrNull(1)?.uppercase() ?: "ASC"
+        val rawField = parts.getOrNull(0)?.trim() ?: "code"
+        val rawOrder = parts.getOrNull(1)?.trim()?.uppercase() ?: "ASC"
+
+        val sortField = when (rawField.lowercase()) {
+            "code" -> "code"
+            "name" -> "name"
+            "locationtype", "location_type" -> "location_type"
+            "isactive", "is_active" -> "is_active"
+            "createdat", "created_at" -> "created_at"
+            "updatedat", "updated_at" -> "updated_at"
+            else -> "code"
+        }
+
+        val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "ASC"
 
         var whereClause = "WHERE true"
         var params = mutableListOf<Any?>()
@@ -64,7 +76,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
             }
             .map { result ->
                 val data = result.map { row ->
-                    val address = row.getJsonObject("address") ?: JsonObject()
+                    val address = JsonObject(row.getString("address"))
 
                     JsonObject()
                         .put("locationId", row.getString("location_id"))

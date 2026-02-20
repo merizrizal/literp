@@ -11,8 +11,20 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
     fun listProducts(page: Int, size: Int, sort: String): Single<JsonObject> {
         val offset = page * size
         val parts = sort.split(",")
-        val sortField = parts.getOrNull(0) ?: "sku"
-        val sortOrder = parts.getOrNull(1)?.uppercase() ?: "ASC"
+        val rawField = parts.getOrNull(0)?.trim() ?: "sku"
+        val rawOrder = parts.getOrNull(1)?.trim()?.uppercase() ?: "ASC"
+
+        val sortField = when (rawField.lowercase()) {
+            "sku" -> "sku"
+            "name" -> "name"
+            "producttype", "product_type" -> "product_type"
+            "baseuom", "base_uom" -> "base_uom"
+            "createdat", "created_at" -> "created_at"
+            "updatedat", "updated_at" -> "updated_at"
+            else -> "sku"
+        }
+
+        val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "ASC"
 
         val query = "SELECT COUNT(*) as total FROM product WHERE active = true"
         val dataQuery = """
