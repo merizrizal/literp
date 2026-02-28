@@ -1,0 +1,433 @@
+openapi: 3.0.3
+info:
+  title: Literp Order Process API
+  description: |
+    Order lifecycle API for POS channel process:
+    draft -> line entry -> confirm -> payment capture -> fulfillment / cancellation.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8010/api/v1
+    description: Local development server
+
+paths:
+  /orders:
+    get:
+      tags: [Order Process]
+      summary: List sales orders
+      operationId: listSalesOrders
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - name: sort
+          in: query
+          schema: { type: string, default: orderDate,desc }
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [DRAFT, CONFIRMED, FULFILLED, CANCELLED]
+        - name: salesChannel
+          in: query
+          schema:
+            type: string
+            enum: [POS, ONLINE, B2B, OTHER]
+        - name: locationId
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sales orders retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SalesOrder'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags: [Order Process]
+      summary: Create sales order draft
+      operationId: createSalesOrderDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSalesOrderDraftRequest'
+      responses:
+        '201':
+          description: Draft order created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SalesOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{salesOrderId}:
+    get:
+      tags: [Order Process]
+      summary: Get sales order details
+      operationId: getSalesOrder
+      parameters:
+        - name: salesOrderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sales order detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SalesOrderDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{salesOrderId}/lines:
+    post:
+      tags: [Order Process]
+      summary: Add line to draft order
+      operationId: addSalesOrderLine
+      parameters:
+        - name: salesOrderId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddSalesOrderLineRequest'
+      responses:
+        '201':
+          description: Order line created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/SalesOrderLine'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{salesOrderId}/confirm:
+    post:
+      tags: [Order Process]
+      summary: Confirm order and reserve stock
+      operationId: confirmSalesOrder
+      parameters:
+        - name: salesOrderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sales order confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{salesOrderId}/payments:
+    post:
+      tags: [Order Process]
+      summary: Capture payment for sales order
+      operationId: capturePayment
+      parameters:
+        - name: salesOrderId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapturePaymentRequest'
+      responses:
+        '201':
+          description: Payment captured
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{salesOrderId}/fulfill:
+    post:
+      tags: [Order Process]
+      summary: Fulfill confirmed sales order
+      operationId: fulfillSalesOrder
+      parameters:
+        - name: salesOrderId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FulfillSalesOrderRequest'
+      responses:
+        '200':
+          description: Sales order fulfilled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /orders/{salesOrderId}/cancel:
+    post:
+      tags: [Order Process]
+      summary: Cancel sales order
+      operationId: cancelSalesOrder
+      parameters:
+        - name: salesOrderId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelSalesOrderRequest'
+      responses:
+        '200':
+          description: Sales order cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    SalesOrder:
+      type: object
+      properties:
+        salesOrderId: { type: string }
+        orderNumber: { type: string }
+        orderDate: { type: string, format: date-time }
+        salesChannel: { type: string }
+        customerId: { type: string, nullable: true }
+        locationId: { type: string }
+        status: { type: string }
+        totalAmount: { type: number }
+        currency: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SalesOrderLine:
+      type: object
+      properties:
+        lineId: { type: string }
+        salesOrderId: { type: string }
+        productId: { type: string }
+        sku: { type: string }
+        quantityOrdered: { type: number }
+        quantityFulfilled: { type: number }
+        unitPrice: { type: number }
+        lineTotal: { type: number }
+        status: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    SalesOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/SalesOrder'
+        - type: object
+          properties:
+            lines:
+              type: array
+              items:
+                $ref: '#/components/schemas/SalesOrderLine'
+            reservations:
+              type: array
+              items:
+                type: object
+            payments:
+              type: array
+              items:
+                type: object
+
+    CreateSalesOrderDraftRequest:
+      type: object
+      required: [locationId]
+      properties:
+        salesChannel:
+          type: string
+          default: POS
+          enum: [POS, ONLINE, B2B, OTHER]
+        locationId:
+          type: string
+        customerId:
+          type: string
+          nullable: true
+        currency:
+          type: string
+          default: USD
+        notes:
+          type: string
+          nullable: true
+
+    AddSalesOrderLineRequest:
+      type: object
+      required: [productId, quantityOrdered, unitPrice]
+      properties:
+        productId:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        quantityOrdered:
+          type: number
+        unitPrice:
+          type: number
+
+    CapturePaymentRequest:
+      type: object
+      required: [paymentMethod, amount]
+      properties:
+        paymentMethod:
+          type: string
+          enum: [CASH, CARD, DIGITAL, GIFT_CARD, OTHER]
+        amount:
+          type: number
+        transactionRef:
+          type: string
+          nullable: true
+
+    FulfillSalesOrderRequest:
+      type: object
+      properties:
+        createdBy:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    CancelSalesOrderRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          nullable: true
+
+    PaginationInfo:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+        totalPages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        status:
+          type: integer
+        errorId:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: State conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

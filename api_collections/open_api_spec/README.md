@@ -42,6 +42,25 @@ Manage physical warehouse, store, and production locations across your multi-loc
 
 ---
 
+### 3. Order Process API
+**Location:** `order-process.yaml` / `order-process.json`
+
+Manage POS order lifecycle from draft to confirmation, payment capture, fulfillment, and cancellation.
+
+**Resources:**
+- Order Process - Sales order flow, line management, reservation lifecycle, payment capture, and fulfillment commands
+
+**Documentation:** See [order-process-README.md](order-process-README.md) for detailed information.
+
+**Features:**
+- Draft -> confirm -> fulfill state flow
+- Reservation creation on confirmation
+- Payment capture command
+- Inventory movement write on fulfillment
+- Cancellation guardrails
+
+---
+
 ## Quick Start
 
 ### View the Specs
@@ -51,10 +70,12 @@ Each API has both YAML and JSON versions for flexibility:
 # YAML format (human-readable)
 cat product-catalog.yaml
 cat locations.yaml
+cat order-process.yaml
 
 # JSON format (tool-compatible)
 cat product-catalog.json
 cat locations.json
+cat order-process.json
 ```
 
 ### Using with Swagger UI
@@ -92,6 +113,12 @@ openapi-generator-cli generate \
   -i product-catalog.yaml \
   -g typescript-axios \
   -o src/generated/typescript-client
+
+# Generate TypeScript client from order process spec
+openapi-generator-cli generate \
+  -i order-process.yaml \
+  -g typescript-axios \
+  -o src/generated/order-process-client
 
 # Generate Java Spring Boot server
 openapi-generator-cli generate \
@@ -180,9 +207,6 @@ Each spec documents database table mappings and constraints.
 
 The following APIs are planned for future implementation:
 
-- **Sales Order API** - Create and manage customer orders
-- **Inventory Movement API** - Track stock movements and ledger
-- **Inventory Reservation API** - Reserve stock for orders
 - **POS Operations API** - Manage terminals, shifts, and receipts
 - **Bill of Materials API** - Define product recipes
 - **Work Order API** - Manage manufacturing orders
@@ -223,6 +247,6 @@ For questions or issues with the OpenAPI specs:
 
 ---
 
-**Last Updated:** 2026-02-17
+**Last Updated:** 2026-02-28
 **OpenAPI Version:** 3.0.3
 **Literp Version:** 1.0.0

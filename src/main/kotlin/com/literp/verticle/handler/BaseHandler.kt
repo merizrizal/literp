@@ -25,11 +25,6 @@ open class BaseHandler(clazz: Class<*>) {
         putResponse(context, statusCode, JsonObject().put("data", data))
     }
 
-    /**
-     * Send a structured error response and log the event for observability.
-     * Generates an `errorId` which is included in the response and in the log entry
-     * so downstream systems (tracing/monitoring) can correlate incidents.
-     */
     protected fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String?) {
         val errorId = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
@@ -45,10 +40,6 @@ open class BaseHandler(clazz: Class<*>) {
         putResponse(context, statusCode, errorResponse)
     }
 
-    /**
-     * Log throwable (with stack) and return an opaque error id to the client.
-     * Use this overload when an exception is available to record full context.
-     */
     protected fun putErrorResponse(context: RoutingContext, statusCode: Int, throwable: Throwable) {
         val errorId = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"

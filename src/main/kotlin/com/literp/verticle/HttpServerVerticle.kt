@@ -3,6 +3,7 @@ package com.literp.verticle
 import com.literp.config.Config
 import com.literp.db.DatabaseConnection
 import com.literp.repository.LocationRepository
+import com.literp.repository.OrderProcessRepository
 import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
 import com.literp.repository.UnitOfMeasureRepository
@@ -14,7 +15,10 @@ import com.literp.service.master.impl.LocationServiceImpl
 import com.literp.service.master.impl.ProductServiceImpl
 import com.literp.service.master.impl.ProductVariantServiceImpl
 import com.literp.service.master.impl.UnitOfMeasureServiceImpl
+import com.literp.service.order.OrderProcessService
+import com.literp.service.order.impl.OrderProcessServiceImpl
 import com.literp.verticle.handler.LocationHandler
+import com.literp.verticle.handler.OrderProcessHandler
 import com.literp.verticle.handler.ProductHandler
 import com.literp.verticle.handler.UnitOfMeasureHandler
 import io.reactivex.rxjava3.core.Single
@@ -41,15 +45,18 @@ class HttpServerVerticle(
     private lateinit var productRepository: ProductRepository
     private lateinit var variantRepository: ProductVariantRepository
     private lateinit var locationRepository: LocationRepository
+    private lateinit var orderProcessRepository: OrderProcessRepository
 
     private lateinit var uomService: UnitOfMeasureService
     private lateinit var productService: ProductService
     private lateinit var variantService: ProductVariantService
     private lateinit var locationService: LocationService
+    private lateinit var orderProcessService: OrderProcessService
 
     private lateinit var productHandler: ProductHandler
     private lateinit var locationHandler: LocationHandler
     private lateinit var uomHandler: UnitOfMeasureHandler
+    private lateinit var orderProcessHandler: OrderProcessHandler
 
     override fun start(startFuture: Promise<Void>?) {
         val coreVertx = vertx.delegate
@@ -58,49 +65,60 @@ class HttpServerVerticle(
         productRepository = ProductRepository(pool)
         variantRepository = ProductVariantRepository(pool)
         locationRepository = LocationRepository(pool)
+        orderProcessRepository = OrderProcessRepository(pool)
 
         UnitOfMeasureService.register(coreVertx, UnitOfMeasureServiceImpl(uomRepository))
         ProductService.register(coreVertx, ProductServiceImpl(productRepository))
         ProductVariantService.register(coreVertx, ProductVariantServiceImpl(variantRepository))
         LocationService.register(coreVertx, LocationServiceImpl(locationRepository))
+        OrderProcessService.register(coreVertx, OrderProcessServiceImpl(orderProcessRepository))
 
         uomService = UnitOfMeasureService.createProxy(coreVertx)
         productService = ProductService.createProxy(coreVertx)
         variantService = ProductVariantService.createProxy(coreVertx)
         locationService = LocationService.createProxy(coreVertx)
+        orderProcessService = OrderProcessService.createProxy(coreVertx)
 
         productHandler = ProductHandler(productService, variantService)
         locationHandler = LocationHandler(locationService)
         uomHandler = UnitOfMeasureHandler(uomService)
+        orderProcessHandler = OrderProcessHandler(orderProcessService)
 
-        loadProductCatalogAndLocations(startFuture)
+        loadApiContracts(startFuture)
     }
 
-    private fun loadProductCatalogAndLocations(startFuture: Promise<Void>?) {
+    private fun loadApiContracts(startFuture: Promise<Void>?) {
         OpenAPIContract
             .rxFrom(vertx, "api_collections/open_api_spec/product-catalog.yaml")
             .flatMap { productContract ->
                 OpenAPIContract
                     .rxFrom(vertx, "api_collections/open_api_spec/locations.yaml")
-                    .map { locationContract -> Pair(productContract, locationContract) }
+                    .flatMap { locationContract ->
+                        OpenAPIContract
+                            .rxFrom(vertx, "api_collections/open_api_spec/order-process.yaml")
+                            .map { orderProcessContract -> Triple(productContract, locationContract, orderProcessContract) }
+                    }
             }
-            .flatMap { (productContract, locationContract) ->
-                Single.just(Pair(
+            .flatMap { (productContract, locationContract, orderProcessContract) ->
+                Single.just(Triple(
                     RouterBuilder.create(vertx, productContract),
-                    RouterBuilder.create(vertx, locationContract)
+                    RouterBuilder.create(vertx, locationContract),
+                    RouterBuilder.create(vertx, orderProcessContract)
                 ))
             }
-            .subscribeWith(object : DisposableSingleObserver<Pair<RouterBuilder, RouterBuilder>>() {
-                override fun onSuccess(routers: Pair<RouterBuilder, RouterBuilder>) {
+            .subscribeWith(object : DisposableSingleObserver<Triple<RouterBuilder, RouterBuilder, RouterBuilder>>() {
+                override fun onSuccess(routers: Triple<RouterBuilder, RouterBuilder, RouterBuilder>) {
                     logger.info("Deployed OpenAPI Contracts")
 
-                    val (productRouterBuilder, locationRouterBuilder) = routers
+                    val (productRouterBuilder, locationRouterBuilder, orderProcessRouterBuilder) = routers
 
                     registerProductCatalogHandlers(productRouterBuilder)
                     registerLocationHandlers(locationRouterBuilder)
+                    registerOrderProcessHandlers(orderProcessRouterBuilder)
 
                     val productRouter = productRouterBuilder.createRouter()
                     val locationRouter = locationRouterBuilder.createRouter()
+                    val orderProcessRouter = orderProcessRouterBuilder.createRouter()
 
                     val router = Router.router(vertx).apply {
                         route().handler(HSTSHandler.create())
@@ -109,6 +127,7 @@ class HttpServerVerticle(
 
                         route("/api/v1/*").subRouter(productRouter)
                         route("/api/v1/*").subRouter(locationRouter)
+                        route("/api/v1/*").subRouter(orderProcessRouter)
                     }
 
                     val config = Config()
@@ -168,6 +187,17 @@ class HttpServerVerticle(
         routerBuilder.getRoute("getLocationByCode").addHandler(locationHandler::getLocationByCode)
         routerBuilder.getRoute("updateLocation").addHandler(locationHandler::updateLocation)
         routerBuilder.getRoute("deleteLocation").addHandler(locationHandler::deleteLocation)
+    }
+
+    private fun registerOrderProcessHandlers(routerBuilder: RouterBuilder) {
+        routerBuilder.getRoute("listSalesOrders").addHandler(orderProcessHandler::listSalesOrders)
+        routerBuilder.getRoute("createSalesOrderDraft").addHandler(orderProcessHandler::createSalesOrderDraft)
+        routerBuilder.getRoute("getSalesOrder").addHandler(orderProcessHandler::getSalesOrder)
+        routerBuilder.getRoute("addSalesOrderLine").addHandler(orderProcessHandler::addSalesOrderLine)
+        routerBuilder.getRoute("confirmSalesOrder").addHandler(orderProcessHandler::confirmSalesOrder)
+        routerBuilder.getRoute("capturePayment").addHandler(orderProcessHandler::capturePayment)
+        routerBuilder.getRoute("fulfillSalesOrder").addHandler(orderProcessHandler::fulfillSalesOrder)
+        routerBuilder.getRoute("cancelSalesOrder").addHandler(orderProcessHandler::cancelSalesOrder)
     }
 
     private fun getIndex(context: RoutingContext) {

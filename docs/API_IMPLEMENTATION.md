@@ -1,193 +1,183 @@
 # Literp REST API Implementation
 
 ## Overview
+This document describes the implemented REST API surface in Literp using Vert.x 5.0.8, Kotlin 2.3.10, and RxJava3.
 
-This document describes the complete REST API implementation for Literp using Vert.x 5.0.8, Kotlin 2.3.10, and reactive RxJava3. All endpoints from the Product Catalog and Inventory Location OpenAPI specifications have been fully implemented.
+Current API coverage includes:
+- Product catalog master data
+- Inventory locations master data
+- POS order process flow (draft, lines, confirm, payment capture, fulfill, cancel)
 
 ## Architecture
 
 ### Technology Stack
 - **Framework**: Vert.x 5.0.8 (reactive, event-driven)
 - **Language**: Kotlin 2.3.10 on Java 25
-- **Async Model**: RxJava3 with reactive streams
-- **Database**: PostgreSQL (via Vert.x PG Client)
-- **API Specification**: OpenAPI 3.0 with vertx-openapi router integration
-- **Build**: Gradle with Kotlin DSL
+- **Async Model**: RxJava3 + Vert.x Futures
+- **Database**: PostgreSQL via Vert.x PG Client
+- **API Spec**: OpenAPI 3.0 with `vertx-web-openapi-router`
+- **Build**: Gradle (Kotlin DSL)
 
 ### Project Structure
 
 ```
 src/main/kotlin/com/literp/
-├── App.kt                          # Application entry point
+├── App.kt
 ├── config/
-│   └── Config.kt                   # Configuration (HTTP port, etc.)
+│   └── Config.kt
 ├── db/
-│   └── DatabaseConnection.kt       # Database pool initialization
+│   └── DatabaseConnection.kt
 ├── repository/
-│   ├── BaseRepository.kt           # Base class with logger & DB connection
-│   ├── UnitOfMeasureRepository.kt  # UOM CRUD operations
-│   ├── ProductRepository.kt        # Product CRUD operations
-│   ├── ProductVariantRepository.kt # Product Variant CRUD operations
-│   └── LocationRepository.kt       # Location CRUD operations
+│   ├── BaseRepository.kt
+│   ├── UnitOfMeasureRepository.kt
+│   ├── ProductRepository.kt
+│   ├── ProductVariantRepository.kt
+│   ├── LocationRepository.kt
+│   └── OrderProcessRepository.kt
 └── verticle/
-    ├── MainVerticle.kt             # Main verticle entry point
-    ├── HttpServerVerticle.kt       # HTTP server with route handlers
+    ├── MainVerticle.kt
+    ├── HttpServerVerticle.kt
     └── handler/
-        ├── BaseHandler.kt          # Base class with shared response utilities
-        ├── UnitOfMeasureHandler.kt # UOM endpoint handlers
-        ├── ProductHandler.kt       # Product & variant endpoint handlers
-        └── LocationHandler.kt      # Location endpoint handlers
+        ├── BaseHandler.kt
+        ├── UnitOfMeasureHandler.kt
+        ├── ProductHandler.kt
+        ├── LocationHandler.kt
+        └── OrderProcessHandler.kt
 ```
 
-## Implementation Details
-
-### 1. Database Connection Layer (`DatabaseConnection.kt`)
-
-Manages the PostgreSQL connection pool:
-- Host: localhost
-- Port: 5432
-- Database: literp
-- Credentials: postgres/postgres
-- Pool Size: 4 connections
-
-```kotlin
-val pool = DatabaseConnection.createPool()
+```
+src/main/java/com/literp/service/
+├── master/
+│   ├── UnitOfMeasureService.java
+│   ├── ProductService.java
+│   ├── ProductVariantService.java
+│   ├── LocationService.java
+│   └── package-info.java
+└── order/
+    ├── OrderProcessService.java
+    └── package-info.java
 ```
 
-### 2. Repository Pattern
+## OpenAPI Contracts
+The server loads and mounts 3 OpenAPI contracts under `/api/v1`:
+- `api_collections/open_api_spec/product-catalog.yaml`
+- `api_collections/open_api_spec/locations.yaml`
+- `api_collections/open_api_spec/order-process.yaml`
 
-Four repository classes handle all database operations using parameterized queries. All repositories extend `BaseRepository` which provides shared logger initialization and database connection validation.
+## Endpoint Inventory
 
-#### BaseRepository (Base Class)
+### Master Data
 
-Provides common functionality for all repositories:
-- **Logger Initialization**: Each repository gets an automatically initialized logger
-- **Database Connection Check**: Validates DB connection during initialization
-- **Generic Constructor**: Accepts pool and class reference for logging context
+#### Unit of Measure (5)
+- `GET /uom`
+- `POST /uom`
+- `GET /uom/{uomId}`
+- `PUT /uom/{uomId}`
+- `DELETE /uom/{uomId}`
 
-```kotlin
-abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
-    protected val logger = LoggerFactory.getLogger(clazz)
-    // DB connection validation in init block
-}
-```
+#### Product (5)
+- `GET /products`
+- `POST /products`
+- `GET /products/{productId}`
+- `PUT /products/{productId}`
+- `DELETE /products/{productId}`
 
-**Benefits:**
-- Eliminates code duplication across repositories
-- Consistent logging setup across all data layers
-- Single point of change for base repository logic
+#### Product Variant (5)
+- `GET /products/{productId}/variants`
+- `POST /products/{productId}/variants`
+- `GET /products/{productId}/variants/{variantId}`
+- `PUT /products/{productId}/variants/{variantId}`
+- `DELETE /products/{productId}/variants/{variantId}`
 
-#### UnitOfMeasureRepository
-- `listUnitOfMeasures(page, size, sort)` - Paginated list with sorting
-- `createUnitOfMeasure(code, name, baseUnit)` - Create new UOM
-- `getUnitOfMeasure(uomId)` - Fetch single UOM
-- `updateUnitOfMeasure(uomId, name, baseUnit)` - Update UOM details
-- `deleteUnitOfMeasure(uomId)` - Delete UOM
-- `checkCodeExists(code)` - Validate unique code constraint
+#### Location (6)
+- `GET /locations`
+- `POST /locations`
+- `GET /locations/{locationId}`
+- `GET /locations/by-code/{code}`
+- `PUT /locations/{locationId}`
+- `DELETE /locations/{locationId}`
 
-#### ProductRepository
-- `listProducts(page, size, sort)` - Paginated list (active only)
-- `createProduct(sku, name, productType, baseUom, metadata)` - Create with JSONB metadata
-- `getProduct(productId)` - Fetch active product
-- `updateProduct(productId, name, productType, metadata)` - Update product (SKU immutable)
-- `deleteProduct(productId)` - Soft delete (sets active=false)
-- `checkSkuExists(sku)` - Validate unique SKU constraint
+### Order Process (8)
+- `GET /orders` - list sales orders
+- `POST /orders` - create sales order draft
+- `GET /orders/{salesOrderId}` - get order with lines/reservations/payments
+- `POST /orders/{salesOrderId}/lines` - add line to draft order
+- `POST /orders/{salesOrderId}/confirm` - confirm order and reserve stock
+- `POST /orders/{salesOrderId}/payments` - capture payment
+- `POST /orders/{salesOrderId}/fulfill` - fulfill order and write inventory movements
+- `POST /orders/{salesOrderId}/cancel` - cancel order
 
-#### ProductVariantRepository
-- `listProductVariants(productId, page, size, sort)` - Variants for specific product
-- `createProductVariant(productId, sku, name, attributes)` - Create with JSONB attributes
-- `getProductVariant(productId, variantId)` - Fetch variant
-- `updateProductVariant(variantId, name, attributes)` - Update variant
-- `deleteProductVariant(variantId)` - Soft delete
-- `checkSkuExists(sku)` - Validate unique SKU per variant
+### Total
+- **29 endpoints** across **5 API domains**.
 
-#### LocationRepository
-- `listLocations(page, size, sort, code, name, locationType, activeOnly)` - Filtered pagination
-- `createLocation(code, name, locationType, address)` - Create with JSONB address
-- `getLocation(locationId)` - Fetch by ID
-- `getLocationByCode(code)` - Lookup by code
-- `updateLocation(locationId, name, locationType, address)` - Update location
-- `deleteLocation(locationId)` - Delete location
-- `checkCodeExists(code)` - Validate unique code constraint
+## Repository Layer
 
-### 3. HTTP Server & Route Handlers (`HttpServerVerticle.kt`)
+### BaseRepository
+Shared concerns:
+- Repository logger initialization
+- Startup DB connectivity check
 
-**Key Features:**
-- Loads both OpenAPI specs (product-catalog.yaml and locations.yaml)
-- Creates RouterBuilders for each spec
-- Delegates request handling to specialized handler classes
-- Mounts routers under `/api/v1` path
-- Returns proper HTTP status codes (200, 201, 204, 400, 404, 409, 500)
-- Comprehensive error handling with descriptive messages
-- JSON request/response bodies
+### Master Data Repositories
+- `UnitOfMeasureRepository`
+- `ProductRepository`
+- `ProductVariantRepository`
+- `LocationRepository`
 
-#### Handler Architecture (SOLID Principles)
+### Order Process Repository
+`OrderProcessRepository` implements:
+- Sales order listing with pagination/filtering
+- Draft creation
+- Order detail aggregation (order + lines + reservations + payments)
+- Line insertion and order total recalculation
+- Confirmation and reservation creation
+- Payment capture and captured-balance calculation
+- Fulfillment and inventory movement creation
+- Cancellation with payment and state guardrails
 
-The handler layer follows the **Single Responsibility Principle** by separating handlers into domain-specific classes. All handlers extend `BaseHandler` which provides shared response utilities.
+## Service Proxy Layer
 
-**BaseHandler (Base Class)**
+### Master service module
+Package: `com.literp.service.master`
+- `UnitOfMeasureService`
+- `ProductService`
+- `ProductVariantService`
+- `LocationService`
 
-Provides common response formatting for all handlers:
-- `putResponse()`: Sends successful responses with status code
-- `putErrorResponse()`: Sends error responses with message and status
+### Order service module
+Package: `com.literp.service.order`
+- `OrderProcessService`
 
-```kotlin
-open class BaseHandler {
-    protected fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject)
-    protected fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String)
-}
-```
+Kotlin implementations:
+- `com.literp.service.master.impl.*`
+- `com.literp.service.order.impl.OrderProcessServiceImpl`
 
-**Benefits:**
-- Eliminates duplicate response formatting code across handlers
-- Consistent HTTP response structure
-- Easier to modify response format (single location)
-- Natural extensibility for subclass handlers
+## Handler Layer
 
-**Handler Organization:**
+Handlers delegate to service proxies and standardize response/error formatting via `BaseHandler`.
 
-1. **UnitOfMeasureHandler** - Extends BaseHandler (5 endpoints)
-   - `listUnitOfMeasures()` - GET /uom
-   - `createUnitOfMeasure()` - POST /uom
-   - `getUnitOfMeasure()` - GET /uom/{uomId}
-   - `updateUnitOfMeasure()` - PUT /uom/{uomId}
-   - `deleteUnitOfMeasure()` - DELETE /uom/{uomId}
+- `UnitOfMeasureHandler`
+- `ProductHandler`
+- `LocationHandler`
+- `OrderProcessHandler`
 
-2. **ProductHandler** - Extends BaseHandler (10 endpoints)
-   - **Product operations** (5):
-     - `listProducts()` - GET /products
-     - `createProduct()` - POST /products
-     - `getProduct()` - GET /products/{productId}
-     - `updateProduct()` - PUT /products/{productId}
-     - `deleteProduct()` - DELETE /products/{productId}
-   - **Product Variant operations** (5):
-     - `listProductVariants()` - GET /products/{productId}/variants
-     - `createProductVariant()` - POST /products/{productId}/variants
-     - `getProductVariant()` - GET /products/{productId}/variants/{variantId}
-     - `updateProductVariant()` - PUT /products/{productId}/variants/{variantId}
-     - `deleteProductVariant()` - DELETE /products/{productId}/variants/{variantId}
-
-3. **LocationHandler** - Extends BaseHandler (6 endpoints)
-   - `listLocations()` - GET /locations
-   - `createLocation()` - POST /locations
-   - `getLocation()` - GET /locations/{locationId}
-   - `getLocationByCode()` - GET /locations/by-code/{code}
-   - `updateLocation()` - PUT /locations/{locationId}
-   - `deleteLocation()` - DELETE /locations/{locationId}
+`BaseHandler` utilities include:
+- `putResponse(...)`
+- `putSuccessResponse(...)`
+- `putErrorResponse(...)`
 
 ## API Response Format
 
-### Success Response (2xx)
+### Success (Single)
 ```json
 {
-  "data": { ... }
+  "data": { }
 }
 ```
 
-### Paginated Response (List endpoints)
+### Success (List)
 ```json
 {
-  "data": [ ... ],
+  "data": [ ],
   "pagination": {
     "page": 0,
     "size": 20,
@@ -197,255 +187,85 @@ open class BaseHandler {
 }
 ```
 
-### Error Response (4xx, 5xx)
+### Error
 ```json
 {
-  "error": "Description of error",
-  "status": 400
+  "error": "Description",
+  "status": 400,
+  "errorId": "uuid"
 }
 ```
 
-## Request Examples
+## HTTP Status Code Usage
+- `200` successful read/update/process command
+- `201` created resources or captured payment creation
+- `204` delete success for hard/soft-delete endpoints
+- `400` validation error
+- `404` resource not found
+- `409` state conflict or uniqueness conflict
+- `500` unexpected internal failure
 
-### Create Unit of Measure
-```bash
-curl -X POST http://localhost:8010/api/v1/uom \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "EA",
-    "name": "Each",
-    "baseUnit": null
-  }'
-```
+## Order Process State Rules (Implemented)
 
-### Create Product
-```bash
-curl -X POST http://localhost:8010/api/v1/products \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sku": "PROD-001",
-    "name": "Sample Product",
-    "productType": "STOCK",
-    "baseUom": "{uomId}",
-    "metadata": {
-      "color": "red",
-      "brand": "Acme"
-    }
-  }'
-```
+### Sales order
+- `DRAFT -> CONFIRMED -> FULFILLED`
+- `DRAFT -> CANCELLED`
+- `CONFIRMED -> CANCELLED` only when no captured payment
 
-### Create Location
-```bash
-curl -X POST http://localhost:8010/api/v1/locations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "WH-001",
-    "name": "Main Warehouse",
-    "locationType": "WAREHOUSE",
-    "address": {
-      "street": "123 Main St",
-      "city": "Springfield",
-      "state": "IL",
-      "zip": "62701"
-    }
-  }'
-```
+### Sales order line
+- `PENDING -> RESERVED -> FULFILLED`
+- `PENDING/RESERVED -> CANCELLED`
 
-### List with Pagination
-```bash
-curl "http://localhost:8010/api/v1/products?page=0&size=20&sort=sku,asc"
-```
+### Reservation
+- `RESERVED -> FULFILLED`
+- `RESERVED -> CANCELLED`
 
-### Filter Locations
-```bash
-curl "http://localhost:8010/api/v1/locations?name=warehouse&locationType=WAREHOUSE&activeOnly=true"
-```
+### Payment
+- API currently writes `CAPTURED` entries directly.
 
-## Error Handling
+## Data Validation and Constraints
 
-The API implements comprehensive error handling:
+### Uniqueness
+- UOM code unique
+- Product SKU unique
+- Variant SKU unique
+- Location code unique
 
-| Status Code | Scenario | Example |
-|-------------|----------|---------|
-| 200 | Successful GET/PUT | Fetch product details |
-| 201 | Resource created | New product created successfully |
-| 204 | No content (DELETE) | Product deleted successfully |
-| 400 | Bad request | Missing required fields |
-| 404 | Not found | Product ID doesn't exist |
-| 409 | Conflict | SKU or code already exists |
-| 500 | Server error | Database connection failure |
+### Required field examples
+- UOM: `code`, `name`
+- Product: `sku`, `name`, `productType`, `baseUom`
+- Variant: `sku`, `name`
+- Location: `code`, `name`, `locationType`
+- Sales order draft: `locationId`
+- Order line: `productId`, `quantityOrdered`, `unitPrice`
+- Payment capture: `paymentMethod`, `amount`
 
-## Data Validation
-
-### Uniqueness Constraints
-- **UOM**: `code` must be unique
-- **Product**: `sku` must be unique
-- **Product Variant**: `sku` must be unique
-- **Location**: `code` must be unique
-
-### Required Fields
-- **UOM**: code, name
-- **Product**: sku, name, productType, baseUom
-- **Product Variant**: sku, name
-- **Location**: code, name, locationType
-
-### Immutable Fields
-- **SKU** in both Product and ProductVariant
-- **Location Code** cannot be changed after creation
-
-## Soft Delete Strategy
-
-Products and ProductVariants use soft deletes:
-- **Update**: `active = false, updated_at = NOW()`
-- **List**: Returns only `active = true` records
-- **Fetch**: Returns only `active = true` records
-- **Data preservation**: Original data kept for audit trails
-
-Locations use hard deletes (physical removal from database).
-
-## Pagination & Sorting
-
-All list endpoints support:
-
-**Query Parameters:**
-- `page` (default: 0) - Zero-indexed page number
-- `size` (default: 20) - Items per page (max: 100)
-- `sort` (default: entity-specific) - Format: `field,order` (e.g., "sku,asc")
-
-**Response Metadata:**
-```json
-{
-  "pagination": {
-    "page": 0,
-    "size": 20,
-    "totalElements": 150,
-    "totalPages": 8
-  }
-}
-```
-
-## Filtering (Locations)
-
-Location list endpoint supports filtering:
-- `code` - Wildcard search (ILIKE)
-- `name` - Wildcard search (ILIKE)
-- `locationType` - Exact match (WAREHOUSE|STORE|PRODUCTION)
-- `activeOnly` (default: true) - Boolean filter
-
-**Example:**
-```bash
-curl "http://localhost:8010/api/v1/locations?locationType=WAREHOUSE&name=main&activeOnly=true"
-```
-
-## JSONB Fields
-
-**Product Metadata:**
-```json
-{
-  "metadata": {
-    "color": "red",
-    "size": "large",
-    "material": "cotton",
-    "supplier": "ABC Corp"
-  }
-}
-```
-
-**Product Variant Attributes:**
-```json
-{
-  "attributes": {
-    "size": "M",
-    "color": "blue",
-    "sku_suffix": "-BLU-M"
-  }
-}
-```
-
-**Location Address:**
-```json
-{
-  "address": {
-    "street": "123 Main Street",
-    "city": "Springfield",
-    "state": "IL",
-    "country": "USA",
-    "postalCode": "62701",
-    "coordinates": {
-      "latitude": 39.7817,
-      "longitude": -89.6501
-    }
-  }
-}
-```
-
-## Starting the Application
-
-1. Ensure PostgreSQL is running with the Literp database migrated
-2. Update `cfg.properties` with correct HTTP port (default: 8010)
-3. Build the project:
-   ```bash
-   ./gradlew build
-   ```
-4. Run the application:
-   ```bash
-   ./gradlew run
-   ```
-5. API will be available at `http://localhost:8010/api/v1`
+## Delete and Lifecycle Strategy
+- Product/ProductVariant: soft delete (`active = false`)
+- UOM/Location: hard delete
+- Sales orders: state-driven lifecycle (`DRAFT/CONFIRMED/FULFILLED/CANCELLED`)
 
 ## Database Dependencies
-
-Ensure the following tables exist (created by Alembic migration):
+Core master + order flow tables used by implemented API:
 - `unit_of_measure`
 - `product`
 - `product_variant`
 - `location`
+- `sales_order`
+- `sales_order_line`
+- `inventory_reservation`
+- `payment`
+- `inventory_movement`
 
-All foreign key relationships are properly established:
-- `product.base_uom` → `unit_of_measure.uom_id` (FK)
-- `product_variant.product_id` → `product.product_id` (FK, CASCADE)
+## Known Limitations (Current Implementation)
+- Fulfillment currently writes `inventory_movement.to_location_id` as the same value as `from_location_id` due non-null schema constraint for `to_location_id`.
+- Receipt persistence (`receipt`) is not yet wired to API flow.
+- Refund API flow (`payment.status = REFUNDED`) is not yet implemented.
+- Partial fulfillment command path is not implemented as a dedicated operation.
+- Multi-step confirm/fulfill/cancel flows should be wrapped in explicit database transactions for stronger atomicity.
 
-## Configuration
-
-**File: `cfg.properties`**
-```properties
-http.port=8010
-```
-
-## OpenAPI Specs
-
-The implementation is based on two OpenAPI 3.0 specifications:
-- `api_collections/open_api_spec/product-catalog.yaml` - Product catalog operations
-- `api_collections/open_api_spec/locations.yaml` - Location management operations
-
-Total: 21 endpoints across 4 resources
-
-## Reactive Processing
-
-All handlers use RxJava3 Single/Observable for:
-- Non-blocking database queries
-- Efficient resource utilization
-- Automatic thread management
-- Error propagation through observable chains
-- Composable async operations
-
-**Handler Pattern:**
-```kotlin
-repository.someOperation(params)
-    .subscribe(
-        { result -> putResponse(context, 200, result) },
-        { error -> putErrorResponse(context, 500, error.message) }
-    )
-```
-
-## Future Enhancements
-
-- Authentication/Authorization (JWT tokens)
-- Request validation with Bean Validation
-- Logging and request tracing
-- Metrics collection (Micrometer)
-- Caching strategies for frequently accessed entities
-- Batch operations for bulk inserts/updates
-- Full-text search capabilities
-- Audit log tracking
-- API rate limiting
+## Run and Verify
+1. Apply migrations.
+2. Start server with `./gradlew run`.
+3. Base URL: `http://localhost:8010/api/v1`.
+4. Validate contracts by calling at least one endpoint from each domain (`/uom`, `/products`, `/locations`, `/orders`).
