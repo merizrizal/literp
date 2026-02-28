@@ -20,12 +20,11 @@ class OrderProcessHandler(
         orderService.listSalesOrders(page, size, sort, status, salesChannel, locationId)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                when {
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message ?: "Not found")
-                    else -> putErrorResponse(context, 500, "Failed to list sales orders: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to list sales orders"
+                )
             }
     }
 
@@ -47,12 +46,11 @@ class OrderProcessHandler(
         orderService.createSalesOrderDraft(salesChannel, locationId, customerId, currency, notes)
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
-                when {
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message ?: "Not found")
-                    else -> putErrorResponse(context, 500, "Failed to create sales order draft: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to create sales order draft"
+                )
             }
     }
 
@@ -61,12 +59,12 @@ class OrderProcessHandler(
         orderService.getSalesOrder(orderId)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Sales order not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to get sales order: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get sales order",
+                    notFoundMessage = "Sales order not found"
+                )
             }
     }
 
@@ -88,12 +86,11 @@ class OrderProcessHandler(
         orderService.addSalesOrderLine(orderId, productId, sku, quantityOrdered, unitPrice)
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to add sales order line: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to add sales order line"
+                )
             }
     }
 
@@ -102,12 +99,11 @@ class OrderProcessHandler(
         orderService.confirmSalesOrder(orderId)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to confirm sales order: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to confirm sales order"
+                )
             }
     }
 
@@ -128,12 +124,11 @@ class OrderProcessHandler(
         orderService.capturePayment(orderId, paymentMethod, amount, transactionRef)
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to capture payment: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to capture payment"
+                )
             }
     }
 
@@ -146,12 +141,11 @@ class OrderProcessHandler(
         orderService.fulfillSalesOrder(orderId, createdBy, notes)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to fulfill sales order: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to fulfill sales order"
+                )
             }
     }
 
@@ -163,12 +157,11 @@ class OrderProcessHandler(
         orderService.cancelSalesOrder(orderId, reason)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to cancel sales order: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to cancel sales order"
+                )
             }
     }
 }

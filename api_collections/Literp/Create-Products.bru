@@ -1,0 +1,31 @@
+meta {
+  name: Create-Products
+  type: http
+  seq: 13
+}
+
+post {
+  url: http://{{host}}:8010/api/v1/products
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sku": "WIDGET-A",
+    "name": "Widget A",
+    "productType": "STOCK",
+    "baseUom": "dd87b99a-be67-4c76-a85c-9b88cfa9c3e7",
+    "active": true,
+    "metadata": {
+      "weight": 2.5,
+      "weight_unit": "kg",
+      "color": "blue"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

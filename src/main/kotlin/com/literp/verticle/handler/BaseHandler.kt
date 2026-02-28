@@ -73,29 +73,46 @@ open class BaseHandler(clazz: Class<*>) {
     protected fun isNotFoundError(message: String?): Boolean {
         if (message.isNullOrBlank()) return false
         return message.equals(ErrorCodes.fromStatus(404), ignoreCase = true)
-            || message.equals(ErrorCodes.RESOURCE_NOT_FOUND, ignoreCase = true)
-            || message.contains("not found", ignoreCase = true)
+                || message.equals(ErrorCodes.RESOURCE_NOT_FOUND, ignoreCase = true)
+                || message.contains("not found", ignoreCase = true)
     }
 
     protected fun isConflictError(message: String?): Boolean {
         if (message.isNullOrBlank()) return false
         return message.equals(ErrorCodes.fromStatus(409), ignoreCase = true)
-            || message.equals(ErrorCodes.CONFLICT, ignoreCase = true)
-            || message.contains("already exists", ignoreCase = true)
-            || message.contains("conflict", ignoreCase = true)
-            || message.contains("cannot cancel", ignoreCase = true)
-            || message.contains("only confirmed", ignoreCase = true)
-            || message.contains("only be captured", ignoreCase = true)
-            || message.contains("insufficient captured payment", ignoreCase = true)
+                || message.equals(ErrorCodes.CONFLICT, ignoreCase = true)
+                || message.contains("already exists", ignoreCase = true)
+                || message.contains("conflict", ignoreCase = true)
+                || message.contains("cannot cancel", ignoreCase = true)
+                || message.contains("only be captured", ignoreCase = true)
+                || message.contains("only confirmed", ignoreCase = true)
+                || message.contains("draft", ignoreCase = true)
+                || message.contains("insufficient captured payment", ignoreCase = true)
     }
 
     protected fun isValidationError(message: String?): Boolean {
         if (message.isNullOrBlank()) return false
         return message.equals(ErrorCodes.fromStatus(400), ignoreCase = true)
-            || message.equals(ErrorCodes.VALIDATION_ERROR, ignoreCase = true)
-            || message.contains("required", ignoreCase = true)
-            || message.contains("must be", ignoreCase = true)
-            || message.contains("without lines", ignoreCase = true)
-            || message.contains("no fulfillable", ignoreCase = true)
+                || message.equals(ErrorCodes.VALIDATION_ERROR, ignoreCase = true)
+                || message.contains("required", ignoreCase = true)
+                || message.contains("must be", ignoreCase = true)
+                || message.contains("without lines", ignoreCase = true)
+                || message.contains("no fulfillable", ignoreCase = true)
+    }
+
+    protected fun putMappedErrorResponse(
+        context: RoutingContext,
+        error: Throwable,
+        internalErrorMessage: String,
+        notFoundMessage: String = "Not found",
+        validationMessage: String? = null,
+        conflictMessage: String? = null
+    ) {
+        when {
+            isNotFoundError(error.message) -> putErrorResponse(context, 404, notFoundMessage)
+            isValidationError(error.message) -> putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
+            isConflictError(error.message) -> putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
+            else -> putErrorResponse(context, 500, "$internalErrorMessage: ${error.message}", error)
+        }
     }
 }

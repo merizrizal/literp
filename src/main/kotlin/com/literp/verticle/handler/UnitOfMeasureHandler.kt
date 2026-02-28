@@ -42,11 +42,12 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isConflictError(error.message) -> putErrorResponse(context, 409, "UOM code already exists")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    else -> putErrorResponse(context, 500, "Failed to create UOM: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to create UOM",
+                    conflictMessage = "UOM code already exists"
+                )
             }
     }
 
@@ -56,12 +57,12 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         uomService.getUnitOfMeasure(uomId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Unit of measure not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to get unit of measure: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get UOM",
+                    notFoundMessage = "UOM not found"
+                )
             }
     }
 
@@ -80,12 +81,12 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         uomService.updateUnitOfMeasure(uomId, name, baseUnit)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Unit of measure not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to update UOM: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to update UOM",
+                    notFoundMessage = "UOM not found"
+                )
             }
     }
 
@@ -95,12 +96,12 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         uomService.deleteUnitOfMeasure(uomId)
             .onSuccess { context.response().setStatusCode(204).end() }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Unit of measure not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to delete UOM: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to delete UOM",
+                    notFoundMessage = "UOM not found"
+                )
             }
     }
 }

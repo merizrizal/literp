@@ -47,12 +47,13 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isConflictError(error.message) -> putErrorResponse(context, 409, "Location code already exists")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message ?: "Location not found")
-                    else -> putErrorResponse(context, 500, "Failed to create location: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to create location",
+                    notFoundMessage = "Location not found",
+                    conflictMessage = "Location code already exists"
+                )
             }
     }
 
@@ -62,12 +63,12 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         locationService.getLocation(locationId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to get location: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get location",
+                    notFoundMessage = "Location not found"
+                )
             }
     }
 
@@ -77,12 +78,12 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         locationService.getLocationByCode(code)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location by code not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to get location by code: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get location by code",
+                    notFoundMessage = "Location by code not found"
+                )
             }
     }
 
@@ -102,12 +103,12 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         locationService.updateLocation(locationId, name, locationType, address)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to update location: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to update location",
+                    notFoundMessage = "Location not found"
+                )
             }
     }
 
@@ -117,12 +118,12 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         locationService.deleteLocation(locationId)
             .onSuccess { context.response().setStatusCode(204).end() }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to delete location: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to delete location",
+                    notFoundMessage = "Location not found"
+                )
             }
     }
 }

@@ -48,11 +48,12 @@ class ProductHandler(
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isConflictError(error.message) -> putErrorResponse(context, 409, "Product SKU already exists")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    else -> putErrorResponse(context, 500, "Failed to create product: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to create product",
+                    conflictMessage = "Product SKU already exists"
+                )
             }
     }
 
@@ -62,12 +63,12 @@ class ProductHandler(
         productService.getProduct(productId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to get product: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get product",
+                    notFoundMessage = "Product not found"
+                )
             }
     }
 
@@ -87,12 +88,12 @@ class ProductHandler(
         productService.updateProduct(productId, name, productType, metadata)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to update product: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to update product",
+                    notFoundMessage = "Product not found"
+                )
             }
     }
 
@@ -102,12 +103,12 @@ class ProductHandler(
         productService.deleteProduct(productId)
             .onSuccess { context.response().setStatusCode(204).end() }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to delete product: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to delete product",
+                    notFoundMessage = "Product not found"
+                )
             }
     }
 
@@ -120,12 +121,12 @@ class ProductHandler(
         variantService.listProductVariants(productId, page, size, sort)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product or variant not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to list variants: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to list product variants",
+                    notFoundMessage = "Product or variant not found"
+                )
             }
     }
 
@@ -152,12 +153,13 @@ class ProductHandler(
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isConflictError(error.message) -> putErrorResponse(context, 409, "Variant SKU already exists")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
-                    else -> putErrorResponse(context, 500, "Failed to create variant: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to create product variant",
+                    notFoundMessage = "Product not found",
+                    conflictMessage = "Variant SKU already exists"
+                )
             }
     }
 
@@ -168,12 +170,12 @@ class ProductHandler(
         variantService.getProductVariant(productId, variantId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product variant not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to get product variant: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get product variant",
+                    notFoundMessage = "Product variant not found"
+                )
             }
     }
 
@@ -191,12 +193,12 @@ class ProductHandler(
         variantService.updateProductVariant(variantId, name, attributes)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product variant not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to update product variant: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to update product variant",
+                    notFoundMessage = "Product variant not found"
+                )
             }
     }
 
@@ -206,12 +208,12 @@ class ProductHandler(
         variantService.deleteProductVariant(variantId)
             .onSuccess { context.response().setStatusCode(204).end() }
             .onFailure { error ->
-                when {
-                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product variant not found")
-                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
-                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
-                    else -> putErrorResponse(context, 500, "Failed to delete variant: ${error.message}", error)
-                }
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to delete product variant",
+                    notFoundMessage = "Product variant not found"
+                )
             }
     }
 }
