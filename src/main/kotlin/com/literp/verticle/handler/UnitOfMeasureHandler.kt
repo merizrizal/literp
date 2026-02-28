@@ -1,6 +1,6 @@
 package com.literp.verticle.handler
 
-import com.literp.service.UnitOfMeasureService
+import com.literp.service.master.UnitOfMeasureService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
@@ -15,7 +15,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         val sort = context.queryParam("sort").firstOrNull() ?: "code,asc"
 
         uomService.listUnitOfMeasures(page, size, sort)
-            .onSuccess { result -> putResponse(context, 200, result) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM: ${error.message}") }
     }
 
@@ -39,7 +39,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
                     uomService.createUnitOfMeasure(code, name, baseUnit)
                 }
             }
-            .onSuccess { result -> putResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
                 if (error.message?.contains("already exists") == true) {
                     putErrorResponse(context, 409, error.message ?: "Conflict")
@@ -53,7 +53,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         val uomId = context.pathParam("uomId")
 
         uomService.getUnitOfMeasure(uomId)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Unit of measure not found") }
     }
 
@@ -70,7 +70,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         }
 
         uomService.updateUnitOfMeasure(uomId, name, baseUnit)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Unit of measure not found") }
     }
 

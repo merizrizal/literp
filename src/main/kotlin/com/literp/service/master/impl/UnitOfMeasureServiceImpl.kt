@@ -1,7 +1,7 @@
-package com.literp.service.impl
+package com.literp.service.master.impl
 
 import com.literp.repository.UnitOfMeasureRepository
-import com.literp.service.UnitOfMeasureService
+import com.literp.service.master.UnitOfMeasureService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 

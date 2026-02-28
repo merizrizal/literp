@@ -1,7 +1,7 @@
-package com.literp.service.impl
+package com.literp.service.master.impl
 
 import com.literp.repository.ProductVariantRepository
-import com.literp.service.ProductVariantService
+import com.literp.service.master.ProductVariantService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 

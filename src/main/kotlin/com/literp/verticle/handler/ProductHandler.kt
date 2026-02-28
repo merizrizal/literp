@@ -1,7 +1,7 @@
 package com.literp.verticle.handler
 
-import com.literp.service.ProductService
-import com.literp.service.ProductVariantService
+import com.literp.service.master.ProductService
+import com.literp.service.master.ProductVariantService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
@@ -19,7 +19,7 @@ class ProductHandler(
         val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
 
         productService.listProducts(page, size, sort)
-            .onSuccess { result -> putResponse(context, 200, result) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}") }
     }
 
@@ -45,7 +45,7 @@ class ProductHandler(
                     productService.createProduct(sku, name, productType, baseUom, metadata)
                 }
             }
-            .onSuccess { result -> putResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
                 if (error.message?.contains("already exists") == true) {
                     putErrorResponse(context, 409, error.message ?: "Conflict")
@@ -59,7 +59,7 @@ class ProductHandler(
         val productId = context.pathParam("productId")
 
         productService.getProduct(productId)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Product not found") }
     }
 
@@ -77,7 +77,7 @@ class ProductHandler(
         }
 
         productService.updateProduct(productId, name, productType, metadata)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Product not found") }
     }
 
@@ -97,7 +97,7 @@ class ProductHandler(
         val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
 
         variantService.listProductVariants(productId, page, size, sort)
-            .onSuccess { result -> putResponse(context, 200, result) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list variants: ${error.message}") }
     }
 
@@ -122,7 +122,7 @@ class ProductHandler(
                     variantService.createProductVariant(productId, sku, name, attributes)
                 }
             }
-            .onSuccess { result -> putResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
                 if (error.message?.contains("already exists") == true) {
                     putErrorResponse(context, 409, error.message ?: "Conflict")
@@ -137,7 +137,7 @@ class ProductHandler(
         val variantId = context.pathParam("variantId")
 
         variantService.getProductVariant(productId, variantId)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Product variant not found") }
     }
 
@@ -153,7 +153,7 @@ class ProductHandler(
         }
 
         variantService.updateProductVariant(variantId, name, attributes)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Product variant not found") }
     }
 

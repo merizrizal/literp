@@ -1,6 +1,6 @@
 package com.literp.verticle.handler
 
-import com.literp.service.LocationService
+import com.literp.service.master.LocationService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
@@ -20,7 +20,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
 
         locationService.listLocations(page, size, sort, code, name, locationType, activeOnly)
-            .onSuccess { result -> putResponse(context, 200, result) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}") }
     }
 
@@ -45,7 +45,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
                     locationService.createLocation(code, name, locationType, address)
                 }
             }
-            .onSuccess { result -> putResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
                 if (error.message?.contains("already exists") == true) {
                     putErrorResponse(context, 409, error.message ?: "Conflict")
@@ -59,7 +59,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val locationId = context.pathParam("locationId")
 
         locationService.getLocation(locationId)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
     }
 
@@ -67,7 +67,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val code = context.pathParam("code")
 
         locationService.getLocationByCode(code)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
     }
 
@@ -85,7 +85,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         }
 
         locationService.updateLocation(locationId, name, locationType, address)
-            .onSuccess { result -> putResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
             .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
     }
 

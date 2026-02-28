@@ -15,6 +15,16 @@ open class BaseHandler(clazz: Class<*>) {
         context.response().end(response.encode())
     }
 
+    protected fun putSuccessResponse(context: RoutingContext, statusCode: Int, data: JsonObject) {
+        val id = UUID.randomUUID().toString()
+        val method = context.request()?.method()?.name() ?: "-"
+        val path = context.request()?.path() ?: "-"
+        val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
+        logger.info("Handling id=$id status=$statusCode method=$method path=$path requestId=$requestId")
+
+        putResponse(context, statusCode, JsonObject().put("data", data))
+    }
+
     /**
      * Send a structured error response and log the event for observability.
      * Generates an `errorId` which is included in the response and in the log entry
@@ -22,9 +32,10 @@ open class BaseHandler(clazz: Class<*>) {
      */
     protected fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String?) {
         val errorId = UUID.randomUUID().toString()
+        val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
         val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
-        logger.warn("Handling errorId=$errorId status=$statusCode path=$path requestId=$requestId message=${message ?: "-"}")
+        logger.warn("Handling errorId=$errorId status=$statusCode method=$method path=$path requestId=$requestId message=${message ?: "-"}")
 
         val errorResponse = JsonObject()
             .put("error", message)
@@ -40,9 +51,10 @@ open class BaseHandler(clazz: Class<*>) {
      */
     protected fun putErrorResponse(context: RoutingContext, statusCode: Int, throwable: Throwable) {
         val errorId = UUID.randomUUID().toString()
+        val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
         val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
-        logger.error("Unhandled exception errorId=$errorId status=$statusCode path=$path requestId=$requestId", throwable)
+        logger.error("Unhandled exception errorId=$errorId status=$statusCode method=$method path=$path requestId=$requestId", throwable)
 
         val message = throwable.message ?: "Internal server error"
         val errorResponse = JsonObject()

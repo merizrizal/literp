@@ -1,7 +1,7 @@
-package com.literp.service.impl
+package com.literp.service.master.impl
 
 import com.literp.repository.LocationRepository
-import com.literp.service.LocationService
+import com.literp.service.master.LocationService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 

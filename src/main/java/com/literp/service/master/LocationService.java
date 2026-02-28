@@ -1,4 +1,4 @@
-package com.literp.service;
+package com.literp.service.master;
 
 import io.vertx.codegen.annotations.ProxyGen;
 import io.vertx.codegen.annotations.VertxGen;
