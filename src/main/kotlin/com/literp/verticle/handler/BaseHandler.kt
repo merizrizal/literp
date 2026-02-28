@@ -1,5 +1,6 @@
 package com.literp.verticle.handler
 
+import com.literp.common.ErrorCodes
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.ext.web.RoutingContext
@@ -25,34 +26,76 @@ open class BaseHandler(clazz: Class<*>) {
         putResponse(context, statusCode, JsonObject().put("data", data))
     }
 
-    protected fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String?) {
+    protected fun putErrorResponse(
+        context: RoutingContext,
+        statusCode: Int,
+        message: String?,
+        errorCode: String = ErrorCodes.fromStatus(statusCode)
+    ) {
         val errorId = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
         val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
-        logger.warn("Handling errorId=$errorId status=$statusCode method=$method path=$path requestId=$requestId message=${message ?: "-"}")
+        logger.warn("Handling errorId=$errorId errorCode=$errorCode status=$statusCode method=$method path=$path requestId=$requestId message=${message ?: "-"}")
 
         val errorResponse = JsonObject()
             .put("error", message)
+            .put("errorCode", errorCode)
             .put("status", statusCode)
             .put("errorId", errorId)
 
         putResponse(context, statusCode, errorResponse)
     }
 
-    protected fun putErrorResponse(context: RoutingContext, statusCode: Int, throwable: Throwable) {
+    protected fun putErrorResponse(
+        context: RoutingContext,
+        statusCode: Int,
+        message: String?,
+        throwable: Throwable,
+        errorCode: String = ErrorCodes.fromStatus(statusCode)
+    ) {
         val errorId = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
         val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
-        logger.error("Unhandled exception errorId=$errorId status=$statusCode method=$method path=$path requestId=$requestId", throwable)
+        logger.error("Unhandled exception errorId=$errorId errorCode=$errorCode status=$statusCode method=$method path=$path requestId=$requestId message=${message ?: "-"}", throwable)
 
-        val message = throwable.message ?: "Internal server error"
+        val resolvedMessage = message ?: throwable.message ?: "Internal server error"
         val errorResponse = JsonObject()
-            .put("error", message)
+            .put("error", resolvedMessage)
+            .put("errorCode", errorCode)
             .put("status", statusCode)
             .put("errorId", errorId)
 
         putResponse(context, statusCode, errorResponse)
+    }
+
+    protected fun isNotFoundError(message: String?): Boolean {
+        if (message.isNullOrBlank()) return false
+        return message.equals(ErrorCodes.fromStatus(404), ignoreCase = true)
+            || message.equals(ErrorCodes.RESOURCE_NOT_FOUND, ignoreCase = true)
+            || message.contains("not found", ignoreCase = true)
+    }
+
+    protected fun isConflictError(message: String?): Boolean {
+        if (message.isNullOrBlank()) return false
+        return message.equals(ErrorCodes.fromStatus(409), ignoreCase = true)
+            || message.equals(ErrorCodes.CONFLICT, ignoreCase = true)
+            || message.contains("already exists", ignoreCase = true)
+            || message.contains("conflict", ignoreCase = true)
+            || message.contains("cannot cancel", ignoreCase = true)
+            || message.contains("only confirmed", ignoreCase = true)
+            || message.contains("only be captured", ignoreCase = true)
+            || message.contains("insufficient captured payment", ignoreCase = true)
+    }
+
+    protected fun isValidationError(message: String?): Boolean {
+        if (message.isNullOrBlank()) return false
+        return message.equals(ErrorCodes.fromStatus(400), ignoreCase = true)
+            || message.equals(ErrorCodes.VALIDATION_ERROR, ignoreCase = true)
+            || message.contains("required", ignoreCase = true)
+            || message.contains("must be", ignoreCase = true)
+            || message.contains("without lines", ignoreCase = true)
+            || message.contains("no fulfillable", ignoreCase = true)
     }
 }

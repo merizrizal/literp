@@ -1,5 +1,6 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
@@ -133,7 +134,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
             .rxExecute(Tuple.of(locationId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Location not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val address = JsonObject(row.getString("address"))
@@ -163,7 +164,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
             .rxExecute(Tuple.of(code))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Location not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val address = JsonObject(row.getString("address"))
@@ -199,7 +200,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
             .rxExecute(Tuple.of(name, locationType, address?.encode(), locationId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Location not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val address = JsonObject(row.getString("address"))

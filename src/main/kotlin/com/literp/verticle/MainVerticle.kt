@@ -21,7 +21,7 @@ class MainVerticle : CoroutineVerticle() {
                     startFuture?.complete()
                 },
                 { failure ->
-                    logger.error("Fail to deploy MainVerticle: ${failure.message}")
+                    logger.error("Fail to deploy MainVerticle: ${failure.message}", failure)
                     startFuture?.fail(failure.message)
                 }
             )

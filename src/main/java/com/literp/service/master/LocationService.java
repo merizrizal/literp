@@ -10,7 +10,7 @@ import io.vertx.serviceproxy.ServiceBinder;
 @ProxyGen
 @VertxGen
 public interface LocationService {
-    String ADDRESS = "service.location";
+    String ADDRESS = "service.master.location";
 
     Future<JsonObject> listLocations(
         int page,

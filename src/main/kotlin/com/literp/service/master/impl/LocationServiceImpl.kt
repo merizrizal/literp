@@ -2,6 +2,8 @@ package com.literp.service.master.impl
 
 import com.literp.repository.LocationRepository
 import com.literp.service.master.LocationService
+import com.literp.service.toVertxFuture
+import com.literp.service.toVertxVoidFuture
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 

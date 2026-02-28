@@ -1,6 +1,7 @@
 package com.literp.verticle
 
 import com.literp.config.Config
+import com.literp.common.ErrorCodes
 import com.literp.db.DatabaseConnection
 import com.literp.repository.LocationRepository
 import com.literp.repository.OrderProcessRepository
@@ -29,17 +30,20 @@ import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.rxjava3.core.Vertx
+import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.ext.web.Router
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.handler.HSTSHandler
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 import io.vertx.rxjava3.openapi.contract.OpenAPIContract
+import java.util.concurrent.TimeUnit
 
 class HttpServerVerticle(
     private val vertx: Vertx
 ) : CoroutineVerticle() {
 
     private val logger = LoggerFactory.getLogger(this@HttpServerVerticle.javaClass)
+    private lateinit var dbPool: Pool
 
     private lateinit var uomRepository: UnitOfMeasureRepository
     private lateinit var productRepository: ProductRepository
@@ -61,6 +65,7 @@ class HttpServerVerticle(
     override fun start(startFuture: Promise<Void>?) {
         val coreVertx = vertx.delegate
         val pool = DatabaseConnection.createPool(vertx)
+        dbPool = pool
         uomRepository = UnitOfMeasureRepository(pool)
         productRepository = ProductRepository(pool)
         variantRepository = ProductVariantRepository(pool)
@@ -124,6 +129,7 @@ class HttpServerVerticle(
                         route().handler(HSTSHandler.create())
 
                         get("/").handler(this@HttpServerVerticle::getIndex)
+                        get("/health/db").handler(this@HttpServerVerticle::getDatabaseHealth)
 
                         route("/api/v1/*").subRouter(productRouter)
                         route("/api/v1/*").subRouter(locationRouter)
@@ -144,14 +150,14 @@ class HttpServerVerticle(
                                 startFuture?.complete()
                             },
                             { failure ->
-                                logger.error("Fail to deploy HttpServerVerticle: ${failure.message}")
+                                logger.error("Fail to deploy HttpServerVerticle: ${failure.message}", failure)
                                 startFuture?.fail(failure.cause)
                             }
                         )
                 }
 
                 override fun onError(e: Throwable) {
-                    logger.error("Fail to deploy OpenAPI Contracts: ${e.message}")
+                    logger.error("Fail to deploy OpenAPI Contracts: ${e.message}", e)
                     startFuture?.fail(e.cause)
                 }
             })
@@ -210,6 +216,40 @@ class HttpServerVerticle(
         }
 
         putResponse(context, 200, response)
+    }
+
+    private fun getDatabaseHealth(context: RoutingContext) {
+        dbPool.preparedQuery("SELECT 1")
+            .rxExecute()
+            .timeout(3, TimeUnit.SECONDS)
+            .subscribe(
+                {
+                    putResponse(
+                        context,
+                        200,
+                        JsonObject()
+                            .put("status", "UP")
+                            .put("database", "UP")
+                    )
+                },
+                { error ->
+                    logger.warn("Database health check failed: ${error.message}", error)
+                    val errorCode = if (error is java.util.concurrent.TimeoutException) {
+                        ErrorCodes.DB_TIMEOUT
+                    } else {
+                        ErrorCodes.INTERNAL_ERROR
+                    }
+                    putResponse(
+                        context,
+                        503,
+                        JsonObject()
+                            .put("status", "DOWN")
+                            .put("database", "DOWN")
+                            .put("errorCode", errorCode)
+                            .put("error", error.message ?: "Database unavailable")
+                    )
+                }
+            )
     }
 
     private fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {

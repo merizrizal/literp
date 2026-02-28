@@ -10,7 +10,7 @@ import io.vertx.serviceproxy.ServiceBinder;
 @ProxyGen
 @VertxGen
 public interface UnitOfMeasureService {
-    String ADDRESS = "service.uom";
+    String ADDRESS = "service.master.uom";
 
     Future<JsonObject> listUnitOfMeasures(int page, int size, String sort);
 

@@ -1,8 +1,8 @@
 package com.literp.service.order.impl
 
 import com.literp.repository.OrderProcessRepository
-import com.literp.service.master.impl.toVertxFuture
 import com.literp.service.order.OrderProcessService
+import com.literp.service.toVertxFuture
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 import java.math.BigDecimal

@@ -1,5 +1,6 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
@@ -92,7 +93,7 @@ class UnitOfMeasureRepository(pool: Pool) : BaseRepository(pool, UnitOfMeasureRe
             .rxExecute(Tuple.of(uomId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Unit of measure not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     Single.just(JsonObject()
@@ -119,7 +120,7 @@ class UnitOfMeasureRepository(pool: Pool) : BaseRepository(pool, UnitOfMeasureRe
             .rxExecute(Tuple.of(name, baseUnit, uomId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Unit of measure not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     Single.just(JsonObject()

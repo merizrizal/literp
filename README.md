@@ -11,7 +11,7 @@ All API and implementation documentation is located in the [./docs](docs) direct
 
 ### API Documentation
 - **[docs/API_IMPLEMENTATION.md](docs/API_IMPLEMENTATION.md)** - Comprehensive technical guide
-- **[docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)** - Testing with curl examples for all 21 endpoints
+- **[docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md)** - Testing with curl examples
 - **[docs/ENDPOINTS_OVERVIEW.md](docs/ENDPOINTS_OVERVIEW.md)** - Visual diagrams and endpoint reference
 - **[docs/README_API.md](docs/README_API.md)** - Complete index and quick links
 
@@ -43,7 +43,7 @@ For detailed setup instructions, see [docs/QUICK_START.md](docs/QUICK_START.md).
 - OpenAPI 3.0
 
 **Features:**
-- 21 REST API endpoints across 4 resources
+- 29 REST API endpoints across 5 API domains
 - Pagination, filtering, and sorting
 - Soft delete for audit trails
 - JSONB fields for extensibility
@@ -73,7 +73,8 @@ literp/
 │       │   ├── UnitOfMeasureRepository.kt
 │       │   ├── ProductRepository.kt
 │       │   ├── ProductVariantRepository.kt
-│       │   └── LocationRepository.kt
+│       │   ├── LocationRepository.kt
+│       │   └── OrderProcessRepository.kt
 │       └── verticle/            # HTTP & Reactive Components
 │           ├── MainVerticle.kt
 │           ├── HttpServerVerticle.kt
@@ -81,7 +82,11 @@ literp/
 │               ├── BaseHandler.kt (shared response utilities)
 │               ├── UnitOfMeasureHandler.kt
 │               ├── ProductHandler.kt
-│               └── LocationHandler.kt
+│               ├── LocationHandler.kt
+│               └── OrderProcessHandler.kt
+├── src/main/java/com/literp/service/
+│   ├── master/                  # Master data service proxies
+│   └── order/                   # Order process service proxy
 ├── python/
 │   └── database/migration/  # Alembic migrations
 ├── docker/                  # Docker configuration
@@ -89,7 +94,7 @@ literp/
 └── build.gradle.kts         # Gradle build config
 ```
 
-## 🔧 API Endpoints (21 Total)
+## 🔧 API Endpoints (29 Total)
 
 **Unit of Measure (5)**
 - GET/POST /uom
@@ -109,6 +114,15 @@ literp/
 - GET /locations/by-code/{code}
 - PUT /locations/{locationId}
 - DELETE /locations/{locationId}
+
+**Order Process (8)**
+- GET/POST /orders
+- GET /orders/{salesOrderId}
+- POST /orders/{salesOrderId}/lines
+- POST /orders/{salesOrderId}/confirm
+- POST /orders/{salesOrderId}/payments
+- POST /orders/{salesOrderId}/fulfill
+- POST /orders/{salesOrderId}/cancel
 
 For detailed endpoint documentation, see [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md).
 
@@ -157,16 +171,16 @@ Future enhancements:
 
 ## 📝 Key Features
 
-✅ 21 fully functional REST endpoints
-✅ Pagination and sorting
-✅ Advanced filtering (locations)
-✅ Soft deletes for audit trails
-✅ JSONB fields for extensibility
-✅ Async non-blocking I/O
-✅ Connection pooling
-✅ Comprehensive error handling
-✅ Complete API documentation
-✅ SOLID design principles applied
+- ✅ 29 fully functional REST endpoints
+- ✅ Pagination and sorting
+- ✅ Advanced filtering (locations)
+- ✅ Soft deletes for audit trails
+- ✅ JSONB fields for extensibility
+- ✅ Async non-blocking I/O
+- ✅ Connection pooling
+- ✅ Comprehensive error handling
+- ✅ Complete API documentation
+- ✅ SOLID design principles applied
 
 ## 🏗️ Architecture & Design Patterns
 
@@ -183,6 +197,7 @@ Future enhancements:
 │  - UnitOfMeasureHandler                 │
 │  - ProductHandler                       │
 │  - LocationHandler                      │
+│  - OrderProcessHandler                  │
 │  - BaseHandler (shared utilities)       │
 └──────────────────┬──────────────────────┘
                    │
@@ -192,6 +207,7 @@ Future enhancements:
 │  - ProductRepository                    │
 │  - ProductVariantRepository             │
 │  - LocationRepository                   │
+│  - OrderProcessRepository               │
 │  - BaseRepository (shared logic)        │
 └──────────────────┬──────────────────────┘
                    │
@@ -258,8 +274,8 @@ Literp - Lightweight ERP System
 
 ---
 
-**Status**: ✅ Production Ready
-**Version**: 1.0.0
-**Last Updated**: February 2026
-**Total Endpoints**: 21
-**Technology**: Vert.x 5.0.8 + Kotlin 2.3.10
+- **Status**: ✅ Production Ready
+- **Version**: 1.0.0
+- **Last Updated**: February 2026
+- **Total Endpoints**: 29
+- **Technology**: Vert.x 5.0.8 + Kotlin 2.3.10

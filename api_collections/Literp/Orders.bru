@@ -1,0 +1,16 @@
+meta {
+  name: Orders
+  type: http
+  seq: 10
+}
+
+get {
+  url: http://{{host}}:8010/api/v1/orders
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

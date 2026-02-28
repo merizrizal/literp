@@ -1,4 +1,4 @@
-package com.literp.service.master.impl
+package com.literp.service
 
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.Future

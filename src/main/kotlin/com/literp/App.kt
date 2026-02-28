@@ -13,6 +13,6 @@ fun main() {
             logger.info("Vertx deployed with id $id")
         }
         .onFailure { err ->
-            logger.error("Vertx deployed with error $err")
+            logger.error("Vertx deployed with error $err", err)
         }
 }

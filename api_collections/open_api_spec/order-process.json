@@ -44,8 +44,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "default": "orderDate",
-              "desc": null
+              "default": "orderDate,desc"
             }
           },
           {

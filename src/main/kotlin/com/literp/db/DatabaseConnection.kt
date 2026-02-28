@@ -24,8 +24,8 @@ object DatabaseConnection {
             .setPassword(config.pgPassword)
 
         val poolOptions = PoolOptions()
-            .setMaxSize(5)
-            .setConnectionTimeout(120000)
+            .setMaxSize(4)
+            .setConnectionTimeout(5000)
 
         val pool = Pool.pool(vertx.delegate,connectOptions, poolOptions)
         logger.info("Database pool created")

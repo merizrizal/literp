@@ -9,7 +9,11 @@ abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
     init {
         pool.rxGetConnection()
             .subscribe(
-                { _ -> logger.info("DB Connection established for ${clazz.simpleName} repository") },
+                { conn ->
+                    logger.info("DB Connection established for ${clazz.simpleName} repository")
+                    // Release startup probe connection back to pool immediately.
+                    conn.close()
+                },
                 { error -> logger.error("Error establishing DB connection for ${clazz.simpleName}", error) }
             )
     }

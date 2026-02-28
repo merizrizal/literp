@@ -1,5 +1,6 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
@@ -109,7 +110,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             .rxExecute(Tuple.of(variantId, productId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Product variant not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val attributes = JsonObject(row.getString("attributes"))
@@ -143,7 +144,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             .rxExecute(Tuple.of(name, attributes?.encode(), variantId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Product variant not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val attributes = JsonObject(row.getString("attributes"))

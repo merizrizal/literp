@@ -1,0 +1,16 @@
+meta {
+  name: Location-By-Code
+  type: http
+  seq: 12
+}
+
+get {
+  url: http://{{host}}:8010/api/v1/locations/by-code/2e4223d6-4e55-4d11-87e6-bebeb34ddce8
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

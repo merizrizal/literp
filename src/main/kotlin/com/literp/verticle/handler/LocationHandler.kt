@@ -1,12 +1,12 @@
 package com.literp.verticle.handler
 
+import com.literp.common.ErrorCodes
 import com.literp.service.master.LocationService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
-
 
 class LocationHandler(private val locationService: LocationService) : BaseHandler(LocationHandler::class.java) {
 
@@ -21,7 +21,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
 
         locationService.listLocations(page, size, sort, code, name, locationType, activeOnly)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}") }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}", error) }
     }
 
     fun createLocation(context: RoutingContext) {
@@ -40,17 +40,18 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         locationService.checkCodeExists(code)
             .compose { exists ->
                 if (exists) {
-                    Future.failedFuture(Exception("Location code already exists"))
+                    Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
                     locationService.createLocation(code, name, locationType, address)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                if (error.message?.contains("already exists") == true) {
-                    putErrorResponse(context, 409, error.message ?: "Conflict")
-                } else {
-                    putErrorResponse(context, 500, "Failed to create location: ${error.message}")
+                when {
+                    isConflictError(error.message) -> putErrorResponse(context, 409, "Location code already exists")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message ?: "Location not found")
+                    else -> putErrorResponse(context, 500, "Failed to create location: ${error.message}", error)
                 }
             }
     }
@@ -60,7 +61,14 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
 
         locationService.getLocation(locationId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to get location: ${error.message}", error)
+                }
+            }
     }
 
     fun getLocationByCode(context: RoutingContext) {
@@ -68,7 +76,14 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
 
         locationService.getLocationByCode(code)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location by code not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to get location by code: ${error.message}", error)
+                }
+            }
     }
 
     fun updateLocation(context: RoutingContext) {
@@ -86,7 +101,14 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
 
         locationService.updateLocation(locationId, name, locationType, address)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Location not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to update location: ${error.message}", error)
+                }
+            }
     }
 
     fun deleteLocation(context: RoutingContext) {
@@ -94,7 +116,13 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
 
         locationService.deleteLocation(locationId)
             .onSuccess { context.response().setStatusCode(204).end() }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to delete location: ${error.message}") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Location not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to delete location: ${error.message}", error)
+                }
+            }
     }
-
 }

@@ -1,5 +1,6 @@
 package com.literp.verticle.handler
 
+import com.literp.common.ErrorCodes
 import com.literp.service.master.ProductService
 import com.literp.service.master.ProductVariantService
 import io.vertx.core.Future
@@ -20,7 +21,7 @@ class ProductHandler(
 
         productService.listProducts(page, size, sort)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}") }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}", error) }
     }
 
     fun createProduct(context: RoutingContext) {
@@ -40,17 +41,17 @@ class ProductHandler(
         productService.checkSkuExists(sku)
             .compose { exists ->
                 if (exists) {
-                    Future.failedFuture(Exception("Product SKU already exists"))
+                    Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
                     productService.createProduct(sku, name, productType, baseUom, metadata)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                if (error.message?.contains("already exists") == true) {
-                    putErrorResponse(context, 409, error.message ?: "Conflict")
-                } else {
-                    putErrorResponse(context, 500, "Failed to create product: ${error.message}")
+                when {
+                    isConflictError(error.message) -> putErrorResponse(context, 409, "Product SKU already exists")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    else -> putErrorResponse(context, 500, "Failed to create product: ${error.message}", error)
                 }
             }
     }
@@ -60,7 +61,14 @@ class ProductHandler(
 
         productService.getProduct(productId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Product not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to get product: ${error.message}", error)
+                }
+            }
     }
 
     fun updateProduct(context: RoutingContext) {
@@ -78,7 +86,14 @@ class ProductHandler(
 
         productService.updateProduct(productId, name, productType, metadata)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Product not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to update product: ${error.message}", error)
+                }
+            }
     }
 
     fun deleteProduct(context: RoutingContext) {
@@ -86,10 +101,16 @@ class ProductHandler(
 
         productService.deleteProduct(productId)
             .onSuccess { context.response().setStatusCode(204).end() }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to delete product: ${error.message}") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to delete product: ${error.message}", error)
+                }
+            }
     }
 
-    // Product Variant handlers
     fun listProductVariants(context: RoutingContext) {
         val productId = context.pathParam("productId")
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
@@ -98,7 +119,14 @@ class ProductHandler(
 
         variantService.listProductVariants(productId, page, size, sort)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list variants: ${error.message}") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product or variant not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to list variants: ${error.message}", error)
+                }
+            }
     }
 
     fun createProductVariant(context: RoutingContext) {
@@ -117,17 +145,18 @@ class ProductHandler(
         variantService.checkSkuExists(sku)
             .compose { exists ->
                 if (exists) {
-                    Future.failedFuture(Exception("Variant SKU already exists"))
+                    Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
                     variantService.createProductVariant(productId, sku, name, attributes)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                if (error.message?.contains("already exists") == true) {
-                    putErrorResponse(context, 409, error.message ?: "Conflict")
-                } else {
-                    putErrorResponse(context, 500, "Failed to create variant: ${error.message}")
+                when {
+                    isConflictError(error.message) -> putErrorResponse(context, 409, "Variant SKU already exists")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product not found")
+                    else -> putErrorResponse(context, 500, "Failed to create variant: ${error.message}", error)
                 }
             }
     }
@@ -138,7 +167,14 @@ class ProductHandler(
 
         variantService.getProductVariant(productId, variantId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Product variant not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product variant not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to get product variant: ${error.message}", error)
+                }
+            }
     }
 
     fun updateProductVariant(context: RoutingContext) {
@@ -154,7 +190,14 @@ class ProductHandler(
 
         variantService.updateProductVariant(variantId, name, attributes)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Product variant not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product variant not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to update product variant: ${error.message}", error)
+                }
+            }
     }
 
     fun deleteProductVariant(context: RoutingContext) {
@@ -162,7 +205,13 @@ class ProductHandler(
 
         variantService.deleteProductVariant(variantId)
             .onSuccess { context.response().setStatusCode(204).end() }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to delete variant: ${error.message}") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Product variant not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to delete variant: ${error.message}", error)
+                }
+            }
     }
-
 }

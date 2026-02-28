@@ -18,8 +18,15 @@ class OrderProcessHandler(
         val locationId = context.queryParam("locationId").firstOrNull()
 
         orderService.listSalesOrders(page, size, sort, status, salesChannel, locationId)
-            .onSuccess { result -> putResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list sales orders: ${error.message}") }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                when {
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message ?: "Not found")
+                    else -> putErrorResponse(context, 500, "Failed to list sales orders: ${error.message}", error)
+                }
+            }
     }
 
     fun createSalesOrderDraft(context: RoutingContext) {
@@ -39,7 +46,14 @@ class OrderProcessHandler(
 
         orderService.createSalesOrderDraft(salesChannel, locationId, customerId, currency, notes)
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to create sales order draft: ${error.message}") }
+            .onFailure { error ->
+                when {
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message ?: "Not found")
+                    else -> putErrorResponse(context, 500, "Failed to create sales order draft: ${error.message}", error)
+                }
+            }
     }
 
     fun getSalesOrder(context: RoutingContext) {
@@ -47,10 +61,11 @@ class OrderProcessHandler(
         orderService.getSalesOrder(orderId)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                if (error.message?.contains("not found", ignoreCase = true) == true) {
-                    putErrorResponse(context, 404, "Sales order not found")
-                } else {
-                    putErrorResponse(context, 500, "Failed to get sales order: ${error.message}")
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Sales order not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to get sales order: ${error.message}", error)
                 }
             }
     }
@@ -74,10 +89,10 @@ class OrderProcessHandler(
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 when {
-                    error.message?.contains("not found", ignoreCase = true) == true -> putErrorResponse(context, 404, error.message)
-                    error.message?.contains("DRAFT", ignoreCase = true) == true -> putErrorResponse(context, 409, error.message)
-                    error.message?.contains("must be", ignoreCase = true) == true -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to add sales order line: ${error.message}")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
+                    else -> putErrorResponse(context, 500, "Failed to add sales order line: ${error.message}", error)
                 }
             }
     }
@@ -88,10 +103,10 @@ class OrderProcessHandler(
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 when {
-                    error.message?.contains("not found", ignoreCase = true) == true -> putErrorResponse(context, 404, error.message)
-                    error.message?.contains("DRAFT", ignoreCase = true) == true -> putErrorResponse(context, 409, error.message)
-                    error.message?.contains("without lines", ignoreCase = true) == true -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to confirm sales order: ${error.message}")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
+                    else -> putErrorResponse(context, 500, "Failed to confirm sales order: ${error.message}", error)
                 }
             }
     }
@@ -114,10 +129,10 @@ class OrderProcessHandler(
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 when {
-                    error.message?.contains("not found", ignoreCase = true) == true -> putErrorResponse(context, 404, error.message)
-                    error.message?.contains("only be captured", ignoreCase = true) == true -> putErrorResponse(context, 409, error.message)
-                    error.message?.contains("must be", ignoreCase = true) == true -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to capture payment: ${error.message}")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
+                    else -> putErrorResponse(context, 500, "Failed to capture payment: ${error.message}", error)
                 }
             }
     }
@@ -132,11 +147,10 @@ class OrderProcessHandler(
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 when {
-                    error.message?.contains("not found", ignoreCase = true) == true -> putErrorResponse(context, 404, error.message)
-                    error.message?.contains("Only CONFIRMED", ignoreCase = true) == true -> putErrorResponse(context, 409, error.message)
-                    error.message?.contains("Insufficient captured payment", ignoreCase = true) == true -> putErrorResponse(context, 409, error.message)
-                    error.message?.contains("No fulfillable", ignoreCase = true) == true -> putErrorResponse(context, 400, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to fulfill sales order: ${error.message}")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
+                    else -> putErrorResponse(context, 500, "Failed to fulfill sales order: ${error.message}", error)
                 }
             }
     }
@@ -150,9 +164,10 @@ class OrderProcessHandler(
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 when {
-                    error.message?.contains("not found", ignoreCase = true) == true -> putErrorResponse(context, 404, error.message)
-                    error.message?.contains("Cannot cancel", ignoreCase = true) == true -> putErrorResponse(context, 409, error.message)
-                    else -> putErrorResponse(context, 500, "Failed to cancel sales order: ${error.message}")
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, error.message)
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message)
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message)
+                    else -> putErrorResponse(context, 500, "Failed to cancel sales order: ${error.message}", error)
                 }
             }
     }

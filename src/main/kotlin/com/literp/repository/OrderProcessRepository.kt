@@ -1,5 +1,6 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
@@ -8,7 +9,7 @@ import io.vertx.rxjava3.sqlclient.Row
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.util.UUID
+import java.util.*
 
 class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepository::class.java) {
 
@@ -143,7 +144,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .rxExecute(Tuple.of(orderId))
             .flatMap { orderResult ->
                 if (orderResult.size() == 0) {
-                    Single.error(Exception("Sales order not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val order = mapSalesOrderRow(orderResult.first())
                     pool.preparedQuery(linesQuery)
@@ -207,7 +208,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                             .rxExecute(Tuple.of(productId))
                             .flatMap { productResult ->
                                 if (productResult.size() == 0) {
-                                    Single.error(Exception("Product not found or inactive"))
+                                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                                 } else {
                                     val resolvedSku = sku ?: productResult.first().getString("sku")
                                     val lineId = UUID.randomUUID().toString()
@@ -261,7 +262,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .rxExecute(Tuple.of(orderId))
             .flatMap { orderResult ->
                 if (orderResult.size() == 0) {
-                    Single.error(Exception("Sales order not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = orderResult.first()
                     val orderStatus = row.getString("status")
@@ -355,7 +356,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .rxExecute(Tuple.of(orderId))
             .flatMap { orderResult ->
                 if (orderResult.size() == 0) {
-                    Single.error(Exception("Sales order not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = orderResult.first()
                     val status = row.getString("status")
@@ -430,7 +431,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .rxExecute(Tuple.of(orderId))
             .flatMap { orderResult ->
                 if (orderResult.size() == 0) {
-                    Single.error(Exception("Sales order not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val orderRow = orderResult.first()
                     val status = orderRow.getString("status")
@@ -543,7 +544,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .rxExecute(Tuple.of(orderId))
             .flatMap { orderResult ->
                 if (orderResult.size() == 0) {
-                    Single.error(Exception("Sales order not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val status = orderResult.first().getString("status")
                     when (status) {

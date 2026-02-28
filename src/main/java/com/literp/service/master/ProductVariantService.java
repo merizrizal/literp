@@ -10,7 +10,7 @@ import io.vertx.serviceproxy.ServiceBinder;
 @ProxyGen
 @VertxGen
 public interface ProductVariantService {
-    String ADDRESS = "service.productVariant";
+    String ADDRESS = "service.master.productVariant";
 
     Future<JsonObject> listProductVariants(String productId, int page, int size, String sort);
 

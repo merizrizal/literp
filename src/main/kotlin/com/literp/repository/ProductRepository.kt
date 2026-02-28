@@ -1,5 +1,6 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
@@ -115,7 +116,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
             .rxExecute(Tuple.of(productId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Product not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val metadata = JsonObject(row.getString("metadata"))
@@ -151,7 +152,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
             .rxExecute(Tuple.of(name, productType, metadata?.encode(), productId))
             .flatMap { result ->
                 if (result.size() == 0) {
-                    Single.error(Exception("Product not found"))
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
                     val metadata = JsonObject(row.getString("metadata"))

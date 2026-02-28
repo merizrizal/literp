@@ -1,5 +1,6 @@
 package com.literp.verticle.handler
 
+import com.literp.common.ErrorCodes
 import com.literp.service.master.UnitOfMeasureService
 import io.vertx.core.Future
 import io.vertx.core.json.JsonObject
@@ -16,7 +17,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
 
         uomService.listUnitOfMeasures(page, size, sort)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM: ${error.message}") }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM: ${error.message}", error) }
     }
 
     fun createUnitOfMeasure(context: RoutingContext) {
@@ -34,17 +35,17 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         uomService.checkCodeExists(code)
             .compose { exists ->
                 if (exists) {
-                    Future.failedFuture(Exception("UOM code already exists"))
+                    Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
                     uomService.createUnitOfMeasure(code, name, baseUnit)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
             .onFailure { error ->
-                if (error.message?.contains("already exists") == true) {
-                    putErrorResponse(context, 409, error.message ?: "Conflict")
-                } else {
-                    putErrorResponse(context, 500, "Failed to create UOM: ${error.message}")
+                when {
+                    isConflictError(error.message) -> putErrorResponse(context, 409, "UOM code already exists")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    else -> putErrorResponse(context, 500, "Failed to create UOM: ${error.message}", error)
                 }
             }
     }
@@ -54,7 +55,14 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
 
         uomService.getUnitOfMeasure(uomId)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Unit of measure not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Unit of measure not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to get unit of measure: ${error.message}", error)
+                }
+            }
     }
 
     fun updateUnitOfMeasure(context: RoutingContext) {
@@ -71,7 +79,14 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
 
         uomService.updateUnitOfMeasure(uomId, name, baseUnit)
             .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
-            .onFailure { _ -> putErrorResponse(context, 404, "Unit of measure not found") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Unit of measure not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to update UOM: ${error.message}", error)
+                }
+            }
     }
 
     fun deleteUnitOfMeasure(context: RoutingContext) {
@@ -79,7 +94,13 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
 
         uomService.deleteUnitOfMeasure(uomId)
             .onSuccess { context.response().setStatusCode(204).end() }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to delete UOM: ${error.message}") }
+            .onFailure { error ->
+                when {
+                    isNotFoundError(error.message) -> putErrorResponse(context, 404, "Unit of measure not found")
+                    isValidationError(error.message) -> putErrorResponse(context, 400, error.message ?: "Bad request")
+                    isConflictError(error.message) -> putErrorResponse(context, 409, error.message ?: "Conflict")
+                    else -> putErrorResponse(context, 500, "Failed to delete UOM: ${error.message}", error)
+                }
+            }
     }
-
 }
