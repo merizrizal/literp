@@ -1,23 +1,21 @@
 meta {
-  name: Update-Locations
+  name: Update-Location
   type: http
-  seq: 7
+  seq: 22
 }
 
 put {
-  url: http://{{host}}:8010/api/v1/locations/4d1348e3-7c95-4144-972e-baf73e7fcc46
+  url: http://{{host}}:{{port}}/api/v1/locations/{{locationId}}
   body: json
   auth: inherit
 }
 
 body:json {
   {
-    "code": "WH-001",
-    "name": "Main Warehouse Updated Twice",
+    "name": "Main Warehouse Updated",
     "locationType": "WAREHOUSE",
-    "isActive": true,
     "address": {
-      "street": "145623 Industrial Way",
+      "street": "456 New Industrial Blvd",
       "city": "Springfield",
       "state": "IL",
       "postal_code": "62701",

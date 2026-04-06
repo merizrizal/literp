@@ -1,11 +1,11 @@
 meta {
-  name: Delete-Location
+  name: Delete-Product
   type: http
-  seq: 23
+  seq: 12
 }
 
 delete {
-  url: http://{{host}}:{{port}}/api/v1/locations/{{locationId}}
+  url: http://{{host}}:{{port}}/api/v1/products/{{productId}}
   body: none
   auth: inherit
 }

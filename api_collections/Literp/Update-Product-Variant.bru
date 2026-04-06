@@ -1,0 +1,26 @@
+meta {
+  name: Update-Product-Variant
+  type: http
+  seq: 16
+}
+
+put {
+  url: http://{{host}}:{{port}}/api/v1/products/{{productId}}/variants/{{variantId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Red Large",
+    "attributes": {
+      "color": "red",
+      "size": "L"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

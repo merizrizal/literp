@@ -1,11 +1,11 @@
 meta {
-  name: DB-Health
+  name: Get-Product
   type: http
-  seq: 2
+  seq: 10
 }
 
 get {
-  url: http://{{host}}:{{port}}/health/db
+  url: http://{{host}}:{{port}}/api/v1/products/{{productId}}
   body: none
   auth: inherit
 }

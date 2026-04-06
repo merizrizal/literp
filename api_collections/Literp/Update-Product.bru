@@ -1,0 +1,28 @@
+meta {
+  name: Update-Product
+  type: http
+  seq: 11
+}
+
+put {
+  url: http://{{host}}:{{port}}/api/v1/products/{{productId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Widget A Updated",
+    "productType": "STOCK",
+    "metadata": {
+      "weight": 2.75,
+      "weight_unit": "kg",
+      "color": "red"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

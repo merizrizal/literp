@@ -1,22 +1,21 @@
 meta {
-  name: Create-Products
+  name: Create-Product
   type: http
-  seq: 13
+  seq: 9
 }
 
 post {
-  url: http://{{host}}:8010/api/v1/products
+  url: http://{{host}}:{{port}}/api/v1/products
   body: json
   auth: inherit
 }
 
 body:json {
   {
-    "sku": "WIDGET-A",
+    "sku": "{{productSku}}",
     "name": "Widget A",
     "productType": "STOCK",
-    "baseUom": "dd87b99a-be67-4c76-a85c-9b88cfa9c3e7",
-    "active": true,
+    "baseUom": "{{uomId}}",
     "metadata": {
       "weight": 2.5,
       "weight_unit": "kg",

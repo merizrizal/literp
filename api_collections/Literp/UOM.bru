@@ -1,11 +1,11 @@
 meta {
-  name: UOM
+  name: List-UOM
   type: http
-  seq: 5
+  seq: 3
 }
 
 get {
-  url: http://{{host}}:8010/api/v1/uom
+  url: http://{{host}}:{{port}}/api/v1/uom?page=0&size=20&sort=code,asc
   body: none
   auth: inherit
 }

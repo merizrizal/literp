@@ -1,0 +1,27 @@
+meta {
+  name: Create-Product-Variant
+  type: http
+  seq: 14
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/products/{{productId}}/variants
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "sku": "{{variantSku}}",
+    "name": "Red Medium",
+    "attributes": {
+      "color": "red",
+      "size": "M"
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

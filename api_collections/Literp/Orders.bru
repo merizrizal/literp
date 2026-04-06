@@ -1,11 +1,11 @@
 meta {
-  name: Orders
+  name: List-Orders
   type: http
-  seq: 10
+  seq: 24
 }
 
 get {
-  url: http://{{host}}:8010/api/v1/orders
+  url: http://{{host}}:{{port}}/api/v1/orders?page=0&size=20&sort=orderDate,desc
   body: none
   auth: inherit
 }

@@ -1,20 +1,20 @@
 meta {
   name: Create-UOM
   type: http
-  seq: 14
+  seq: 4
 }
 
 post {
-  url: http://{{host}}:8010/api/v1/uom
+  url: http://{{host}}:{{port}}/api/v1/uom
   body: json
   auth: inherit
 }
 
 body:json {
   {
-    "code": "KG",
-    "name": "Kilogram",
-    "baseUnit": "g"
+    "code": "{{uomCode}}",
+    "name": "Each",
+    "baseUnit": "each"
   }
 }
 

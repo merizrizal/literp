@@ -23,9 +23,9 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
     fun createUnitOfMeasure(context: RoutingContext) {
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val code = body.getString("code")
-        val name = body.getString("name")
-        val baseUnit = body.getString("baseUnit")
+        val code = body?.getString("code")
+        val name = body?.getString("name")
+        val baseUnit = body?.getString("baseUnit")
 
         if (code.isNullOrEmpty() || name.isNullOrEmpty()) {
             putErrorResponse(context, 400, "Code and name are required")
@@ -70,8 +70,8 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         val uomId = context.pathParam("uomId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val name = body.getString("name")
-        val baseUnit = body.getString("baseUnit")
+        val name = body?.getString("name")
+        val baseUnit = body?.getString("baseUnit")
 
         if (name.isNullOrEmpty()) {
             putErrorResponse(context, 400, "Name is required")

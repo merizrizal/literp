@@ -1,0 +1,16 @@
+meta {
+  name: Confirm-Order
+  type: http
+  seq: 28
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/orders/{{salesOrderId}}/confirm
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

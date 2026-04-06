@@ -1,0 +1,26 @@
+meta {
+  name: Create-Order-Draft
+  type: http
+  seq: 25
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/orders
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "salesChannel": "POS",
+    "locationId": "{{locationId}}",
+    "customerId": "{{customerId}}",
+    "currency": "USD",
+    "notes": "Walk-in customer order"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

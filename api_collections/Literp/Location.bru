@@ -1,11 +1,11 @@
 meta {
-  name: Location
+  name: Get-Location
   type: http
-  seq: 8
+  seq: 20
 }
 
 get {
-  url: http://{{host}}:8010/api/v1/locations/2e4223d6-4e55-4d11-87e6-bebeb34ddce8
+  url: http://{{host}}:{{port}}/api/v1/locations/{{locationId}}
   body: none
   auth: inherit
 }

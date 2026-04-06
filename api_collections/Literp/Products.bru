@@ -1,11 +1,11 @@
 meta {
-  name: Products
+  name: List-Products
   type: http
-  seq: 4
+  seq: 8
 }
 
 get {
-  url: http://{{host}}:8010/api/v1/products
+  url: http://{{host}}:{{port}}/api/v1/products?page=0&size=20&sort=sku,asc
   body: none
   auth: inherit
 }

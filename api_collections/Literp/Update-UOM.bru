@@ -1,0 +1,23 @@
+meta {
+  name: Update-UOM
+  type: http
+  seq: 6
+}
+
+put {
+  url: http://{{host}}:{{port}}/api/v1/uom/{{uomId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Each Updated",
+    "baseUnit": "unit"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

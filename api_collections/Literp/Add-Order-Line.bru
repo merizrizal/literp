@@ -1,0 +1,25 @@
+meta {
+  name: Add-Order-Line
+  type: http
+  seq: 27
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/orders/{{salesOrderId}}/lines
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "productId": "{{productId}}",
+    "sku": "{{productSku}}",
+    "quantityOrdered": 2,
+    "unitPrice": 19.99
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

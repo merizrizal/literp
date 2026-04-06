@@ -1,0 +1,22 @@
+meta {
+  name: Cancel-Order
+  type: http
+  seq: 31
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/orders/{{salesOrderId}}/cancel
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "reason": "Customer changed mind"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

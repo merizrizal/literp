@@ -27,10 +27,10 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
     fun createLocation(context: RoutingContext) {
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val code = body.getString("code")
-        val name = body.getString("name")
-        val locationType = body.getString("locationType")
-        val address = body.getJsonObject("address")
+        val code = body?.getString("code")
+        val name = body?.getString("name")
+        val locationType = body?.getString("locationType")
+        val address = body?.getJsonObject("address")
 
         if (code.isNullOrEmpty() || name.isNullOrEmpty() || locationType.isNullOrEmpty()) {
             putErrorResponse(context, 400, "code, name, and locationType are required")
@@ -91,9 +91,9 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val locationId = context.pathParam("locationId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val name = body.getString("name")
-        val locationType = body.getString("locationType")
-        val address = body.getJsonObject("address")
+        val name = body?.getString("name")
+        val locationType = body?.getString("locationType")
+        val address = body?.getJsonObject("address")
 
         if (name.isNullOrEmpty() || locationType.isNullOrEmpty()) {
             putErrorResponse(context, 400, "name and locationType are required")

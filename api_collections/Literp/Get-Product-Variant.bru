@@ -1,0 +1,16 @@
+meta {
+  name: Get-Product-Variant
+  type: http
+  seq: 15
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/products/{{productId}}/variants/{{variantId}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -27,11 +27,11 @@ class ProductHandler(
     fun createProduct(context: RoutingContext) {
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val sku = body.getString("sku")
-        val name = body.getString("name")
-        val productType = body.getString("productType")
-        val baseUom = body.getString("baseUom")
-        val metadata = body.getJsonObject("metadata")
+        val sku = body?.getString("sku")
+        val name = body?.getString("name")
+        val productType = body?.getString("productType")
+        val baseUom = body?.getString("baseUom")
+        val metadata = body?.getJsonObject("metadata")
 
         if (sku.isNullOrEmpty() || name.isNullOrEmpty() || productType.isNullOrEmpty() || baseUom.isNullOrEmpty()) {
             putErrorResponse(context, 400, "sku, name, productType, and baseUom are required")
@@ -76,9 +76,9 @@ class ProductHandler(
         val productId = context.pathParam("productId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val name = body.getString("name")
-        val productType = body.getString("productType")
-        val metadata = body.getJsonObject("metadata")
+        val name = body?.getString("name")
+        val productType = body?.getString("productType")
+        val metadata = body?.getJsonObject("metadata")
 
         if (name.isNullOrEmpty() || productType.isNullOrEmpty()) {
             putErrorResponse(context, 400, "name and productType are required")
@@ -134,9 +134,9 @@ class ProductHandler(
         val productId = context.pathParam("productId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
         val body = validatedRequest.body.jsonObject
-        val sku = body.getString("sku")
-        val name = body.getString("name")
-        val attributes = body.getJsonObject("attributes")
+        val sku = body?.getString("sku")
+        val name = body?.getString("name")
+        val attributes = body?.getJsonObject("attributes")
 
         if (sku.isNullOrEmpty() || name.isNullOrEmpty()) {
             putErrorResponse(context, 400, "sku and name are required")

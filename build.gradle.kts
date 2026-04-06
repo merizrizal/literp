@@ -1,8 +1,8 @@
 import org.gradle.jvm.tasks.Jar
 
 buildscript {
-    System.setProperty("kotlinVersion", "2.3.10")
-    System.setProperty("vertxVersion", "5.0.8")
+    System.setProperty("kotlinVersion", "2.3.20")
+    System.setProperty("vertxVersion", "5.0.10")
 }
 
 group = "com.literp"
@@ -46,11 +46,11 @@ dependencies {
     implementation("io.vertx:vertx-openapi:${vertxVersion}")
     implementation("io.vertx:vertx-web-openapi-router:${vertxVersion}")
 
-    // Vertx Rxjava
+    // Vertx RxJava
     implementation("io.vertx:vertx-rx-java3:$vertxVersion")
     implementation("io.vertx:vertx-rx-java3-gen:$vertxVersion")
 
-    // Vertx Postgresql
+    // Vertx PostgreSQL
     implementation("io.vertx:vertx-pg-client:$vertxVersion")
     // Scram SASL SCRAM-SHA-256
     implementation("com.ongres.scram:scram-client:3.2")

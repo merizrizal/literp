@@ -1,11 +1,11 @@
 meta {
-  name: Locations
+  name: List-Locations
   type: http
-  seq: 3
+  seq: 18
 }
 
 get {
-  url: http://{{host}}:8010/api/v1/locations
+  url: http://{{host}}:{{port}}/api/v1/locations?page=0&size=20&sort=code,asc&activeOnly=true
   body: none
   auth: inherit
 }
