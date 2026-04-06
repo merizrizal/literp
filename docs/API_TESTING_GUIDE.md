@@ -1,133 +1,181 @@
 # API Testing Guide
 
-Quick reference for testing all 21 endpoints of the Literp REST API.
+Use Bruno for routine testing and curl for quick verification.
+
+Bruno collection:
+
+```text
+api_collections/Literp
+```
+
+Base URL used below:
+
+```bash
+BASE_URL=http://localhost:8010/api/v1
+```
 
 ## Prerequisites
-- Server running on `http://localhost:8010`
-- PostgreSQL with literp database running
-- `jq` tool for JSON formatting (optional)
 
-## Unit of Measure (UOM) Endpoints
-
-### 1. List all UOMs
 ```bash
-curl -X GET "http://localhost:8010/api/v1/uom?page=0&size=20&sort=code,asc" \
-  -H "Accept: application/json" | jq
+curl http://localhost:8010 | jq
+curl http://localhost:8010/health/db | jq
 ```
 
-### 2. Create a new UOM
+If you need fresh local data:
+
 ```bash
-curl -X POST "http://localhost:8010/api/v1/uom" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "EA",
-    "name": "Each",
-    "baseUnit": null
-  }' | jq
+cd docker
+source envrc
+make network
+DIR=pgsql make env-up
 ```
 
-**Response:**
+## Response Shape Note
+
+Master-data endpoints currently wrap the payload twice:
+
 ```json
 {
   "data": {
-    "uomId": "550e8400-e29b-41d4-a716-446655440000",
-    "code": "EA",
-    "name": "Each",
-    "baseUnit": null
+    "data": {}
   }
 }
 ```
 
-### 3. Get a specific UOM
-```bash
-curl -X GET "http://localhost:8010/api/v1/uom/{uomId}" \
-  -H "Accept: application/json" | jq
+List endpoints currently return:
+
+```json
+{
+  "data": {
+    "data": [],
+    "pagination": {}
+  }
+}
 ```
 
-### 4. Update UOM
+Order-process commands usually return a single `data` envelope.
+
+## Utility Endpoints
+
+### Index
+
 ```bash
-curl -X PUT "http://localhost:8010/api/v1/uom/{uomId}" \
+curl http://localhost:8010 | jq
+```
+
+### Database health
+
+```bash
+curl http://localhost:8010/health/db | jq
+```
+
+## Unit of Measure
+
+### List
+
+```bash
+curl "$BASE_URL/uom?page=0&size=20&sort=code,asc" | jq
+```
+
+### Create
+
+```bash
+curl -X POST "$BASE_URL/uom" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Each (Updated)",
+    "code": "EA",
+    "name": "Each",
+    "baseUnit": null
+  }' | jq
+```
+
+### Get
+
+```bash
+curl "$BASE_URL/uom/{uomId}" | jq
+```
+
+### Update
+
+```bash
+curl -X PUT "$BASE_URL/uom/{uomId}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Each Updated",
     "baseUnit": "unit"
   }' | jq
 ```
 
-### 5. Delete UOM
+### Delete
+
 ```bash
-curl -X DELETE "http://localhost:8010/api/v1/uom/{uomId}" \
-  -H "Accept: application/json"
+curl -i -X DELETE "$BASE_URL/uom/{uomId}"
 ```
 
----
+## Products
 
-## Product Endpoints
+### List
 
-### 6. List all Products
 ```bash
-curl -X GET "http://localhost:8010/api/v1/products?page=0&size=20&sort=sku,asc" \
-  -H "Accept: application/json" | jq
+curl "$BASE_URL/products?page=0&size=20&sort=sku,asc" | jq
 ```
 
-### 7. Create a new Product
+### Create
+
 ```bash
-curl -X POST "http://localhost:8010/api/v1/products" \
+curl -X POST "$BASE_URL/products" \
   -H "Content-Type: application/json" \
   -d '{
     "sku": "PROD-001",
-    "name": "Sample Product",
+    "name": "Widget A",
     "productType": "STOCK",
     "baseUom": "{uomId}",
     "metadata": {
-      "color": "red",
-      "brand": "Acme",
-      "size": "M"
+      "brand": "Literp",
+      "color": "blue"
     }
   }' | jq
 ```
 
-**Note:** Replace `{uomId}` with an actual UOM ID from step 2.
+### Get
 
-### 8. Get a specific Product
 ```bash
-curl -X GET "http://localhost:8010/api/v1/products/{productId}" \
-  -H "Accept: application/json" | jq
+curl "$BASE_URL/products/{productId}" | jq
 ```
 
-### 9. Update Product
+### Update
+
 ```bash
-curl -X PUT "http://localhost:8010/api/v1/products/{productId}" \
+curl -X PUT "$BASE_URL/products/{productId}" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Updated Product Name",
+    "name": "Widget A Updated",
     "productType": "STOCK",
     "metadata": {
-      "color": "blue",
-      "brand": "Acme"
+      "brand": "Literp",
+      "color": "red"
     }
   }' | jq
 ```
 
-### 10. Delete Product (Soft Delete)
+### Delete
+
 ```bash
-curl -X DELETE "http://localhost:8010/api/v1/products/{productId}" \
-  -H "Accept: application/json"
+curl -i -X DELETE "$BASE_URL/products/{productId}"
 ```
 
----
+## Product Variants
 
-## Product Variant Endpoints
+### List
 
-### 11. List all Variants for a Product
 ```bash
-curl -X GET "http://localhost:8010/api/v1/products/{productId}/variants?page=0&size=20&sort=sku,asc" \
-  -H "Accept: application/json" | jq
+curl "$BASE_URL/products/{productId}/variants?page=0&size=20&sort=sku,asc" | jq
 ```
 
-### 12. Create a Product Variant
+### Create
+
 ```bash
-curl -X POST "http://localhost:8010/api/v1/products/{productId}/variants" \
+curl -X POST "$BASE_URL/products/{productId}/variants" \
   -H "Content-Type: application/json" \
   -d '{
     "sku": "PROD-001-RED-M",
@@ -139,15 +187,16 @@ curl -X POST "http://localhost:8010/api/v1/products/{productId}/variants" \
   }' | jq
 ```
 
-### 13. Get a specific Product Variant
+### Get
+
 ```bash
-curl -X GET "http://localhost:8010/api/v1/products/{productId}/variants/{variantId}" \
-  -H "Accept: application/json" | jq
+curl "$BASE_URL/products/{productId}/variants/{variantId}" | jq
 ```
 
-### 14. Update Product Variant
+### Update
+
 ```bash
-curl -X PUT "http://localhost:8010/api/v1/products/{productId}/variants/{variantId}" \
+curl -X PUT "$BASE_URL/products/{productId}/variants/{variantId}" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Red Large",
@@ -158,207 +207,224 @@ curl -X PUT "http://localhost:8010/api/v1/products/{productId}/variants/{variant
   }' | jq
 ```
 
-### 15. Delete Product Variant (Soft Delete)
+### Delete
+
 ```bash
-curl -X DELETE "http://localhost:8010/api/v1/products/{productId}/variants/{variantId}" \
-  -H "Accept: application/json"
+curl -i -X DELETE "$BASE_URL/products/{productId}/variants/{variantId}"
 ```
 
----
+## Locations
 
-## Location Endpoints
+### List
 
-### 16. List all Locations
 ```bash
-curl -X GET "http://localhost:8010/api/v1/locations?page=0&size=20&sort=code,asc" \
-  -H "Accept: application/json" | jq
+curl "$BASE_URL/locations?page=0&size=20&sort=code,asc&activeOnly=true" | jq
 ```
 
-### 17. List Locations with Filters
+### Filtered list
+
 ```bash
-curl -X GET "http://localhost:8010/api/v1/locations?locationType=WAREHOUSE&name=main&activeOnly=true" \
-  -H "Accept: application/json" | jq
+curl "$BASE_URL/locations?page=0&size=20&sort=code,asc&locationType=WAREHOUSE&name=main&activeOnly=true" | jq
 ```
 
-### 18. Create a new Location
+### Create
+
 ```bash
-curl -X POST "http://localhost:8010/api/v1/locations" \
+curl -X POST "$BASE_URL/locations" \
   -H "Content-Type: application/json" \
   -d '{
     "code": "WH-001",
     "name": "Main Warehouse",
     "locationType": "WAREHOUSE",
     "address": {
-      "street": "123 Main Street",
-      "city": "Springfield",
-      "state": "IL",
-      "country": "USA",
-      "postalCode": "62701"
-    }
-  }' | jq
-```
-
-### 19. Get a specific Location
-```bash
-curl -X GET "http://localhost:8010/api/v1/locations/{locationId}" \
-  -H "Accept: application/json" | jq
-```
-
-### 20. Get Location by Code
-```bash
-curl -X GET "http://localhost:8010/api/v1/locations/by-code/WH-001" \
-  -H "Accept: application/json" | jq
-```
-
-### 21. Update Location
-```bash
-curl -X PUT "http://localhost:8010/api/v1/locations/{locationId}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Updated Warehouse Name",
-    "locationType": "WAREHOUSE",
-    "address": {
-      "street": "456 New Street",
+      "street": "123 Industrial Way",
       "city": "Springfield",
       "state": "IL"
     }
   }' | jq
 ```
 
-### 22. Delete Location (Hard Delete)
+### Get by ID
+
 ```bash
-curl -X DELETE "http://localhost:8010/api/v1/locations/{locationId}" \
-  -H "Accept: application/json"
+curl "$BASE_URL/locations/{locationId}" | jq
 ```
 
----
+### Get by code
 
-## Error Response Examples
-
-### 400 Bad Request - Missing required field
 ```bash
-curl -X POST "http://localhost:8010/api/v1/products" \
-  -H "Content-Type: application/json" \
-  -d '{"sku": "PROD-002"}'
+curl "$BASE_URL/locations/by-code/WH-001" | jq
 ```
 
-**Response:**
-```json
-{
-  "error": "sku, name, productType, and baseUom are required",
-  "status": 400
-}
-```
+### Update
 
-### 409 Conflict - Duplicate SKU
 ```bash
-curl -X POST "http://localhost:8010/api/v1/products" \
+curl -X PUT "$BASE_URL/locations/{locationId}" \
   -H "Content-Type: application/json" \
   -d '{
+    "name": "Main Warehouse Updated",
+    "locationType": "WAREHOUSE",
+    "address": {
+      "street": "456 New Industrial Blvd",
+      "city": "Springfield",
+      "state": "IL"
+    }
+  }' | jq
+```
+
+### Delete
+
+```bash
+curl -i -X DELETE "$BASE_URL/locations/{locationId}"
+```
+
+## Order Process
+
+### List orders
+
+```bash
+curl "$BASE_URL/orders?page=0&size=20&sort=orderDate,desc" | jq
+```
+
+### Create draft
+
+```bash
+curl -X POST "$BASE_URL/orders" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "salesChannel": "POS",
+    "locationId": "{locationId}",
+    "customerId": "CUST-001",
+    "currency": "USD",
+    "notes": "Walk-in customer order"
+  }' | jq
+```
+
+### Get order
+
+```bash
+curl "$BASE_URL/orders/{salesOrderId}" | jq
+```
+
+### Add line
+
+```bash
+curl -X POST "$BASE_URL/orders/{salesOrderId}/lines" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "productId": "{productId}",
     "sku": "PROD-001",
-    "name": "Duplicate Product",
-    "productType": "STOCK",
-    "baseUom": "{uomId}"
-  }'
+    "quantityOrdered": 2,
+    "unitPrice": 19.99
+  }' | jq
 ```
 
-**Response:**
-```json
-{
-  "error": "Product SKU already exists",
-  "status": 409
-}
-```
+### Confirm
 
-### 404 Not Found
 ```bash
-curl -X GET "http://localhost:8010/api/v1/products/invalid-id"
+curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" | jq
 ```
 
-**Response:**
-```json
-{
-  "error": "Product not found",
-  "status": 404
-}
-```
+### Capture payment
 
----
-
-## Testing Workflow
-
-### Complete End-to-End Test
-
-1. **Create UOM**
-   ```bash
-   UOM_RESPONSE=$(curl -s -X POST "http://localhost:8010/api/v1/uom" \
-     -H "Content-Type: application/json" \
-     -d '{"code": "EA", "name": "Each"}')
-   UOM_ID=$(echo $UOM_RESPONSE | jq -r '.data.uomId')
-   echo "Created UOM: $UOM_ID"
-   ```
-
-2. **Create Product** (using UOM_ID)
-   ```bash
-   PRODUCT_RESPONSE=$(curl -s -X POST "http://localhost:8010/api/v1/products" \
-     -H "Content-Type: application/json" \
-     -d "{\"sku\": \"PROD-TEST\", \"name\": \"Test Product\", \"productType\": \"STOCK\", \"baseUom\": \"$UOM_ID\"}")
-   PRODUCT_ID=$(echo $PRODUCT_RESPONSE | jq -r '.data.productId')
-   echo "Created Product: $PRODUCT_ID"
-   ```
-
-3. **Create Product Variant**
-   ```bash
-   VARIANT_RESPONSE=$(curl -s -X POST "http://localhost:8010/api/v1/products/$PRODUCT_ID/variants" \
-     -H "Content-Type: application/json" \
-     -d '{"sku": "PROD-TEST-VAR1", "name": "Variant 1", "attributes": {"color": "red"}}')
-   VARIANT_ID=$(echo $VARIANT_RESPONSE | jq -r '.data.variantId')
-   echo "Created Variant: $VARIANT_ID"
-   ```
-
-4. **Create Location**
-   ```bash
-   LOCATION_RESPONSE=$(curl -s -X POST "http://localhost:8010/api/v1/locations" \
-     -H "Content-Type: application/json" \
-     -d '{"code": "LOC-001", "name": "Test Location", "locationType": "WAREHOUSE"}')
-   LOCATION_ID=$(echo $LOCATION_RESPONSE | jq -r '.data.locationId')
-   echo "Created Location: $LOCATION_ID"
-   ```
-
-5. **List all entities**
-   ```bash
-   curl -s "http://localhost:8010/api/v1/uom" | jq '.data[]'
-   curl -s "http://localhost:8010/api/v1/products" | jq '.data[]'
-   curl -s "http://localhost:8010/api/v1/products/$PRODUCT_ID/variants" | jq '.data[]'
-   curl -s "http://localhost:8010/api/v1/locations" | jq '.data[]'
-   ```
-
----
-
-## Pagination Examples
-
-### First page
 ```bash
-curl "http://localhost:8010/api/v1/products?page=0&size=10"
+curl -X POST "$BASE_URL/orders/{salesOrderId}/payments" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paymentMethod": "CASH",
+    "amount": 39.98,
+    "transactionRef": "POS-CASH-0001"
+  }' | jq
 ```
 
-### Second page
+### Fulfill
+
 ```bash
-curl "http://localhost:8010/api/v1/products?page=1&size=10"
+curl -X POST "$BASE_URL/orders/{salesOrderId}/fulfill" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "createdBy": "manual-test",
+    "notes": "Handed over to customer"
+  }' | jq
 ```
 
-### Reverse sort
+### Cancel
+
 ```bash
-curl "http://localhost:8010/api/v1/products?sort=name,desc"
+curl -X POST "$BASE_URL/orders/{salesOrderId}/cancel" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reason": "Customer changed mind"
+  }' | jq
 ```
 
----
+## End-to-End Happy Path
 
-## Notes
+```bash
+UOM_ID=...
+PRODUCT_ID=...
+LOCATION_ID=...
 
-- All timestamps are in ISO-8601 format (e.g., "2026-01-26T22:30:45.123456")
-- UUIDs are standard string format (36 characters with hyphens)
-- All endpoints return 200, 201, 204, 400, 404, 409, or 500 status codes
-- Soft deletes only affect Products and ProductVariants (marked as inactive)
-- Locations use hard deletes (physical removal from database)
-- JSON fields (metadata, attributes, address) accept any valid JSON object
+ORDER_ID=$(curl -s -X POST "$BASE_URL/orders" \
+  -H "Content-Type: application/json" \
+  -d "{\"locationId\":\"$LOCATION_ID\",\"salesChannel\":\"POS\"}" | jq -r '.data.salesOrderId')
+
+curl -s -X POST "$BASE_URL/orders/$ORDER_ID/lines" \
+  -H "Content-Type: application/json" \
+  -d "{\"productId\":\"$PRODUCT_ID\",\"quantityOrdered\":2,\"unitPrice\":19.99}" | jq
+
+curl -s -X POST "$BASE_URL/orders/$ORDER_ID/confirm" | jq
+
+curl -s -X POST "$BASE_URL/orders/$ORDER_ID/payments" \
+  -H "Content-Type: application/json" \
+  -d '{"paymentMethod":"CASH","amount":39.98}' | jq
+
+curl -s -X POST "$BASE_URL/orders/$ORDER_ID/fulfill" \
+  -H "Content-Type: application/json" \
+  -d '{"createdBy":"manual-test"}' | jq
+
+curl -s "$BASE_URL/orders/$ORDER_ID" | jq
+```
+
+## Common Error Cases
+
+### Missing required field
+
+```bash
+curl -X POST "$BASE_URL/products" \
+  -H "Content-Type: application/json" \
+  -d '{"sku":"PROD-002"}' | jq
+```
+
+### Duplicate SKU
+
+```bash
+curl -X POST "$BASE_URL/products" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sku":"PROD-001",
+    "name":"Duplicate Product",
+    "productType":"STOCK",
+    "baseUom":"{uomId}"
+  }' | jq
+```
+
+### Confirm order with no lines
+
+```bash
+curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" | jq
+```
+
+### Fulfill before full payment
+
+```bash
+curl -X POST "$BASE_URL/orders/{salesOrderId}/fulfill" | jq
+```
+
+### Cancel order with captured payment
+
+```bash
+curl -X POST "$BASE_URL/orders/{salesOrderId}/cancel" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"late test"}' | jq
+```

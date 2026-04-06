@@ -1,269 +1,151 @@
-# Literp API - Quick Start Guide
+# Quick Start
 
-## 30-Second Setup
+This guide matches the current branch state:
+- 29 implemented API endpoints
+- schema + seed data via Alembic
+- Bruno collection in `api_collections/Literp`
 
-Everything is already implemented! Just run:
+## Prerequisites
+
+- Java 25
+- Docker and Docker Compose
+- Bash shell
+- `jq` recommended for readable JSON
+
+Optional:
+- Bruno for request collection testing
+- Python if you want to run Alembic manually outside Docker
+
+## Start the Database
 
 ```bash
-# Build the project
-./gradlew build
+cd docker
+source envrc
+make network
+DIR=pgsql make env-up
+```
 
-# Start the server (listening on http://localhost:8010)
+What this does:
+- creates or reuses the Docker network from `DOCKER_NETWORK`
+- starts PostgreSQL
+- runs Alembic migrations to `head`
+- populates deterministic seed data
+
+The application reads connection settings from [`cfg.properties`](../cfg.properties).
+
+## Build and Run
+
+```bash
+./gradlew build
 ./gradlew run
 ```
 
-## Test Your First Endpoint (30 seconds)
+Server URLs:
+- root: `http://localhost:8010`
+- health: `http://localhost:8010/health/db`
+- API base: `http://localhost:8010/api/v1`
+
+## First Checks
 
 ```bash
-# List all UOMs
-curl http://localhost:8010/api/v1/uom | python3 -m json.tool
-
-# Create a UOM
-curl -X POST http://localhost:8010/api/v1/uom \
-  -H "Content-Type: application/json" \
-  -d '{"code":"EA","name":"Each"}' | python3 -m json.tool
+curl http://localhost:8010 | jq
+curl http://localhost:8010/health/db | jq
+curl "http://localhost:8010/api/v1/uom?page=0&size=20&sort=code,asc" | jq
+curl "http://localhost:8010/api/v1/locations?page=0&size=20&sort=code,asc&activeOnly=true" | jq
+curl "http://localhost:8010/api/v1/orders?page=0&size=20&sort=orderDate,desc" | jq
 ```
 
-## 21 Fully Implemented Endpoints
+## Use the Bruno Collection
 
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| /uom | GET | List units of measure |
-| /uom | POST | Create UOM |
-| /uom/{id} | GET | Get UOM details |
-| /uom/{id} | PUT | Update UOM |
-| /uom/{id} | DELETE | Delete UOM |
-| /products | GET | List products |
-| /products | POST | Create product |
-| /products/{id} | GET | Get product |
-| /products/{id} | PUT | Update product |
-| /products/{id} | DELETE | Delete product |
-| /products/{id}/variants | GET | List variants |
-| /products/{id}/variants | POST | Create variant |
-| /products/{id}/variants/{vid} | GET | Get variant |
-| /products/{id}/variants/{vid} | PUT | Update variant |
-| /products/{id}/variants/{vid} | DELETE | Delete variant |
-| /locations | GET | List locations |
-| /locations | POST | Create location |
-| /locations/{id} | GET | Get location |
-| /locations/by-code/{code} | GET | Find by code |
-| /locations/{id} | PUT | Update location |
-| /locations/{id} | DELETE | Delete location |
+Collection path:
 
-## What's Implemented
-
-✅ **4 Resources**: UOM, Product, ProductVariant, Location
-✅ **21 Endpoints**: Full CRUD for all resources
-✅ **Pagination**: Size, page, sort parameters on list endpoints
-✅ **Filtering**: Advanced filters on locations
-✅ **Error Handling**: Proper HTTP status codes and messages
-✅ **Data Validation**: Unique constraints, required fields
-✅ **Database**: PostgreSQL with connection pooling
-✅ **Async/Reactive**: Non-blocking I/O with RxJava3
-✅ **Soft Deletes**: Products/Variants marked inactive
-✅ **JSONB Support**: Metadata, attributes, address fields
-
-## Key Features
-
-### Pagination
-```bash
-curl "http://localhost:8010/api/v1/products?page=0&size=20&sort=sku,asc"
+```text
+api_collections/Literp
 ```
 
-### Filtering Locations
-```bash
-curl "http://localhost:8010/api/v1/locations?locationType=WAREHOUSE&name=main"
-```
+Useful collection variables are already defined in [`collection.bru`](../api_collections/Literp/collection.bru):
+- `host`
+- `port`
+- `uomId`
+- `productId`
+- `variantId`
+- `locationId`
+- `salesOrderId`
 
-### Create with Metadata
-```bash
-curl -X POST http://localhost:8010/api/v1/products \
-  -H "Content-Type: application/json" \
-  -d '{
-    "sku": "PROD-001",
-    "name": "Product",
-    "productType": "STOCK",
-    "baseUom": "{uom_id}",
-    "metadata": {"color": "red", "brand": "Acme"}
-  }'
-```
+The collection includes:
+- utility endpoints (`/`, `/health/db`)
+- all 29 implemented API endpoints
+- request bodies aligned to the actual handlers
 
-## Response Formats
+## Manual Alembic Alternative
 
-### Success (200, 201)
-```json
-{
-  "data": { "id": "...", "name": "...", ... }
-}
-```
+If you do not want the migration container to run it for you:
 
-### List (200)
-```json
-{
-  "data": [ ... ],
-  "pagination": { "page": 0, "size": 20, "totalElements": 100, "totalPages": 5 }
-}
-```
-
-### Error (400, 404, 409, 500)
-```json
-{
-  "error": "Descriptive error message",
-  "status": 400
-}
-```
-
-## Database
-
-Connects to: `postgres://postgres:postgres@localhost:5432/literp`
-
-Make sure Alembic migrations are applied:
 ```bash
 cd python/database/migration
-alembic upgrade head
+DB_URL=postgresql://root:pgdevpassword@localhost:5432/literp alembic upgrade head
 ```
 
-## Documentation
+## Recommended Test Flow
 
-- **[API_IMPLEMENTATION.md](API_IMPLEMENTATION.md)** - Technical deep dive
-- **[API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)** - All 21 curl examples
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - What was built
+### Master data
 
-## Docker Stack
+1. Create or list UOMs
+2. Create or list products
+3. Create or list variants
+4. Create or list locations
 
-```bash
-# Database and infrastructure ready
-make env-up  # Starts PostgreSQL, etc.
-```
+### Order process
 
-## Architecture
+1. Create draft order
+2. Add line
+3. Confirm order
+4. Capture payment
+5. Fulfill order
+6. Fetch order details
 
-```
-HTTP Requests (8010)
-        ↓
-HttpServerVerticle
-        ↓
-Route Handlers (21 handlers)
-        ↓
-Repository Layer (4 repos)
-        ↓
-PostgreSQL (RxJava3 async)
-        ↓
-Database (UOM, Product, ProductVariant, Location)
-```
+## Current Endpoint Totals
 
-## Common Tasks
+| Domain | Endpoints |
+|---|---:|
+| Unit of Measure | 5 |
+| Product | 5 |
+| Product Variant | 5 |
+| Location | 6 |
+| Order Process | 8 |
+| Total | 29 |
 
-### List all products
-```bash
-curl http://localhost:8010/api/v1/products
-```
+## Current Behavior Notes
 
-### Get product with ID
-```bash
-curl http://localhost:8010/api/v1/products/{productId}
-```
-
-### Create location
-```bash
-curl -X POST http://localhost:8010/api/v1/locations \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "WH-001",
-    "name": "Main Warehouse",
-    "locationType": "WAREHOUSE",
-    "address": {"street": "123 Main", "city": "Springfield"}
-  }'
-```
-
-### Find location by code
-```bash
-curl http://localhost:8010/api/v1/locations/by-code/WH-001
-```
-
-### Update product
-```bash
-curl -X PUT http://localhost:8010/api/v1/products/{id} \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "New Name",
-    "productType": "STOCK",
-    "metadata": {"updated": true}
-  }'
-```
-
-### Delete product (soft delete - marked inactive)
-```bash
-curl -X DELETE http://localhost:8010/api/v1/products/{id}
-```
-
-## Status Codes
-
-- **200** - Successful GET/PUT
-- **201** - Successfully created
-- **204** - Successfully deleted (no body)
-- **400** - Bad request (missing fields, validation error)
-- **404** - Resource not found
-- **409** - Conflict (duplicate SKU, code already exists)
-- **500** - Server error
-
-## Files You Need to Know
-
-```
-src/main/kotlin/com/literp/
-├── verticle/HttpServerVerticle.kt  ← Main handler registry
-├── repository/                      ← Data access layer
-│   ├── UnitOfMeasureRepository.kt
-│   ├── ProductRepository.kt
-│   ├── ProductVariantRepository.kt
-│   └── LocationRepository.kt
-├── db/DatabaseConnection.kt         ← Connection pool
-└── config/Config.kt                 ← HTTP port config
-```
+- Product and variant deletes are soft deletes.
+- UOM and location deletes are hard deletes.
+- Order cancellation is blocked when captured payment exists.
+- Fulfillment requires the order to be `CONFIRMED` and fully captured.
+- The seed data is deterministic and intended for local demos and regression testing.
 
 ## Troubleshooting
 
-**Port already in use?**
+### Database health is down
+
 ```bash
-# Change in cfg.properties
-http.port=8011  # or any available port
+curl http://localhost:8010/health/db | jq
 ```
 
-**Database connection failed?**
-```bash
-# Ensure PostgreSQL is running
-make env-up
+If it is down:
+- verify Docker is running
+- verify `DIR=pgsql make env-up` completed
+- confirm `cfg.properties` still targets `localhost:5432`
 
-# Check credentials in DatabaseConnection.kt:
-# localhost:5432, database: literp, user: postgres
+### Port 8010 is in use
+
+Edit [`cfg.properties`](../cfg.properties) and change:
+
+```properties
+http.port=8010
 ```
 
-**Build errors?**
-```bash
-./gradlew clean build
-```
+### You want to browse the API quickly
 
-## Next Steps
-
-1. ✅ Read [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
-2. ✅ Review [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)
-3. ✅ Test endpoints with curl or Postman
-4. ⏳ Add authentication (JWT tokens)
-5. ⏳ Add request validation (Bean Validation)
-6. ⏳ Add caching for frequently accessed data
-7. ⏳ Add metrics and monitoring
-
-## Questions?
-
-All implementation details are in:
-- **Setup**: This file
-- **Testing**: API_TESTING_GUIDE.md
-- **Architecture**: API_IMPLEMENTATION.md
-- **Summary**: IMPLEMENTATION_SUMMARY.md
-
----
-
-**Status**: ✅ Ready to Use
-**Total Endpoints**: 21
-**Technology**: Vert.x 5.0.8, Kotlin 2.3.10, RxJava3
-**Database**: PostgreSQL with Alembic migrations
+Use:
+- Bruno collection in `api_collections/Literp`
+- curl examples in [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)

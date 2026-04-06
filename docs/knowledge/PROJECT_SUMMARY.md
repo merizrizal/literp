@@ -1,47 +1,43 @@
-## Summary of the Literp Project - Lightweight ERP core with POS as a channel
+## Project Summary
 
-This is a **Kotlin/Java backend application** with the following characteristics:
+Literp is currently a Kotlin and Vert.x backend that implements a lightweight ERP core focused on catalog, location, and order-to-fulfillment flows.
 
-### **Core Technology Stack**
+### Current runtime characteristics
 
-- **Language**: Kotlin (Kotlin 2.3.10) running on Java 25
-- **Framework**: Vert.x 5.0.8 (reactive, event-driven framework)
-- **Build System**: Gradle (Kotlin DSL)
-- **Native Compilation**: GraalVM native image support
+- Kotlin `2.3.20` on Java `25`
+- Vert.x `5.0.10`
+- PostgreSQL via Vert.x PG client
+- RxJava3 for asynchronous repository flows
+- OpenAPI-based routing
 
-### **Architecture**
+### What is implemented
 
-- **Verticle-based design**:
-  - `MainVerticle` - Entry point that deploys the HTTP server
-  - `HttpServerVerticle` - Handles HTTP requests and routing
-- **Configuration**: Externalized via cfg.properties file (HTTP port: 8010)
-- **Currently implements**: A basic index endpoint (`GET /`) that returns `{"success": true}`
+- utility endpoints for index and database health
+- 29 API endpoints across:
+  - Unit of Measure
+  - Product
+  - Product Variant
+  - Location
+  - Order Process
 
-### **Database & Persistence**
+### Data model currently present
 
-- **Python component** with Alembic for database migrations
-- **PostgreSQL support** via Vert.x PG client
-- **Authentication**: SCRAM-SHA-256 SASL support
-- **Migration tool**: SQLAlchemy-based Alembic (initial migration exists: `314b57a8dd0f_00_initial_migration.py`)
+- product catalog and UOM
+- multi-location inventory
+- immutable inventory movement ledger
+- sales orders, lines, reservations, and payments
+- POS terminal, shift, and receipt tables
+- manufacturing tables for BOM, work orders, and production runs
 
-### **Containerization & Deployment**
+### Supporting assets
 
-- **Docker**: Multi-stage build using GraalVM 25 (linux/amd64)
-- **Docker Compose**: Container orchestration with custom networking
-- **Volumes**: Maps JAR file and configuration into container
-- **Port**: 8010 (HTTP server)
+- Alembic schema migration
+- deterministic Alembic seed data migration
+- OpenAPI specs in `api_collections/open_api_spec`
+- Bruno collection in `api_collections/Literp`
 
-### **Project Features**
+### Current implementation caveats
 
-- Security: HSTS header handler included
-- API Testing: Bruno collection for API endpoints (Literp)
-- Code Generation: Vert.x annotation processors for service proxy generation
-- Dependency Management: Kotlin stdlib, Vert.x Web, RxJava3 integration
-
-### **Build Outputs**
-
-- Generates fat JAR with all dependencies
-- Native image configuration for GraalVM compilation
-- Organized Gradle tasks for building and running
-
-This appears to be a **lightweight, reactive REST API backend** designed for containerized deployment with database-driven functionality and native compilation capabilities for optimal performance.
+- some endpoint response envelopes are still inconsistent
+- some OpenAPI fields are ahead of the current handler behavior
+- receipt, refund, and partial-fulfillment APIs are not yet exposed

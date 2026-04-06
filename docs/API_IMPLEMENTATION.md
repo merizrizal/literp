@@ -1,95 +1,98 @@
-# Literp REST API Implementation
+# API Implementation
 
-## Overview
-This document describes the implemented REST API surface in Literp using Vert.x 5.0.8, Kotlin 2.3.10, and RxJava3.
+This document describes the implementation that exists on the current branch, not an aspirational target state.
 
-Current API coverage includes:
-- Product catalog master data
-- Inventory locations master data
-- POS order process flow (draft, lines, confirm, payment capture, fulfill, cancel)
+## Stack
 
-## Architecture
+- Kotlin `2.3.20`
+- Vert.x `5.0.10`
+- Java `25`
+- RxJava3
+- PostgreSQL
+- Vert.x OpenAPI RouterBuilder
+- Vert.x service proxies
+- Alembic for schema and seed migrations
 
-### Technology Stack
-- **Framework**: Vert.x 5.0.8 (reactive, event-driven)
-- **Language**: Kotlin 2.3.10 on Java 25
-- **Async Model**: RxJava3 + Vert.x Futures
-- **Database**: PostgreSQL via Vert.x PG Client
-- **API Spec**: OpenAPI 3.0 with `vertx-web-openapi-router`
-- **Build**: Gradle (Kotlin DSL)
+## Modules
 
-### Project Structure
+### Entry points
 
-```
-src/main/kotlin/com/literp/
-├── App.kt
-├── config/
-│   └── Config.kt
-├── db/
-│   └── DatabaseConnection.kt
-├── repository/
-│   ├── BaseRepository.kt
-│   ├── UnitOfMeasureRepository.kt
-│   ├── ProductRepository.kt
-│   ├── ProductVariantRepository.kt
-│   ├── LocationRepository.kt
-│   └── OrderProcessRepository.kt
-└── verticle/
-    ├── MainVerticle.kt
-    ├── HttpServerVerticle.kt
-    └── handler/
-        ├── BaseHandler.kt
-        ├── UnitOfMeasureHandler.kt
-        ├── ProductHandler.kt
-        ├── LocationHandler.kt
-        └── OrderProcessHandler.kt
-```
+- `src/main/kotlin/com/literp/App.kt`
+- `src/main/kotlin/com/literp/verticle/MainVerticle.kt`
+- `src/main/kotlin/com/literp/verticle/HttpServerVerticle.kt`
 
-```
-src/main/java/com/literp/service/
-├── master/
-│   ├── UnitOfMeasureService.java
-│   ├── ProductService.java
-│   ├── ProductVariantService.java
-│   ├── LocationService.java
-│   └── package-info.java
-└── order/
-    ├── OrderProcessService.java
-    └── package-info.java
-```
+### Shared infrastructure
 
-## OpenAPI Contracts
-The server loads and mounts 3 OpenAPI contracts under `/api/v1`:
+- `src/main/kotlin/com/literp/config/Config.kt`
+- `src/main/kotlin/com/literp/db/DatabaseConnection.kt`
+- `src/main/kotlin/com/literp/common/ErrorCodes.kt`
+
+### Repositories
+
+- `BaseRepository`
+- `UnitOfMeasureRepository`
+- `ProductRepository`
+- `ProductVariantRepository`
+- `LocationRepository`
+- `OrderProcessRepository`
+
+### Handlers
+
+- `BaseHandler`
+- `UnitOfMeasureHandler`
+- `ProductHandler`
+- `LocationHandler`
+- `OrderProcessHandler`
+
+### Service proxies
+
+Java interfaces:
+- `src/main/java/com/literp/service/master/*`
+- `src/main/java/com/literp/service/order/*`
+
+Kotlin implementations:
+- `src/main/kotlin/com/literp/service/master/impl/*`
+- `src/main/kotlin/com/literp/service/order/impl/OrderProcessServiceImpl.kt`
+
+## Routing
+
+The HTTP server loads 3 OpenAPI contracts:
 - `api_collections/open_api_spec/product-catalog.yaml`
 - `api_collections/open_api_spec/locations.yaml`
 - `api_collections/open_api_spec/order-process.yaml`
 
-## Endpoint Inventory
+It also exposes two utility routes outside `/api/v1`:
+- `GET /`
+- `GET /health/db`
 
-### Master Data
+## Implemented API Surface
 
-#### Unit of Measure (5)
+### Unit of Measure
+
 - `GET /uom`
 - `POST /uom`
 - `GET /uom/{uomId}`
 - `PUT /uom/{uomId}`
 - `DELETE /uom/{uomId}`
 
-#### Product (5)
+### Product
+
 - `GET /products`
 - `POST /products`
 - `GET /products/{productId}`
 - `PUT /products/{productId}`
 - `DELETE /products/{productId}`
 
-#### Product Variant (5)
+### Product Variant
+
 - `GET /products/{productId}/variants`
 - `POST /products/{productId}/variants`
 - `GET /products/{productId}/variants/{variantId}`
 - `PUT /products/{productId}/variants/{variantId}`
 - `DELETE /products/{productId}/variants/{variantId}`
 
-#### Location (6)
+### Location
+
 - `GET /locations`
 - `POST /locations`
 - `GET /locations/{locationId}`
@@ -97,175 +100,293 @@ The server loads and mounts 3 OpenAPI contracts under `/api/v1`:
 - `PUT /locations/{locationId}`
 - `DELETE /locations/{locationId}`
 
-### Order Process (8)
-- `GET /orders` - list sales orders
-- `POST /orders` - create sales order draft
-- `GET /orders/{salesOrderId}` - get order with lines/reservations/payments
-- `POST /orders/{salesOrderId}/lines` - add line to draft order
-- `POST /orders/{salesOrderId}/confirm` - confirm order and reserve stock
-- `POST /orders/{salesOrderId}/payments` - capture payment
-- `POST /orders/{salesOrderId}/fulfill` - fulfill order and write inventory movements
-- `POST /orders/{salesOrderId}/cancel` - cancel order
+### Order Process
 
-### Total
-- **29 endpoints** across **5 API domains**.
+- `GET /orders`
+- `POST /orders`
+- `GET /orders/{salesOrderId}`
+- `POST /orders/{salesOrderId}/lines`
+- `POST /orders/{salesOrderId}/confirm`
+- `POST /orders/{salesOrderId}/payments`
+- `POST /orders/{salesOrderId}/fulfill`
+- `POST /orders/{salesOrderId}/cancel`
 
-## Repository Layer
+Total API endpoints: `29`
 
-### BaseRepository
-Shared concerns:
-- Repository logger initialization
-- Startup DB connectivity check
+## Database and Seed Data
 
-### Master Data Repositories
-- `UnitOfMeasureRepository`
-- `ProductRepository`
-- `ProductVariantRepository`
-- `LocationRepository`
+Schema and seed data are managed through:
+- `python/database/migration/alembic/versions/314b57a8dd0f_00_initial_migration.py`
+- `python/database/migration/alembic/versions/acf82479ef78_99_populate_seed_data.py`
 
-### Order Process Repository
-`OrderProcessRepository` implements:
-- Sales order listing with pagination/filtering
-- Draft creation
-- Order detail aggregation (order + lines + reservations + payments)
-- Line insertion and order total recalculation
-- Confirmation and reservation creation
-- Payment capture and captured-balance calculation
-- Fulfillment and inventory movement creation
-- Cancellation with payment and state guardrails
+The seed migration populates deterministic data for:
+- UOM
+- products and variants
+- locations
+- opening and transfer inventory movements
+- sales orders, lines, reservations, and payments
+- POS terminal, shift, and receipt
+- BOM, BOM lines, work orders, and production run
 
-## Service Proxy Layer
+The Docker PostgreSQL stack runs migrations automatically on startup.
 
-### Master service module
-Package: `com.literp.service.master`
-- `UnitOfMeasureService`
-- `ProductService`
-- `ProductVariantService`
-- `LocationService`
+## Runtime Configuration
 
-### Order service module
-Package: `com.literp.service.order`
-- `OrderProcessService`
+The server reads `cfg.properties` from the repository root.
 
-Kotlin implementations:
-- `com.literp.service.master.impl.*`
-- `com.literp.service.order.impl.OrderProcessServiceImpl`
+Current defaults:
 
-## Handler Layer
-
-Handlers delegate to service proxies and standardize response/error formatting via `BaseHandler`.
-
-- `UnitOfMeasureHandler`
-- `ProductHandler`
-- `LocationHandler`
-- `OrderProcessHandler`
-
-`BaseHandler` utilities include:
-- `putResponse(...)`
-- `putSuccessResponse(...)`
-- `putErrorResponse(...)`
-
-## API Response Format
-
-### Success (Single)
-```json
-{
-  "data": { }
-}
+```properties
+http.port=8010
+pg.host=localhost
+pg.port=5432
+pg.user=root
+pg.password=pgdevpassword
+pg.database=literp
 ```
 
-### Success (List)
+## Handler and Repository Behavior
+
+### UOM
+
+Supported:
+- list with `page`, `size`, `sort`
+- create with duplicate code check
+- get, update, delete by ID
+
+Validation:
+- `code` and `name` required on create
+- `name` required on update
+
+### Products
+
+Supported:
+- list with `page`, `size`, `sort`
+- create with SKU uniqueness check
+- get, update, soft delete
+
+Validation:
+- create requires `sku`, `name`, `productType`, `baseUom`
+- update requires `name`, `productType`
+
+Important implementation note:
+- handler and repository currently only honor `page`, `size`, and `sort` on list
+- `baseUom` and `active` are not currently applied on update even if sent
+
+### Product Variants
+
+Supported:
+- list nested under product
+- create with SKU uniqueness check
+- get by `productId` and `variantId`
+- update by `variantId`
+- soft delete by `variantId`
+
+Validation:
+- create requires `sku`, `name`
+- update requires `name`
+
+### Locations
+
+Supported:
+- list with `page`, `size`, `sort`, `code`, `name`, `locationType`, `activeOnly`
+- create with code uniqueness check
+- get by ID
+- get by code
+- update
+- delete
+
+Validation:
+- create requires `code`, `name`, `locationType`
+- update requires `name`, `locationType`
+
+Important implementation note:
+- `isActive` is documented in OpenAPI but is not currently used by create or update handlers
+
+### Order Process
+
+#### Create draft
+
+Required:
+- `locationId`
+
+Optional:
+- `salesChannel` defaults to `POS`
+- `currency` defaults to `USD`
+- `customerId`
+- `notes`
+
+#### Add line
+
+Required:
+- `productId`
+- `quantityOrdered`
+- `unitPrice`
+
+Optional:
+- `sku`
+
+Rules:
+- order must exist
+- order must be `DRAFT`
+- product must exist and be active
+- `quantityOrdered > 0`
+- `unitPrice >= 0`
+
+#### Confirm
+
+Rules:
+- order must exist
+- order must be `DRAFT`
+- order must have at least one line
+- reservations are created per non-fulfilled line
+- lines move from `PENDING` to `RESERVED`
+- order moves to `CONFIRMED`
+
+#### Capture payment
+
+Required:
+- `paymentMethod`
+- `amount`
+
+Optional:
+- `transactionRef`
+
+Rules:
+- amount must be positive
+- order must be `CONFIRMED` or `FULFILLED`
+- payment rows are created directly with `CAPTURED`
+
+#### Fulfill
+
+Optional body:
+- `createdBy`
+- `notes`
+
+Rules:
+- order must be `CONFIRMED`
+- captured payment total must be at least the order total
+- only remaining lines are fulfilled
+- inventory movements are written as `OUT`
+- reservations are marked `FULFILLED`
+- order moves to `FULFILLED`
+
+#### Cancel
+
+Optional body:
+- `reason`
+
+Rules:
+- fulfilled orders cannot be cancelled
+- orders with captured payment cannot be cancelled
+- non-fulfilled lines are marked `CANCELLED`
+- active reservations are marked `CANCELLED`
+- order moves to `CANCELLED`
+
+## Response Shapes
+
+Current response shapes are not fully normalized across handlers.
+
+### Utility endpoints
+
+`GET /` and `GET /health/db` return plain JSON objects without the handler envelope.
+
+### List endpoints
+
+List endpoints currently return:
+
 ```json
 {
-  "data": [ ],
-  "pagination": {
-    "page": 0,
-    "size": 20,
-    "totalElements": 100,
-    "totalPages": 5
+  "data": {
+    "data": [],
+    "pagination": {
+      "page": 0,
+      "size": 20,
+      "totalElements": 0,
+      "totalPages": 0
+    }
   }
 }
 ```
 
-### Error
+### Master-data single-resource endpoints
+
+Most master-data CRUD reads and writes currently return:
+
 ```json
 {
-  "error": "Description",
+  "data": {
+    "data": {
+      "id": "..."
+    }
+  }
+}
+```
+
+This applies to UOM, Product, Product Variant, and Location create/get/update flows.
+
+### Order-process command endpoints
+
+Order-process commands return a single envelope:
+
+```json
+{
+  "data": {
+    "salesOrderId": "...",
+    "status": "CONFIRMED"
+  }
+}
+```
+
+### Error response
+
+```json
+{
+  "error": "message",
+  "errorCode": "VALIDATION_ERROR",
   "status": 400,
   "errorId": "uuid"
 }
 ```
 
-## HTTP Status Code Usage
-- `200` successful read/update/process command
-- `201` created resources or captured payment creation
-- `204` delete success for hard/soft-delete endpoints
+## HTTP Status Mapping
+
+- `200` successful read or command
+- `201` successful create or payment capture
+- `204` successful delete
 - `400` validation error
-- `404` resource not found
-- `409` state conflict or uniqueness conflict
-- `500` unexpected internal failure
+- `404` not found
+- `409` conflict or invalid state transition
+- `500` internal failure
+- `503` database health failure
 
-## Order Process State Rules (Implemented)
+## Delete Strategy
 
-### Sales order
-- `DRAFT -> CONFIRMED -> FULFILLED`
-- `DRAFT -> CANCELLED`
-- `CONFIRMED -> CANCELLED` only when no captured payment
+- UOM: hard delete
+- Product: soft delete via `active = false`
+- Product Variant: soft delete via `active = false`
+- Location: hard delete
+- Sales Order: lifecycle-driven, not deleted by API
 
-### Sales order line
-- `PENDING -> RESERVED -> FULFILLED`
-- `PENDING/RESERVED -> CANCELLED`
+## Bruno and OpenAPI Assets
 
-### Reservation
-- `RESERVED -> FULFILLED`
-- `RESERVED -> CANCELLED`
+Bruno collection:
+- `api_collections/Literp`
 
-### Payment
-- API currently writes `CAPTURED` entries directly.
+OpenAPI contracts:
+- `api_collections/open_api_spec/*.yaml`
 
-## Data Validation and Constraints
+Important distinction:
+- the Bruno collection is synchronized to the implemented handlers
+- the OpenAPI specs still include a few forward-looking fields that the current handlers ignore
 
-### Uniqueness
-- UOM code unique
-- Product SKU unique
-- Variant SKU unique
-- Location code unique
+## Known Limitations
 
-### Required field examples
-- UOM: `code`, `name`
-- Product: `sku`, `name`, `productType`, `baseUom`
-- Variant: `sku`, `name`
-- Location: `code`, `name`, `locationType`
-- Sales order draft: `locationId`
-- Order line: `productId`, `quantityOrdered`, `unitPrice`
-- Payment capture: `paymentMethod`, `amount`
-
-## Delete and Lifecycle Strategy
-- Product/ProductVariant: soft delete (`active = false`)
-- UOM/Location: hard delete
-- Sales orders: state-driven lifecycle (`DRAFT/CONFIRMED/FULFILLED/CANCELLED`)
-
-## Database Dependencies
-Core master + order flow tables used by implemented API:
-- `unit_of_measure`
-- `product`
-- `product_variant`
-- `location`
-- `sales_order`
-- `sales_order_line`
-- `inventory_reservation`
-- `payment`
-- `inventory_movement`
-
-## Known Limitations (Current Implementation)
-- Fulfillment currently writes `inventory_movement.to_location_id` as the same value as `from_location_id` due non-null schema constraint for `to_location_id`.
-- Receipt persistence (`receipt`) is not yet wired to API flow.
-- Refund API flow (`payment.status = REFUNDED`) is not yet implemented.
-- Partial fulfillment command path is not implemented as a dedicated operation.
-- Multi-step confirm/fulfill/cancel flows should be wrapped in explicit database transactions for stronger atomicity.
-
-## Run and Verify
-1. Apply migrations.
-2. Start server with `./gradlew run`.
-3. Base URL: `http://localhost:8010/api/v1`.
-4. Validate contracts by calling at least one endpoint from each domain (`/uom`, `/products`, `/locations`, `/orders`).
+- confirm, fulfill, and cancel are multi-step flows without explicit database transactions
+- list responses and some single-resource responses are double wrapped under `data`
+- product list filtering in OpenAPI is broader than the current implementation
+- location `isActive` and product update `baseUom` / `active` are not currently applied
+- order fulfillment writes `to_location_id` equal to `from_location_id`
+- receipt persistence exists in schema and seed data but is not wired to API operations
+- refunds are not exposed through a dedicated endpoint
+- partial fulfillment is not exposed through a dedicated endpoint
