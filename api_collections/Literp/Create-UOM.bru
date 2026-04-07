@@ -18,6 +18,17 @@ body:json {
   }
 }
 
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const body = res.getBody();
+    const uomId = body.data.data.uomId
+    console.log(`UOM ID = ${uomId}`)
+    // Store a variable globally
+    bru.setEnvVar('uomId', uomId);
+    console.log(`Env var uomId = ${bru.getEnvVar('uomId')}`)
+  }
+}
+
 settings {
   encodeUrl: true
   timeout: 0

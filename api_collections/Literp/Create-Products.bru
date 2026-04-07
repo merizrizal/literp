@@ -24,6 +24,16 @@ body:json {
   }
 }
 
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const body = res.getBody();
+    const productId = body.data.data.productId;
+    console.log(`Product ID = ${productId}`);
+    bru.setEnvVar('productId', productId);
+    console.log(`Env var productId = ${bru.getEnvVar('productId')}`);
+  }
+}
+
 settings {
   encodeUrl: true
   timeout: 0

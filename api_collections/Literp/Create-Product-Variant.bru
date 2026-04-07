@@ -21,6 +21,16 @@ body:json {
   }
 }
 
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const body = res.getBody();
+    const variantId = body.data.data.variantId;
+    console.log(`Variant ID = ${variantId}`);
+    bru.setEnvVar('variantId', variantId);
+    console.log(`Env var variantId = ${bru.getEnvVar('variantId')}`);
+  }
+}
+
 settings {
   encodeUrl: true
   timeout: 0

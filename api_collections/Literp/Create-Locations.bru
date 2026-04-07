@@ -28,6 +28,16 @@ body:json {
   
 }
 
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const body = res.getBody();
+    const locationId = body.data.data.locationId;
+    console.log(`Location ID = ${locationId}`);
+    bru.setEnvVar('locationId', locationId);
+    console.log(`Env var locationId = ${bru.getEnvVar('locationId')}`);
+  }
+}
+
 settings {
   encodeUrl: true
   timeout: 0

@@ -20,6 +20,16 @@ body:json {
   }
 }
 
+script:post-response {
+  if (res.getStatus() === 200 || res.getStatus() === 201) {
+    const body = res.getBody();
+    const salesOrderId = body.data.salesOrderId;
+    console.log(`Sales Order ID = ${salesOrderId}`);
+    bru.setEnvVar('salesOrderId', salesOrderId);
+    console.log(`Env var salesOrderId = ${bru.getEnvVar('salesOrderId')}`);
+  }
+}
+
 settings {
   encodeUrl: true
   timeout: 0
