@@ -95,16 +95,24 @@ Estimate: 1.5-2 engineer-days
 
 Tasks:
 
-- [ ] Harden migration behavior for partially initialized databases, especially enum creation
-- [ ] Add a dedicated test database workflow
-- [ ] Ensure seed data can be loaded consistently in the test workflow
-- [ ] Document when to use local development database vs. test database
+- [x] Harden migration behavior for partially initialized databases, especially enum creation
+- [x] Add a dedicated test database workflow
+- [x] Ensure seed data can be loaded consistently in the test workflow
+- [x] Document when to use local development database vs. test database
 
 Done when:
 
-- [ ] A clean database can migrate to `head`
-- [ ] A partially initialized local database has a clear recovery path
-- [ ] Tests can run against an isolated PostgreSQL database
+- [x] A clean database can migrate to `head`
+- [x] A partially initialized local database has a clear recovery path
+- [x] Tests can run against an isolated PostgreSQL database
+
+Implementation notes:
+
+- [x] Initial migration creates PostgreSQL enum types only when missing
+- [x] Table declarations bind existing PostgreSQL enum types without re-creating them
+- [x] Alembic fails fast when `DB_URL` is not configured
+- [x] `docker/pgsql-test` provides an isolated `literp_test` database on host port `55432`
+- [x] Test database migration to `head` was verified with deterministic seed data loaded
 
 ### 01.4 Build And Migration Verification
 
@@ -150,7 +158,7 @@ Done when:
 ## Definition of Done
 
 - [ ] Runtime can start from a clean checkout with documented local setup
-- [ ] Database schema and seed data can be recreated deterministically
+- [x] Database schema and seed data can be recreated deterministically
 - [ ] Startup failures are actionable in logs
 - [ ] CI validates compilation and migrations
 - [ ] Repository transaction support is available for business commands

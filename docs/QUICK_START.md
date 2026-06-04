@@ -18,6 +18,14 @@ Optional:
 
 ## Start the Database
 
+From the repository root, create a local app config file:
+
+```bash
+cp cfg.properties.template cfg.properties
+```
+
+Then start the local development database:
+
 ```bash
 cd docker
 source envrc
@@ -31,9 +39,37 @@ What this does:
 - runs Alembic migrations to `head`
 - populates deterministic seed data
 
-The application reads connection settings from [`cfg.properties`](../cfg.properties2).
+The application reads connection settings from `cfg.properties`.
 Non-blank environment variables override file values, using `LITERP_*`,
 `PG_*`, or the existing `DB_*` names from `python/database/envrc`.
+
+## Start the Test Database
+
+Use the test database for automated tests, destructive checks, or any workflow
+that should not touch local development data.
+
+```bash
+cd docker
+source envrc
+make network
+DIR=pgsql-test make env-up
+```
+
+What this does:
+- starts `literp_pgsql_test` on host port `55432`
+- creates the `literp_test` database
+- runs the same Alembic migrations to `head`
+- loads the same deterministic seed data into the test database
+
+From the repository root, point local commands or the application at the test
+database:
+
+```bash
+source python/database/envrc.test
+```
+
+Because runtime config supports `DB_*` overrides, values from
+`python/database/envrc.test` take precedence over `cfg.properties`.
 
 ## Build and Run
 
@@ -86,6 +122,13 @@ If you do not want the migration container to run it for you:
 ```bash
 cd python/database/migration
 DB_URL=postgresql://root:pgdevpassword@localhost:5432/literp alembic upgrade head
+```
+
+For the test database:
+
+```bash
+cd python/database/migration
+DB_URL=postgresql://root:pgdevpassword@localhost:55432/literp_test alembic upgrade head
 ```
 
 ## Recommended Test Flow
@@ -141,11 +184,26 @@ If it is down:
 
 ### Port 8010 is in use
 
-Edit [`cfg.properties`](../cfg.properties2) and change:
+Edit `cfg.properties` and change:
 
 ```properties
 http.port=8010
 ```
+
+### Migration failed after partially creating objects
+
+The initial migration is safe to rerun when PostgreSQL enum types or tables
+already exist. If the database is in an unknown state, reset only the affected
+Docker volume:
+
+```bash
+cd docker
+source envrc
+DIR=pgsql make env-down
+DIR=pgsql make env-up
+```
+
+For the isolated test database, use `DIR=pgsql-test` instead.
 
 ### You want to browse the API quickly
 

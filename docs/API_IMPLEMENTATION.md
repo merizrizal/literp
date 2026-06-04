@@ -128,7 +128,20 @@ The seed migration populates deterministic data for:
 - POS terminal, shift, and receipt
 - BOM, BOM lines, work orders, and production run
 
-The Docker PostgreSQL stack runs migrations automatically on startup.
+The Docker PostgreSQL stacks run migrations automatically on startup:
+
+| Workflow | Compose directory | Host port | Database | Use for |
+|---|---|---:|---|---|
+| Development | `docker/pgsql` | `5432` | `literp` | local app work and manual API checks |
+| Test | `docker/pgsql-test` | `55432` | `literp_test` | automated tests and destructive checks |
+
+Both workflows run Alembic to `head`, so the schema and deterministic seed data
+come from the same migration path. The PostgreSQL services expose a healthcheck
+and migration containers wait for the database before running Alembic.
+
+Manual Alembic execution requires `DB_URL`. Use `python/database/envrc` for the
+development database, `python/database/envrc.test` for the isolated test
+database, or set `DB_URL` directly.
 
 ## Runtime Configuration
 

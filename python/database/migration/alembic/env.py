@@ -20,12 +20,19 @@ if config.config_file_name is not None:
 # target_metadata = mymodel.Base.metadata
 target_metadata = None
 
-# other values from the config, defined by the needs of cfg.properties2.py,
-# can be acquired:
+# other values from the config can be acquired here:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-config.set_main_option('sqlalchemy.url', os.getenv('DB_URL', ''))
+db_url = os.getenv('DB_URL')
+if not db_url:
+    raise RuntimeError(
+        'DB_URL is required for Alembic migrations. '
+        'Source python/database/envrc, source python/database/envrc.test, '
+        'or set DB_URL explicitly before running alembic.'
+    )
+
+config.set_main_option('sqlalchemy.url', db_url)
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.

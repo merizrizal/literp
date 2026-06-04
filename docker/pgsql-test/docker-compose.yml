@@ -1,30 +1,30 @@
 services:
-  database:
+  database_test:
     build:
       context: ${ROOT_DIR}/docker/pgsql
       dockerfile: Dockerfile
     platform: linux/amd64
-    image: literp_pgsql
-    container_name: literp_pgsql
+    image: literp_pgsql_test
+    container_name: literp_pgsql_test
     restart: always
     networks:
       - project_network
     ports:
-      - ${DB_PORT}:5432
+      - ${TEST_DB_PORT:-55432}:5432
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_DB: ${TEST_DB_NAME:-literp_test}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${TEST_DB_NAME:-literp_test}"]
       interval: 5s
       timeout: 5s
       retries: 20
-  migration:
+  migration_test:
     image: python:3.13-slim
-    container_name: literp_migration
+    container_name: literp_migration_test
     depends_on:
-      database:
+      database_test:
         condition: service_healthy
     networks:
       - project_network
@@ -33,7 +33,7 @@ services:
     working_dir: /workspace/python/database/migration
     environment:
       ROOT_DIR: /workspace
-      DB_URL: postgresql://${DB_USER}:${DB_PASSWORD}@database:5432/${DB_NAME}
+      DB_URL: postgresql://${DB_USER}:${DB_PASSWORD}@database_test:5432/${TEST_DB_NAME:-literp_test}
     command: >
       /bin/sh -lc "
       pip install --no-cache-dir -r /workspace/python/requirements.txt

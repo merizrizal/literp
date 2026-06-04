@@ -5,6 +5,27 @@ from sqlalchemy.schema import Sequence as SqlSequence
 from alembic import op
 
 
+def enum_type_exists(enum_name):
+    """Check if a PostgreSQL enum type exists."""
+    bind = op.get_context().bind
+    result = bind.execute(
+        sa.text("SELECT 1 FROM pg_type WHERE typname = :enum_name"),
+        {"enum_name": enum_name},
+    )
+    return result.scalar() is not None
+
+
+def create_enum_if_not_exists(enum_name, *values):
+    """Create a PostgreSQL enum type if it does not exist."""
+    if enum_type_exists(enum_name):
+        print(f'Enum {enum_name} already exists')
+        return
+
+    print(f'Creating enum: {enum_name}')
+    quoted_values = ', '.join([f"'{value}'" for value in values])
+    op.execute(sa.text(f"CREATE TYPE {enum_name} AS ENUM ({quoted_values})"))
+
+
 def create_table_if_not_exists(table_name, *columns):
     """Create a table if it does not exist."""
     bind = op.get_context().bind

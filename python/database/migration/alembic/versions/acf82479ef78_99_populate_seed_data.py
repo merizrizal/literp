@@ -12,6 +12,7 @@ import json
 import uuid
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -88,35 +89,35 @@ SEED_IDS = {
 
 def upgrade() -> None:
     """Populate deterministic seed data for end-to-end simulation."""
-    product_type_enum = sa.Enum('STOCK', 'SERVICE', name='product_type', create_type=False)
-    location_type_enum = sa.Enum('WAREHOUSE', 'STORE', 'PRODUCTION', name='location_type', create_type=False)
-    movement_type_enum = sa.Enum('IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', name='movement_type', create_type=False)
-    reference_type_enum = sa.Enum(
+    product_type_enum = postgresql.ENUM('STOCK', 'SERVICE', name='product_type', create_type=False)
+    location_type_enum = postgresql.ENUM('WAREHOUSE', 'STORE', 'PRODUCTION', name='location_type', create_type=False)
+    movement_type_enum = postgresql.ENUM('IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', name='movement_type', create_type=False)
+    reference_type_enum = postgresql.ENUM(
         'SALES_ORDER', 'WORK_ORDER', 'PURCHASE_ORDER', 'ADJUSTMENT', 'TRANSFER',
         name='reference_type', create_type=False
     )
-    reservation_status_enum = sa.Enum(
+    reservation_status_enum = postgresql.ENUM(
         'RESERVED', 'FULFILLED', 'CANCELLED', name='reservation_status', create_type=False
     )
-    sales_channel_enum = sa.Enum('POS', 'ONLINE', 'B2B', 'OTHER', name='sales_channel', create_type=False)
-    order_status_enum = sa.Enum(
+    sales_channel_enum = postgresql.ENUM('POS', 'ONLINE', 'B2B', 'OTHER', name='sales_channel', create_type=False)
+    order_status_enum = postgresql.ENUM(
         'DRAFT', 'CONFIRMED', 'FULFILLED', 'CANCELLED', name='order_status', create_type=False
     )
-    line_status_enum = sa.Enum(
+    line_status_enum = postgresql.ENUM(
         'PENDING', 'RESERVED', 'FULFILLED', 'CANCELLED', name='line_status', create_type=False
     )
-    payment_method_enum = sa.Enum(
+    payment_method_enum = postgresql.ENUM(
         'CASH', 'CARD', 'DIGITAL', 'GIFT_CARD', 'OTHER', name='payment_method', create_type=False
     )
-    payment_status_enum = sa.Enum(
+    payment_status_enum = postgresql.ENUM(
         'PENDING', 'AUTHORIZED', 'CAPTURED', 'REFUNDED', name='payment_status', create_type=False
     )
-    shift_status_enum = sa.Enum('OPEN', 'CLOSED', name='shift_status', create_type=False)
-    bom_status_enum = sa.Enum('DRAFT', 'ACTIVE', 'DEPRECATED', name='bom_status', create_type=False)
-    work_order_status_enum = sa.Enum(
+    shift_status_enum = postgresql.ENUM('OPEN', 'CLOSED', name='shift_status', create_type=False)
+    bom_status_enum = postgresql.ENUM('DRAFT', 'ACTIVE', 'DEPRECATED', name='bom_status', create_type=False)
+    work_order_status_enum = postgresql.ENUM(
         'PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', name='work_order_status', create_type=False
     )
-    run_status_enum = sa.Enum('IN_PROGRESS', 'COMPLETED', name='run_status', create_type=False)
+    run_status_enum = postgresql.ENUM('IN_PROGRESS', 'COMPLETED', name='run_status', create_type=False)
 
     unit_of_measure = sa.table(
         'unit_of_measure',

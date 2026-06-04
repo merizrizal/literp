@@ -17,12 +17,15 @@ import sys
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
 sys.path.insert(0, os.getenv('ROOT_DIR'))
-from python.database.migration.alembic.resources import \
-    create_table_if_not_exists
+from python.database.migration.alembic.resources import (
+    create_enum_if_not_exists,
+    create_table_if_not_exists,
+)
 
 # revision identifiers, used by Alembic.
 revision: str = '314b57a8dd0f'
@@ -35,21 +38,36 @@ def upgrade() -> None:
     """Upgrade schema - Create all core tables."""
 
     # ==================== ENUMS ====================
-    product_type_enum = sa.Enum('STOCK', 'SERVICE', name='product_type', create_type=True)
-    location_type_enum = sa.Enum('WAREHOUSE', 'STORE', 'PRODUCTION', name='location_type', create_type=True)
-    movement_type_enum = sa.Enum('IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', name='movement_type', create_type=True)
-    reference_type_enum = sa.Enum('SALES_ORDER', 'WORK_ORDER', 'PURCHASE_ORDER', 'ADJUSTMENT', 'TRANSFER',
-                                    name='reference_type', create_type=True)
-    reservation_status_enum = sa.Enum('RESERVED', 'FULFILLED', 'CANCELLED', name='reservation_status', create_type=True)
-    sales_channel_enum = sa.Enum('POS', 'ONLINE', 'B2B', 'OTHER', name='sales_channel', create_type=True)
-    order_status_enum = sa.Enum('DRAFT', 'CONFIRMED', 'FULFILLED', 'CANCELLED', name='order_status', create_type=True)
-    line_status_enum = sa.Enum('PENDING', 'RESERVED', 'FULFILLED', 'CANCELLED', name='line_status', create_type=True)
-    payment_method_enum = sa.Enum('CASH', 'CARD', 'DIGITAL', 'GIFT_CARD', 'OTHER', name='payment_method', create_type=True)
-    payment_status_enum = sa.Enum('PENDING', 'AUTHORIZED', 'CAPTURED', 'REFUNDED', name='payment_status', create_type=True)
-    shift_status_enum = sa.Enum('OPEN', 'CLOSED', name='shift_status', create_type=True)
-    bom_status_enum = sa.Enum('DRAFT', 'ACTIVE', 'DEPRECATED', name='bom_status', create_type=True)
-    work_order_status_enum = sa.Enum('PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', name='work_order_status', create_type=True)
-    run_status_enum = sa.Enum('IN_PROGRESS', 'COMPLETED', name='run_status', create_type=True)
+    create_enum_if_not_exists('product_type', 'STOCK', 'SERVICE')
+    create_enum_if_not_exists('location_type', 'WAREHOUSE', 'STORE', 'PRODUCTION')
+    create_enum_if_not_exists('movement_type', 'IN', 'OUT', 'TRANSFER', 'ADJUSTMENT')
+    create_enum_if_not_exists('reference_type', 'SALES_ORDER', 'WORK_ORDER', 'PURCHASE_ORDER', 'ADJUSTMENT', 'TRANSFER')
+    create_enum_if_not_exists('reservation_status', 'RESERVED', 'FULFILLED', 'CANCELLED')
+    create_enum_if_not_exists('sales_channel', 'POS', 'ONLINE', 'B2B', 'OTHER')
+    create_enum_if_not_exists('order_status', 'DRAFT', 'CONFIRMED', 'FULFILLED', 'CANCELLED')
+    create_enum_if_not_exists('line_status', 'PENDING', 'RESERVED', 'FULFILLED', 'CANCELLED')
+    create_enum_if_not_exists('payment_method', 'CASH', 'CARD', 'DIGITAL', 'GIFT_CARD', 'OTHER')
+    create_enum_if_not_exists('payment_status', 'PENDING', 'AUTHORIZED', 'CAPTURED', 'REFUNDED')
+    create_enum_if_not_exists('shift_status', 'OPEN', 'CLOSED')
+    create_enum_if_not_exists('bom_status', 'DRAFT', 'ACTIVE', 'DEPRECATED')
+    create_enum_if_not_exists('work_order_status', 'PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')
+    create_enum_if_not_exists('run_status', 'IN_PROGRESS', 'COMPLETED')
+
+    product_type_enum = postgresql.ENUM('STOCK', 'SERVICE', name='product_type', create_type=False)
+    location_type_enum = postgresql.ENUM('WAREHOUSE', 'STORE', 'PRODUCTION', name='location_type', create_type=False)
+    movement_type_enum = postgresql.ENUM('IN', 'OUT', 'TRANSFER', 'ADJUSTMENT', name='movement_type', create_type=False)
+    reference_type_enum = postgresql.ENUM('SALES_ORDER', 'WORK_ORDER', 'PURCHASE_ORDER', 'ADJUSTMENT', 'TRANSFER',
+                                          name='reference_type', create_type=False)
+    reservation_status_enum = postgresql.ENUM('RESERVED', 'FULFILLED', 'CANCELLED', name='reservation_status', create_type=False)
+    sales_channel_enum = postgresql.ENUM('POS', 'ONLINE', 'B2B', 'OTHER', name='sales_channel', create_type=False)
+    order_status_enum = postgresql.ENUM('DRAFT', 'CONFIRMED', 'FULFILLED', 'CANCELLED', name='order_status', create_type=False)
+    line_status_enum = postgresql.ENUM('PENDING', 'RESERVED', 'FULFILLED', 'CANCELLED', name='line_status', create_type=False)
+    payment_method_enum = postgresql.ENUM('CASH', 'CARD', 'DIGITAL', 'GIFT_CARD', 'OTHER', name='payment_method', create_type=False)
+    payment_status_enum = postgresql.ENUM('PENDING', 'AUTHORIZED', 'CAPTURED', 'REFUNDED', name='payment_status', create_type=False)
+    shift_status_enum = postgresql.ENUM('OPEN', 'CLOSED', name='shift_status', create_type=False)
+    bom_status_enum = postgresql.ENUM('DRAFT', 'ACTIVE', 'DEPRECATED', name='bom_status', create_type=False)
+    work_order_status_enum = postgresql.ENUM('PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', name='work_order_status', create_type=False)
+    run_status_enum = postgresql.ENUM('IN_PROGRESS', 'COMPLETED', name='run_status', create_type=False)
 
     # ==================== 1. UNIT OF MEASURE ====================
     create_table_if_not_exists(

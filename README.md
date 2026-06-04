@@ -43,7 +43,13 @@ The order process API supports:
 
 ### 1. Start PostgreSQL and run migrations
 
-The repository already includes a root-level [`cfg.properties`](cfg.properties2) that points the app at the local Docker database.
+Create a local config file from the committed template:
+
+```bash
+cp cfg.properties.template cfg.properties
+```
+
+Then start the local development database:
 
 ```bash
 cd docker
