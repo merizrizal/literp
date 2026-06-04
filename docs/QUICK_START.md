@@ -31,7 +31,9 @@ What this does:
 - runs Alembic migrations to `head`
 - populates deterministic seed data
 
-The application reads connection settings from [`cfg.properties`](../cfg.properties).
+The application reads connection settings from [`cfg.properties`](../cfg.properties2).
+Non-blank environment variables override file values, using `LITERP_*`,
+`PG_*`, or the existing `DB_*` names from `python/database/envrc`.
 
 ## Build and Run
 
@@ -135,10 +137,11 @@ If it is down:
 - verify Docker is running
 - verify `DIR=pgsql make env-up` completed
 - confirm `cfg.properties` still targets `localhost:5432`
+- confirm environment overrides such as `DB_HOST`, `DB_PORT`, or `LITERP_PG_HOST` are not pointing elsewhere
 
 ### Port 8010 is in use
 
-Edit [`cfg.properties`](../cfg.properties) and change:
+Edit [`cfg.properties`](../cfg.properties2) and change:
 
 ```properties
 http.port=8010

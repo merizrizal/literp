@@ -36,36 +36,116 @@ movements created by manufacturing operations.
 - [x] seed data includes manufacturing-related inventory movements
 - [x] simulated seed data includes 14 days of production and sales activity
 
-## Remaining POS Work
+## Ordered Tasks
+
+### 05.1 POS Operations Contract
+
+Estimate: 2-3 engineer-days
+
+Tasks:
 
 - [ ] Create POS Operations OpenAPI spec
+- [ ] Define terminal operations
+- [ ] Define shift operations
+- [ ] Define receipt lookup operations
+- [ ] Add Bruno request skeletons for POS operations
+
+Done when:
+
+- [ ] POS Operations API has an agreed OpenAPI contract
+- [ ] Bruno has placeholder requests for every planned POS endpoint
+- [ ] POS scope is clearly separated from core sales order behavior
+
+### 05.2 POS Terminal And Shift API
+
+Estimate: 4-7 engineer-days
+
+Tasks:
+
 - [ ] Add terminal list/create/get/update/deactivate endpoints
 - [ ] Add shift open/close endpoints
 - [ ] Add current-shift lookup by terminal
+- [ ] Add cashier/operator attribution to POS order workflows
+- [ ] Add cash reconciliation rules for closing shifts
+
+Done when:
+
+- [ ] A POS operator can open and close a shift
+- [ ] Active terminal and shift state can be queried
+- [ ] POS order workflows can be attributed to an operator or shift
+
+### 05.3 Receipt And Refund API
+
+Estimate: 4-7 engineer-days
+
+Tasks:
+
 - [ ] Add receipt generation from fulfilled POS order
 - [ ] Add receipt lookup by receipt number
 - [ ] Add receipt lookup by sales order
-- [ ] Add cashier/operator attribution to POS order workflows
-- [ ] Add cash reconciliation rules for closing shifts
 - [ ] Add refund endpoint and receipt adjustment behavior
 - [ ] Add POS integration tests
-- [ ] Add Bruno requests for POS operations
+- [ ] Complete Bruno requests for POS operations
 
-## Remaining Manufacturing Work
+Done when:
+
+- [ ] Fulfilled POS orders can produce receipts
+- [ ] Receipts can be retrieved by receipt number and sales order
+- [ ] Refund behavior is explicit, auditable, and tested
+
+### 05.4 BOM API
+
+Estimate: 3-5 engineer-days
+
+Tasks:
 
 - [ ] Create BOM OpenAPI spec
 - [ ] Add BOM create/update/activate/deprecate endpoints
 - [ ] Add BOM line management endpoints
+- [ ] Add Bruno requests for BOM operations
+- [ ] Add BOM integration tests
+
+Done when:
+
+- [ ] Users can define and activate a bill of materials
+- [ ] BOM lines can be managed without direct database edits
+- [ ] BOM lifecycle behavior is tested and documented
+
+### 05.5 Work Order And Production Run API
+
+Estimate: 5-9 engineer-days
+
+Tasks:
+
 - [ ] Create Work Order OpenAPI spec
 - [ ] Add work order plan/start/complete/cancel endpoints
 - [ ] Add production run start/complete endpoints
+- [ ] Track yield and scrap behavior
+- [ ] Add Bruno requests for work order and production run operations
+
+Done when:
+
+- [ ] Users can plan, start, complete, and cancel work orders
+- [ ] Production runs capture operator, output, and scrap data
+- [ ] Work order lifecycle behavior is tested and documented
+
+### 05.6 Manufacturing Inventory Movements
+
+Estimate: 4-7 engineer-days
+
+Tasks:
+
 - [ ] Write material consumption inventory `OUT` movements
 - [ ] Write finished-goods inventory `IN` movements
-- [ ] Track yield and scrap behavior
 - [ ] Add made-to-stock workflow
 - [ ] Add made-to-order workflow only after the basic production loop is stable
 - [ ] Add manufacturing integration tests
-- [ ] Add Bruno requests for manufacturing operations
+
+Done when:
+
+- [ ] Manufacturing consumes components through the inventory movement ledger
+- [ ] Manufacturing produces finished goods through the inventory movement ledger
+- [ ] POS, sales, and manufacturing stock effects are visible in the same stock rollups
 
 ## Assumptions
 

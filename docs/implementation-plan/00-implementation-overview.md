@@ -60,14 +60,14 @@ deployment approval delays.
 
 ## 00.4 Phase Summary
 
-| Phase | File | Goal | Estimate |
-|---|---|---|---:|
-| 00 | `00-implementation-overview.md` | Explain execution plan | Documentation only |
-| 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | 5-9 remaining engineer-days |
-| 02 | `02-master-data-api.md` | Complete catalog and location API parity | 6-10 remaining engineer-days |
-| 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | 10-18 remaining engineer-days |
-| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, and operational readiness | 8-14 remaining engineer-days |
-| 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | 18-35 future engineer-days |
+| Phase | File | Goal | Status | Estimate |
+|---|---|---|---|---:|
+| 00 | `00-implementation-overview.md` | Explain execution plan | Done for initial planning | Documentation only |
+| 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Active gate | 5-9 remaining engineer-days |
+| 02 | `02-master-data-api.md` | Complete catalog and location API parity | Queued until Phase 01 is done | 6-10 remaining engineer-days |
+| 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 01 is done | 10-18 remaining engineer-days |
+| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, and operational readiness | Queued until Phase 01 is done | 8-14 remaining engineer-days |
+| 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | Future phase | 18-35 future engineer-days |
 
 Estimated remaining MVP hardening:
 
@@ -87,6 +87,16 @@ Build in this order:
 3. Order and inventory flow hardening
 4. Quality, contracts, and observability
 5. POS and manufacturing expansion
+
+Phase discipline:
+
+- [ ] Complete the remaining work in `01-foundation.md`
+- [ ] Satisfy the Phase 01 definition of done
+- [ ] Re-check this overview and mark Phase 01 as complete
+- [ ] Start Phase 02 only after Phase 01 is complete
+
+Later phase files may be used for planning and context, but implementation work
+should not jump ahead while Phase 01 still has unchecked required tasks.
 
 Do not build IAM first.
 
@@ -136,17 +146,45 @@ Current state:
 - [ ] The full slice is covered by automated integration tests
 - [ ] The full slice runs inside explicit database transactions where needed
 
-## 00.8 Tracking Format
+## 00.8 Ordered Task Format
 
-Each task uses checkboxes:
+Each phase is broken into ordered task chunks.
+
+Use this format:
+
+```text
+### 01.1 Task name
+
+Estimate: 1-2 engineer-days
+
+Tasks:
+
+- [ ] Task not started
+- [x] Task completed
+
+Done when:
+
+- [ ] Observable completion condition
+- [ ] Verification condition
+```
+
+Rules:
+
+- task chunks are executed in order inside a phase
+- later phases stay queued until the active phase is complete
+- estimates belong to the chunk, not every checklist item
+- `Done when` describes acceptance criteria, not implementation steps
+- completed subtasks should only be checked when the behavior exists and is verified
+
+Individual checklist items use this format:
 
 ```text
 - [ ] Task not started
 - [x] Task completed
 ```
 
-Subtasks should be checked only when the behavior exists in the branch and has a
-clear code, migration, documentation, OpenAPI, or collection artifact.
+Subtasks should be checked only when the behavior exists in the branch and has
+a clear code, migration, documentation, OpenAPI, test, or collection artifact.
 
 ## 00.9 Definition of MVP Done
 

@@ -72,23 +72,95 @@ OpenAPI parity, Bruno examples, and automated verification.
 - [x] Bruno requests exist for master-data APIs
 - [x] API testing guide includes master-data examples
 
-## Remaining Work
+## Ordered Tasks
 
+### 02.1 Response Envelope Normalization
+
+Estimate: 1-2 engineer-days
+
+Tasks:
+
+- [ ] Choose the final list response envelope
 - [ ] Normalize list response envelopes
+- [ ] Choose the final single-resource response envelope
 - [ ] Normalize single-resource response envelopes
+- [ ] Update docs and Bruno examples for the final response shape
+
+Done when:
+
+- [ ] UOM, product, variant, and location responses use one documented envelope style
+- [ ] API docs and Bruno examples match the actual response shape
+- [ ] Existing clients have a documented migration note if response shape changes
+
+### 02.2 Delete Semantics And Error Behavior
+
+Estimate: 1-2 engineer-days
+
+Tasks:
+
 - [ ] Decide final delete policy for UOM and Location
 - [ ] Return `404` when delete requests target missing resources
 - [ ] Handle foreign-key delete conflicts with stable `409` responses
-- [ ] Implement product list filters documented in OpenAPI
+- [ ] Document hard delete and soft delete behavior per resource
+
+Done when:
+
+- [ ] Delete behavior is explicit for every master-data resource
+- [ ] Missing resources return stable not-found responses
+- [ ] Referential conflicts return stable conflict responses
+
+### 02.3 OpenAPI And Handler Parity
+
+Estimate: 2-3 engineer-days
+
+Tasks:
+
+- [ ] Implement product list filters documented in OpenAPI or remove them from the contract
 - [ ] Apply product update `baseUom` if the contract keeps it writable
 - [ ] Apply product update `active` if the contract keeps it writable
 - [ ] Apply location create/update `isActive` if the contract keeps it writable
+- [ ] Regenerate or update OpenAPI JSON after YAML changes
+
+Done when:
+
+- [ ] Product catalog OpenAPI behavior matches handlers
+- [ ] Location OpenAPI behavior matches handlers
+- [ ] OpenAPI YAML and JSON are synchronized
+
+### 02.4 Pagination And JSON Robustness
+
+Estimate: 1-1.5 engineer-days
+
+Tasks:
+
 - [ ] Add pagination bounds validation for `page` and `size`
-- [ ] Make JSON metadata and address mapping robust when database values are null
-- [ ] Add repository tests for duplicate checks, soft delete, hard delete, and not-found behavior
+- [ ] Add sort validation behavior for unsupported fields
+- [ ] Make JSON metadata mapping robust when database values are null
+- [ ] Make JSON address mapping robust when database values are null
+
+Done when:
+
+- [ ] Invalid pagination input returns a clear validation error
+- [ ] JSON fields can be null without handler or repository crashes
+- [ ] Sorting behavior is documented and predictable
+
+### 02.5 Master Data Verification
+
+Estimate: 1.5-2.5 engineer-days
+
+Tasks:
+
+- [ ] Add repository tests for duplicate checks
+- [ ] Add repository tests for soft delete and hard delete behavior
+- [ ] Add repository tests for not-found behavior
 - [ ] Add HTTP integration tests for all master-data endpoints
 - [ ] Keep Bruno examples aligned after response envelope changes
-- [ ] Regenerate or update OpenAPI JSON after YAML changes
+
+Done when:
+
+- [ ] Master-data happy paths are covered by automated tests
+- [ ] Master-data error paths are covered by automated tests
+- [ ] Bruno collection remains usable for manual verification
 
 ## Assumptions
 

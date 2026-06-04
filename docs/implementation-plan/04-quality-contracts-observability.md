@@ -31,25 +31,94 @@ contracts, logging, health checks, CI, and readiness for client integration.
 - [x] Handlers log generated handling IDs and request metadata
 - [x] Database health endpoint returns `UP` or `DOWN`
 
-## Remaining Work
+## Ordered Tasks
+
+### 04.1 Test Foundation
+
+Estimate: 2-3 engineer-days
+
+Tasks:
 
 - [ ] Add unit tests for repository query builders and validation edge cases
 - [ ] Add integration tests against PostgreSQL
+- [ ] Add test fixtures for seeded and newly created data
+- [ ] Document how to run unit and integration tests locally
+
+Done when:
+
+- [ ] Tests can run from a clean checkout
+- [ ] Repository behavior has focused test coverage
+- [ ] PostgreSQL integration tests are isolated from local development data
+
+### 04.2 API And Contract Verification
+
+Estimate: 2-4 engineer-days
+
+Tasks:
+
 - [ ] Add HTTP tests for all 29 implemented endpoints
 - [ ] Add end-to-end order lifecycle tests
 - [ ] Add contract tests that verify OpenAPI operation IDs are registered by handlers
 - [ ] Add response snapshot or schema tests for normalized response envelopes
 - [ ] Add error response tests for validation, not found, conflict, database timeout, and internal failures
+
+Done when:
+
+- [ ] Public endpoint behavior is automated-test covered
+- [ ] OpenAPI operation IDs cannot drift silently from handler registration
+- [ ] Response and error contracts are verified by tests
+
+### 04.3 CI And Artifact Synchronization
+
+Estimate: 1.5-2.5 engineer-days
+
+Tasks:
+
 - [ ] Add CI workflow for build and tests
 - [ ] Add OpenAPI validation to CI
 - [ ] Add Bruno or collection linting if practical
 - [ ] Document and enforce a single source of truth for generated OpenAPI JSON
+- [ ] Keep version references synchronized with `build.gradle.kts`
+
+Done when:
+
+- [ ] CI blocks broken build, tests, and OpenAPI contracts
+- [ ] OpenAPI YAML and JSON drift is detected or prevented
+- [ ] Version references do not drift silently from the build file
+
+### 04.4 Logging, Health, And Metrics
+
+Estimate: 2-3 engineer-days
+
+Tasks:
+
 - [ ] Add structured logs or a clear log format for production use
 - [ ] Propagate incoming `X-Request-ID` into all logs and responses
 - [ ] Add readiness and liveness semantics beyond database health if needed
 - [ ] Add metrics for request count, latency, error count, and database failures
+
+Done when:
+
+- [ ] A single request can be traced through logs
+- [ ] Health endpoints clearly separate process, router, and database readiness where needed
+- [ ] Basic runtime metrics are available for operators
+
+### 04.5 Security Planning Gate
+
+Estimate: 0.5-1 engineer-day
+
+Tasks:
+
 - [ ] Decide when authentication and authorization enter the plan
-- [ ] Keep version references synchronized with `build.gradle.kts`
+- [ ] Define the minimum protected endpoints for the first auth slice
+- [ ] Decide whether auth belongs before or after Phase 05 expansion
+- [ ] Document the security sequencing decision
+
+Done when:
+
+- [ ] Security scope has an owner phase
+- [ ] The plan states which endpoints must be protected first
+- [ ] Later implementation work is not blocked by an undefined auth strategy
 
 ## Assumptions
 

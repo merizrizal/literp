@@ -194,46 +194,48 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             return Single.error(Exception("quantityOrdered must be > 0 and unitPrice must be >= 0"))
         }
 
-        return pool.preparedQuery(orderQuery)
-            .rxExecute(Tuple.of(orderId))
-            .flatMap { orderResult ->
-                if (orderResult.size() == 0) {
-                    Single.error(Exception("Sales order not found"))
-                } else {
-                    val status = orderResult.first().getString("status")
-                    if (status != "DRAFT") {
-                        Single.error(Exception("Order line can only be added to DRAFT orders"))
+        return inTransaction { connection ->
+            connection.preparedQuery(orderQuery)
+                .rxExecute(Tuple.of(orderId))
+                .flatMap { orderResult ->
+                    if (orderResult.size() == 0) {
+                        Single.error(Exception("Sales order not found"))
                     } else {
-                        pool.preparedQuery(productQuery)
-                            .rxExecute(Tuple.of(productId))
-                            .flatMap { productResult ->
-                                if (productResult.size() == 0) {
-                                    Single.error(Exception(ErrorCodes.fromStatus(404)))
-                                } else {
-                                    val resolvedSku = sku ?: productResult.first().getString("sku")
-                                    val lineId = UUID.randomUUID().toString()
-                                    val lineTotal = unitPrice.multiply(quantityOrdered)
-                                    pool.preparedQuery(lineInsertQuery)
-                                        .rxExecute(
-                                            Tuple.tuple()
-                                                .addString(lineId)
-                                                .addString(orderId)
-                                                .addString(productId)
-                                                .addString(resolvedSku)
-                                                .addValue(quantityOrdered)
-                                                .addValue(unitPrice)
-                                                .addValue(lineTotal)
-                                        )
-                                        .flatMap { insertedLine ->
-                                            pool.preparedQuery(recalcTotalQuery)
-                                                .rxExecute(Tuple.of(orderId))
-                                                .map { mapSalesOrderLineRow(insertedLine.first()) }
-                                        }
+                        val status = orderResult.first().getString("status")
+                        if (status != "DRAFT") {
+                            Single.error(Exception("Order line can only be added to DRAFT orders"))
+                        } else {
+                            connection.preparedQuery(productQuery)
+                                .rxExecute(Tuple.of(productId))
+                                .flatMap { productResult ->
+                                    if (productResult.size() == 0) {
+                                        Single.error(Exception(ErrorCodes.fromStatus(404)))
+                                    } else {
+                                        val resolvedSku = sku ?: productResult.first().getString("sku")
+                                        val lineId = UUID.randomUUID().toString()
+                                        val lineTotal = unitPrice.multiply(quantityOrdered)
+                                        connection.preparedQuery(lineInsertQuery)
+                                            .rxExecute(
+                                                Tuple.tuple()
+                                                    .addString(lineId)
+                                                    .addString(orderId)
+                                                    .addString(productId)
+                                                    .addString(resolvedSku)
+                                                    .addValue(quantityOrdered)
+                                                    .addValue(unitPrice)
+                                                    .addValue(lineTotal)
+                                            )
+                                            .flatMap { insertedLine ->
+                                                connection.preparedQuery(recalcTotalQuery)
+                                                    .rxExecute(Tuple.of(orderId))
+                                                    .map { mapSalesOrderLineRow(insertedLine.first()) }
+                                            }
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
-            }
+        }
     }
 
     fun confirmSalesOrder(orderId: String): Single<JsonObject> {

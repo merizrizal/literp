@@ -1,7 +1,9 @@
 package com.literp.repository
 
+import io.reactivex.rxjava3.core.Single
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.rxjava3.sqlclient.Pool
+import io.vertx.rxjava3.sqlclient.SqlConnection
 
 abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
     protected val logger = LoggerFactory.getLogger(clazz)
@@ -16,5 +18,11 @@ abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
                 },
                 { error -> logger.error("Error establishing DB connection for ${clazz.simpleName}", error) }
             )
+    }
+
+    protected fun <T : Any> inTransaction(work: (SqlConnection) -> Single<T>): Single<T> {
+        return pool.rxWithTransaction { connection ->
+            work(connection).toMaybe()
+        }.toSingle()
     }
 }

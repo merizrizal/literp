@@ -132,7 +132,8 @@ The Docker PostgreSQL stack runs migrations automatically on startup.
 
 ## Runtime Configuration
 
-The server reads `cfg.properties` from the repository root.
+The server reads `cfg.properties` from the repository root. Non-blank
+environment variables override file values.
 
 Current defaults:
 
@@ -144,6 +145,26 @@ pg.user=root
 pg.password=pgdevpassword
 pg.database=literp
 ```
+
+Config precedence:
+
+```text
+environment override -> cfg.properties -> startup failure
+```
+
+Supported environment overrides:
+
+| Property | Environment variables, in precedence order |
+|---|---|
+| `http.port` | `LITERP_HTTP_PORT`, `HTTP_PORT` |
+| `pg.host` | `LITERP_PG_HOST`, `PG_HOST`, `DB_HOST` |
+| `pg.port` | `LITERP_PG_PORT`, `PG_PORT`, `DB_PORT` |
+| `pg.user` | `LITERP_PG_USER`, `PG_USER`, `DB_USER` |
+| `pg.password` | `LITERP_PG_PASSWORD`, `PG_PASSWORD`, `DB_PASSWORD` |
+| `pg.database` | `LITERP_PG_DATABASE`, `PG_DATABASE`, `DB_NAME` |
+
+Startup fails with an actionable error when a required value is missing, blank,
+or when numeric values such as `http.port` or `pg.port` are invalid.
 
 ## Handler and Repository Behavior
 
