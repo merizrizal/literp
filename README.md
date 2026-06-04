@@ -31,8 +31,8 @@ The order process API supports:
 
 ## Stack
 
-- Kotlin `2.3.20`
-- Vert.x `5.0.10`
+- Kotlin `2.4.0`
+- Vert.x `5.1.1`
 - Java `25`
 - RxJava3
 - PostgreSQL
@@ -96,6 +96,7 @@ The Bruno collection is aligned to the implemented handlers and uses collection 
 - [docs/README_API.md](docs/README_API.md): documentation index
 - [docs/IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md): branch-level implementation summary
 - [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md): validation checklist
+- [docs/implementation-plan/00-implementation-overview.md](docs/implementation-plan/00-implementation-overview.md): phased implementation plan
 
 Domain notes:
 - [docs/knowledge/PROJECT_OVERVIEW.md](docs/knowledge/PROJECT_OVERVIEW.md)

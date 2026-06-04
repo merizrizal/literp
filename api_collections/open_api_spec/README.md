@@ -136,7 +136,7 @@ All APIs follow a consistent design:
 - **Production:** `https://api.literp.example.com/api/v1`
 
 ### Response Format
-All responses follow a standard envelope:
+The OpenAPI contracts describe a normalized envelope:
 
 ```json
 {
@@ -145,16 +145,20 @@ All responses follow a standard envelope:
 }
 ```
 
+The current handlers are not fully normalized yet. List endpoints return an outer
+`data` object around `{ "data": [], "pagination": {} }`, many master-data
+single-resource endpoints return `data.data`, and order-process command
+endpoints usually return a single `data` envelope.
+
 ### Error Format
-Consistent error responses across all APIs:
+The current handlers return error responses in this shape:
 
 ```json
 {
-  "code": "ERROR_CODE",
-  "message": "Human-readable message",
-  "details": { "field": "value" },
-  "timestamp": "2026-02-17T10:30:00Z",
-  "path": "/api/v1/resource"
+  "error": "Human-readable message",
+  "errorCode": "VALIDATION_ERROR",
+  "status": 400,
+  "errorId": "uuid"
 }
 ```
 
@@ -177,7 +181,9 @@ All Literp APIs adhere to these core principles:
 - Historical references remain valid
 
 ### 2. Soft Deletes
-- Resources deactivated via `active`/`isActive` flag
+- Products and product variants are deactivated via `active`
+- Unit of Measure and Location delete endpoints currently hard-delete rows
+- Some `active` / `isActive` fields remain documented ahead of handler support
 - Preserves historical audit trails
 - Prevents breaking existing references
 
@@ -198,10 +204,12 @@ All Literp APIs adhere to these core principles:
 
 ## Database Alignment
 
-All specs are **fully synchronized** with the database schema:
+The specs are aligned with the database model defined in:
 - `./python/database/migration/alembic/versions/314b57a8dd0f_00_initial_migration.py`
 
-Each spec documents database table mappings and constraints.
+The implemented handlers are slightly narrower than the specs in a few places:
+product list filters, product update `baseUom` / `active`, and location
+`isActive` create/update behavior are documented but not currently applied.
 
 ## Upcoming APIs
 
@@ -234,8 +242,8 @@ When adding new APIs:
 
 - [PROJECT_OVERVIEW.md](../../docs/knowledge/PROJECT_OVERVIEW.md) - System vision and goals
 - [MODEL_DESIGN.md](../../docs/knowledge/MODEL_DESIGN.md) - Complete database schema
-- [DATABASE_MIGRATION](../database/migration/) - Migration files
-- [ARCHITECTURE.md](../../docs/knowledge/ARCHITECTURE.md) - System architecture
+- [DATABASE_MIGRATION](../../python/database/migration/) - Migration files
+- [PROJECT_OVERVIEW.md](../../docs/knowledge/PROJECT_OVERVIEW.md) - System architecture and product vision
 
 ## Support
 
@@ -247,6 +255,6 @@ For questions or issues with the OpenAPI specs:
 
 ---
 
-**Last Updated:** 2026-02-28
+**Last Updated:** 2026-06-04
 **OpenAPI Version:** 3.0.3
 **Literp Version:** 1.0.0

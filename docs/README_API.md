@@ -38,6 +38,11 @@ This directory documents the current implementation on this branch.
 - [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
   What this branch adds on top of the original skeleton.
 
+### Implementation plan
+
+- [implementation-plan/00-implementation-overview.md](implementation-plan/00-implementation-overview.md)
+  Phased plan synced to the current branch, with completed work checked.
+
 ### Domain notes
 
 - [knowledge/PROJECT_OVERVIEW.md](knowledge/PROJECT_OVERVIEW.md)
@@ -53,8 +58,8 @@ This directory documents the current implementation on this branch.
 
 ## Current Implementation Snapshot
 
-- Kotlin `2.3.20`
-- Vert.x `5.0.10`
+- Kotlin `2.4.0`
+- Vert.x `5.1.1`
 - Java `25`
 - 29 implemented API endpoints
 - 2 utility endpoints

@@ -4,8 +4,8 @@ This document describes the implementation that exists on the current branch, no
 
 ## Stack
 
-- Kotlin `2.3.20`
-- Vert.x `5.0.10`
+- Kotlin `2.4.0`
+- Vert.x `5.1.1`
 - Java `25`
 - RxJava3
 - PostgreSQL
