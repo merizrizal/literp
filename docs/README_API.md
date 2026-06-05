@@ -8,7 +8,9 @@ This directory documents the current implementation on this branch.
 2. [API_IMPLEMENTATION.md](API_IMPLEMENTATION.md)
 3. [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)
 4. [ENDPOINTS_OVERVIEW.md](ENDPOINTS_OVERVIEW.md)
-5. [VERIFICATION_CHECKLIST.md](VERIFICATION_CHECKLIST.md)
+5. [CI_VERIFICATION.md](CI_VERIFICATION.md)
+6. [LOCAL_RESET.md](LOCAL_RESET.md)
+7. [VERIFICATION_CHECKLIST.md](VERIFICATION_CHECKLIST.md)
 
 ## File Map
 
@@ -16,6 +18,9 @@ This directory documents the current implementation on this branch.
 
 - [QUICK_START.md](QUICK_START.md)
   Setup, Docker database startup, migrations, Bruno collection, first requests.
+
+- [LOCAL_RESET.md](LOCAL_RESET.md)
+  Non-destructive and destructive local PostgreSQL reset paths.
 
 ### Technical reference
 
@@ -29,6 +34,9 @@ This directory documents the current implementation on this branch.
 
 - [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md)
   Curl examples for master data and order flow.
+
+- [CI_VERIFICATION.md](CI_VERIFICATION.md)
+  Required CI checks and local reproduction commands.
 
 - [VERIFICATION_CHECKLIST.md](VERIFICATION_CHECKLIST.md)
   Validation checklist for runtime behavior, docs, and assets.

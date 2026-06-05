@@ -99,6 +99,8 @@ The Bruno collection is aligned to the implemented handlers and uses collection 
 - [docs/API_IMPLEMENTATION.md](docs/API_IMPLEMENTATION.md): architecture and implementation details
 - [docs/API_TESTING_GUIDE.md](docs/API_TESTING_GUIDE.md): curl workflows for the implemented endpoints
 - [docs/ENDPOINTS_OVERVIEW.md](docs/ENDPOINTS_OVERVIEW.md): endpoint inventory and lifecycle map
+- [docs/CI_VERIFICATION.md](docs/CI_VERIFICATION.md): required CI checks and local reproduction
+- [docs/LOCAL_RESET.md](docs/LOCAL_RESET.md): non-destructive and destructive local database reset paths
 - [docs/README_API.md](docs/README_API.md): documentation index
 - [docs/IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md): branch-level implementation summary
 - [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md): validation checklist

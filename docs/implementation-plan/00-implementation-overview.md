@@ -25,7 +25,7 @@ Current completed runtime scope:
 
 Current important gaps:
 
-- [ ] multi-step order commands are not wrapped in explicit database transactions
+- [ ] some multi-step order commands still need broader transaction coverage
 - [ ] response envelopes are not normalized across endpoint families
 - [ ] a few OpenAPI fields and filters are ahead of handler behavior
 - [ ] receipt, refund, partial fulfillment, POS operations, and manufacturing APIs are not exposed yet
@@ -63,16 +63,16 @@ deployment approval delays.
 | Phase | File | Goal | Status | Estimate |
 |---|---|---|---|---:|
 | 00 | `00-implementation-overview.md` | Explain execution plan | Done for initial planning | Documentation only |
-| 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Active gate | 5-9 remaining engineer-days |
-| 02 | `02-master-data-api.md` | Complete catalog and location API parity | Queued until Phase 01 is done | 6-10 remaining engineer-days |
-| 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 01 is done | 10-18 remaining engineer-days |
-| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, and operational readiness | Queued until Phase 01 is done | 8-14 remaining engineer-days |
+| 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Complete | 0 remaining engineer-days |
+| 02 | `02-master-data-api.md` | Complete catalog and location API parity | Unblocked next | 6-10 remaining engineer-days |
+| 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 02 is done | 10-18 remaining engineer-days |
+| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, and operational readiness | Queued until earlier phase gates are done | 8-14 remaining engineer-days |
 | 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | Future phase | 18-35 future engineer-days |
 
 Estimated remaining MVP hardening:
 
 ```text
-29-51 engineer-days
+24-42 engineer-days
 ```
 
 The current branch already implements the functional MVP path. The remaining
@@ -90,13 +90,14 @@ Build in this order:
 
 Phase discipline:
 
-- [ ] Complete the remaining work in `01-foundation.md`
-- [ ] Satisfy the Phase 01 definition of done
-- [ ] Re-check this overview and mark Phase 01 as complete
-- [ ] Start Phase 02 only after Phase 01 is complete
+- [x] Complete the remaining work in `01-foundation.md`
+- [x] Satisfy the Phase 01 definition of done
+- [x] Re-check this overview and mark Phase 01 as complete
+- [x] Unblock Phase 02 after Phase 01 completion
+- [ ] Complete Phase 02 before starting Phase 03 implementation
 
 Later phase files may be used for planning and context, but implementation work
-should not jump ahead while Phase 01 still has unchecked required tasks.
+should now continue with Phase 02 before jumping to Phase 03 or later.
 
 Do not build IAM first.
 

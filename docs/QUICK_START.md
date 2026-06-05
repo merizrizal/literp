@@ -193,8 +193,10 @@ http.port=8010
 ### Migration failed after partially creating objects
 
 The initial migration is safe to rerun when PostgreSQL enum types or tables
-already exist. If the database is in an unknown state, reset only the affected
-Docker volume:
+already exist. If the database is in an unknown state, use the non-destructive
+or destructive paths in [LOCAL_RESET.md](LOCAL_RESET.md).
+
+For a destructive development database reset:
 
 ```bash
 cd docker
