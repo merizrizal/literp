@@ -12,6 +12,13 @@ Use this checklist to validate the current implementation, docs, and testing ass
 - [ ] `GET /` returns a JSON response
 - [ ] `GET /health/db` returns database `UP`
 
+## CI Verification
+
+- [ ] `Foundation Verification / Build` passes
+- [ ] `Foundation Verification / Migration Verification` passes
+- [ ] Build failures can be reproduced with `./gradlew build`
+- [ ] Migration failures can be reproduced with `python scripts/verify_migrations.py`
+
 ## API Coverage
 
 ### Unit of Measure
@@ -110,6 +117,8 @@ Total API endpoints to verify: `29`
 - [ ] `docs/API_IMPLEMENTATION.md` reflects actual handler behavior
 - [ ] `docs/API_TESTING_GUIDE.md` includes order-process testing
 - [ ] `docs/ENDPOINTS_OVERVIEW.md` lists 29 endpoints
+- [ ] `docs/CI_VERIFICATION.md` documents required CI checks
+- [ ] `docs/LOCAL_RESET.md` separates non-destructive and destructive reset paths
 - [ ] `docs/IMPLEMENTATION_SUMMARY.md` reflects seed data and Bruno assets
 - [ ] `docs/README_API.md` points to the updated docs
 - [ ] `docs/knowledge/PROJECT_SUMMARY.md` reflects the implemented platform state
@@ -118,5 +127,5 @@ Total API endpoints to verify: `29`
 
 - [ ] response envelopes are still inconsistent across endpoint families
 - [ ] some OpenAPI-documented fields are not applied by handlers yet
-- [ ] multi-step order flows are not wrapped in explicit database transactions
+- [ ] some multi-step order flows still need broader transaction coverage
 - [ ] fulfillment still uses the non-null destination workaround for inventory movement

@@ -13,11 +13,11 @@ runtime infrastructure.
 
 ## Phase Status
 
-Phase 01 is the current active implementation gate.
+Phase 01 is complete.
 
-Do not start Phase 02, Phase 03, Phase 04, or Phase 05 implementation work until
-the ordered tasks below are completed or deliberately moved out of the
-foundation gate with a documented reason.
+Phase 02 is explicitly unblocked as the next implementation gate. Do not jump to
+Phase 03, Phase 04, or Phase 05 implementation work until the relevant earlier
+phase gates are completed or deliberately moved with a documented reason.
 
 ## Generated Source Policy
 
@@ -120,16 +120,22 @@ Estimate: 1-1.5 engineer-days
 
 Tasks:
 
-- [ ] Add build verification to CI
-- [ ] Add database migration verification to CI
-- [ ] Ensure CI uses the same Java and Gradle expectations as the project
-- [ ] Document the minimum CI checks required before merging implementation work
+- [x] Add build verification to CI
+- [x] Add database migration verification to CI
+- [x] Ensure CI uses the same Java and Gradle expectations as the project
+- [x] Document the minimum CI checks required before merging implementation work
 
 Done when:
 
-- [ ] CI validates compilation
-- [ ] CI validates migrations against PostgreSQL
-- [ ] CI failure output is actionable for local reproduction
+- [x] CI validates compilation
+- [x] CI validates migrations against PostgreSQL
+- [x] CI failure output is actionable for local reproduction
+
+Implementation notes:
+
+- [x] `Foundation Verification / Build` runs Java 25 and `./gradlew build`
+- [x] `Foundation Verification / Migration Verification` runs Alembic against PostgreSQL 18
+- [x] `scripts/verify_migrations.py` provides the local reproduction path for migration failures
 
 ### 01.5 Local Reset And Phase 02 Gate
 
@@ -137,16 +143,22 @@ Estimate: 0.5-1 engineer-day
 
 Tasks:
 
-- [ ] Add a local reset workflow that clearly separates destructive and non-destructive paths
-- [ ] Document how to reset PostgreSQL and seed data for local work
-- [ ] Re-check every Phase 01 definition-of-done item
-- [ ] Update `00-implementation-overview.md` when Phase 01 is complete
+- [x] Add a local reset workflow that clearly separates destructive and non-destructive paths
+- [x] Document how to reset PostgreSQL and seed data for local work
+- [x] Re-check every Phase 01 definition-of-done item
+- [x] Update `00-implementation-overview.md` when Phase 01 is complete
 
 Done when:
 
-- [ ] Local reset instructions are documented
-- [ ] Phase 01 definition of done is fully checked
-- [ ] Phase 02 is explicitly unblocked in `00-implementation-overview.md`
+- [x] Local reset instructions are documented
+- [x] Phase 01 definition of done is fully checked
+- [x] Phase 02 is explicitly unblocked in `00-implementation-overview.md`
+
+Implementation notes:
+
+- [x] `docs/LOCAL_RESET.md` separates non-destructive restart/verify from destructive volume reset
+- [x] Development and test PostgreSQL reset paths are documented separately
+- [x] Reset verification uses `python scripts/verify_migrations.py`
 
 ## Assumptions
 
@@ -157,9 +169,9 @@ Done when:
 
 ## Definition of Done
 
-- [ ] Runtime can start from a clean checkout with documented local setup
+- [x] Runtime can start from a clean checkout with documented local setup
 - [x] Database schema and seed data can be recreated deterministically
-- [ ] Startup failures are actionable in logs
-- [ ] CI validates compilation and migrations
-- [ ] Repository transaction support is available for business commands
-- [ ] Phase 02 is explicitly unblocked in `00-implementation-overview.md`
+- [x] Startup failures are actionable in logs
+- [x] CI validates compilation and migrations
+- [x] Repository transaction support is available for business commands
+- [x] Phase 02 is explicitly unblocked in `00-implementation-overview.md`

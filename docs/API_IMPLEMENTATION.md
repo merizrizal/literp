@@ -143,6 +143,20 @@ Manual Alembic execution requires `DB_URL`. Use `python/database/envrc` for the
 development database, `python/database/envrc.test` for the isolated test
 database, or set `DB_URL` directly.
 
+## Foundation CI Verification
+
+The repository includes the `Foundation Verification` workflow at
+`.github/workflows/foundation-verification.yml`.
+
+Required checks:
+
+- Build: Java 25 with the Gradle wrapper, running `./gradlew build`
+- Migration Verification: Python 3.13 with PostgreSQL 18, running `python scripts/verify_migrations.py`
+
+The migration verification script runs Alembic to `head`, verifies the database
+revision matches the repository's Alembic head, and checks that deterministic
+seed data exists in core tables.
+
 ## Runtime Configuration
 
 The server reads `cfg.properties` from the repository root. Non-blank
