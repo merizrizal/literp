@@ -1,13 +1,14 @@
 package com.literp.repository
 
 import io.reactivex.rxjava3.core.Single
-import io.vertx.pgclient.PgException
 import io.vertx.core.internal.logging.LoggerFactory
+import io.vertx.core.json.JsonObject
+import io.vertx.pgclient.PgException
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.SqlConnection
 
 abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
-    protected val logger = LoggerFactory.getLogger(clazz)
+    protected val logger = LoggerFactory.getLogger(clazz)!!
 
     init {
         pool.rxGetConnection()
@@ -37,6 +38,10 @@ abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
         }
 
         return false
+    }
+
+    protected fun jsonObjectOrEmpty(value: String?): JsonObject {
+        return if (value.isNullOrBlank()) JsonObject() else JsonObject(value)
     }
 
     private companion object {

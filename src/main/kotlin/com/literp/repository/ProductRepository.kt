@@ -27,6 +27,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
             "name" -> "name"
             "producttype", "product_type" -> "product_type"
             "baseuom", "base_uom" -> "base_uom"
+            "active" -> "active"
             "createdat", "created_at" -> "created_at"
             "updatedat", "updated_at" -> "updated_at"
             else -> "sku"
@@ -71,7 +72,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
             }
             .map { result ->
                 val data = result.map { row ->
-                    val metadata = JsonObject(row.getString("metadata"))
+                    val metadata = jsonObjectOrEmpty(row.getString("metadata"))
                     JsonObject()
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))
@@ -160,7 +161,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val metadata = JsonObject(row.getString("metadata"))
+                    val metadata = jsonObjectOrEmpty(row.getString("metadata"))
                     val product = JsonObject()
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))
@@ -179,7 +180,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                             .rxExecute(Tuple.of(productId))
                             .map { variantsResult ->
                                 val variants = variantsResult.map { variantRow ->
-                                    val attributes = JsonObject(variantRow.getString("attributes"))
+                                    val attributes = jsonObjectOrEmpty(variantRow.getString("attributes"))
                                     JsonObject()
                                         .put("variantId", variantRow.getString("variant_id"))
                                         .put("productId", variantRow.getString("product_id"))
@@ -220,7 +221,7 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val metadata = JsonObject(row.getString("metadata"))
+                    val metadata = jsonObjectOrEmpty(row.getString("metadata"))
                     Single.just(JsonObject()
                         .put("productId", row.getString("product_id"))
                         .put("sku", row.getString("sku"))

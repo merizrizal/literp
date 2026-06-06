@@ -75,16 +75,20 @@ Total API endpoints to verify: `29`
 - [ ] Product get applies `includeVariants=true`
 - [ ] Product create/update applies documented `active`
 - [ ] Product update applies documented `baseUom`
+- [ ] Product metadata maps database nulls to an empty JSON object
 - [ ] Product variant delete sets `active = false`
 - [ ] Product variant delete returns `404` for missing, mismatched parent product, or already inactive variants
 - [ ] Product variant list applies `sort` and `activeOnly`
 - [ ] Product variant create/update applies documented `active`
 - [ ] Product variant update returns `404` for mismatched parent product
+- [ ] Product variant attributes map database nulls to an empty JSON object
 - [ ] UOM delete removes the row
 - [ ] UOM delete returns `404` for missing rows and `409` for referenced rows
 - [ ] Location create/update applies documented `isActive`
 - [ ] Location delete removes the row
 - [ ] Location delete returns `404` for missing rows and `409` for referenced rows
+- [ ] Location address maps database nulls to an empty JSON object
+- [ ] Master-data list endpoints reject invalid `page`, `size`, `sort`, and boolean query values
 - [ ] Draft order creation defaults `salesChannel` to `POS` when omitted
 - [ ] Add line is blocked for non-`DRAFT` orders
 - [ ] Confirm is blocked when the order has no lines
@@ -102,6 +106,14 @@ Total API endpoints to verify: `29`
 - [ ] Master-data create/get/update responses return the resource under top-level `data`
 - [ ] Order-process command responses return a single `data` envelope
 - [ ] Error responses contain `error`, `errorCode`, `status`, and `errorId`
+
+## Automated Tests
+
+- [ ] `MasterDataRepositoryTest` covers duplicate checks
+- [ ] `MasterDataRepositoryTest` covers hard delete, soft delete, and not-found behavior
+- [ ] `MasterDataRepositoryTest` covers nullable JSON mapping
+- [ ] `MasterDataHttpIntegrationTest` covers all master-data endpoints
+- [ ] `MasterDataHttpIntegrationTest` covers master-data error and validation behavior
 
 ## Seed Data Verification
 

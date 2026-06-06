@@ -10,11 +10,9 @@ import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseHandler(UnitOfMeasureHandler::class.java) {
 
     fun listUnitOfMeasures(context: RoutingContext) {
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "code,asc"
+        val query = parseListQuery(context, "code,asc", SORT_FIELDS) ?: return
 
-        uomService.listUnitOfMeasures(page, size, sort)
+        uomService.listUnitOfMeasures(query.page, query.size, query.sort)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM: ${error.message}", error) }
     }
@@ -103,5 +101,9 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
                     conflictMessage = "UOM is referenced and cannot be deleted"
                 )
             }
+    }
+
+    private companion object {
+        private val SORT_FIELDS = setOf("code", "name", "createdAt", "created_at", "updatedAt", "updated_at")
     }
 }

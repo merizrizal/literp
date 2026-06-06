@@ -26,10 +26,10 @@ Current completed runtime scope:
 Current important gaps:
 
 - [ ] some multi-step order commands still need broader transaction coverage
-- [ ] response envelopes are not normalized across endpoint families
-- [ ] a few OpenAPI fields and filters are ahead of handler behavior
+- [ ] order-process list responses still need envelope normalization
+- [ ] OpenAPI, Bruno, docs, and handlers need automated drift checks as the API expands
 - [ ] receipt, refund, partial fulfillment, POS operations, and manufacturing APIs are not exposed yet
-- [ ] automated test coverage is not present in the repository
+- [ ] automated test coverage is focused on foundation and master-data behavior; order flow still needs broader tests
 
 ## 00.2 Directory Name
 
@@ -64,7 +64,7 @@ deployment approval delays.
 |---|---|---|---|---:|
 | 00 | `00-implementation-overview.md` | Explain execution plan | Done for initial planning | Documentation only |
 | 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Complete | 0 remaining engineer-days |
-| 02 | `02-master-data-api.md` | Complete catalog and location API parity | In progress: 02.1, 02.2, and 02.3 complete | 2.5-4 remaining engineer-days |
+| 02 | `02-master-data-api.md` | Complete catalog and location API parity | Complete | 0 remaining engineer-days |
 | 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 02 is done | 10-18 remaining engineer-days |
 | 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Queued until earlier phase gates are done | 9-16 remaining engineer-days |
 | 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | Future phase | 18-35 future engineer-days |
@@ -72,7 +72,7 @@ deployment approval delays.
 Estimated remaining MVP hardening:
 
 ```text
-21.5-38 engineer-days
+19-34 engineer-days
 ```
 
 The current branch already implements the functional MVP path. The remaining
@@ -94,7 +94,7 @@ Phase discipline:
 - [x] Satisfy the Phase 01 definition of done
 - [x] Re-check this overview and mark Phase 01 as complete
 - [x] Unblock Phase 02 after Phase 01 completion
-- [ ] Complete Phase 02 before starting Phase 03 implementation
+- [x] Complete Phase 02 before starting Phase 03 implementation
 - [ ] Complete the Phase 04 project structure gate before starting Phase 05 implementation
 
 Later phase files may be used for planning and context, but implementation work

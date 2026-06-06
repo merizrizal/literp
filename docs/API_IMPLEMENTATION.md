@@ -257,6 +257,26 @@ Validation:
 Important implementation note:
 - create and update apply optional `isActive`
 
+### Master-data list validation
+
+UOM, Product, Product Variant, and Location list endpoints apply the same query
+rules:
+
+- `page` defaults to `0` and must be an integer greater than or equal to `0`
+- `size` defaults to `20` and must be an integer from `1` through `100`
+- `sort` must use `field,asc` or `field,desc`
+- `activeOnly` and `includeVariants` must be `true` or `false` when supplied
+
+Supported sort fields:
+
+- UOM: `code`, `name`, `createdAt`, `created_at`, `updatedAt`, `updated_at`
+- Product: `sku`, `name`, `productType`, `product_type`, `baseUom`, `base_uom`, `active`, `createdAt`, `created_at`, `updatedAt`, `updated_at`
+- Product Variant: `sku`, `name`, `active`, `createdAt`, `created_at`, `updatedAt`, `updated_at`
+- Location: `code`, `name`, `locationType`, `location_type`, `isActive`, `is_active`, `createdAt`, `created_at`, `updatedAt`, `updated_at`
+
+Product `metadata`, product variant `attributes`, and location `address` are
+returned as empty JSON objects when the database value is null.
+
 ### Order Process
 
 #### Create draft
@@ -432,6 +452,7 @@ OpenAPI contracts:
 Important distinction:
 - the Bruno collection is synchronized to the implemented handlers
 - the master-data OpenAPI specs are synchronized with the implemented catalog and location handlers
+- repository and HTTP integration tests cover master-data success and error flows
 
 ## Known Limitations
 

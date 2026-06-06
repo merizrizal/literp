@@ -35,9 +35,10 @@ Literp is currently a Kotlin and Vert.x backend that implements a lightweight ER
 - deterministic Alembic seed data migration
 - OpenAPI specs in `api_collections/open_api_spec`
 - Bruno collection in `api_collections/Literp`
+- automated foundation and master-data tests
 
 ### Current implementation caveats
 
-- some endpoint response envelopes are still inconsistent
-- some OpenAPI fields are ahead of the current handler behavior
+- order-process list response envelopes still need normalization
+- automated tests are not yet broad across the full order-to-inventory flow
 - receipt, refund, and partial-fulfillment APIs are not yet exposed

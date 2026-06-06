@@ -153,16 +153,24 @@ Estimate: 1-1.5 engineer-days
 
 Tasks:
 
-- [ ] Add pagination bounds validation for `page` and `size`
-- [ ] Add sort validation behavior for unsupported fields
-- [ ] Make JSON metadata mapping robust when database values are null
-- [ ] Make JSON address mapping robust when database values are null
+- [x] Add pagination bounds validation for `page` and `size`
+- [x] Add sort validation behavior for unsupported fields
+- [x] Make JSON metadata mapping robust when database values are null
+- [x] Make JSON address mapping robust when database values are null
 
 Done when:
 
-- [ ] Invalid pagination input returns a clear validation error
-- [ ] JSON fields can be null without handler or repository crashes
-- [ ] Sorting behavior is documented and predictable
+- [x] Invalid pagination input returns a clear validation error
+- [x] JSON fields can be null without handler or repository crashes
+- [x] Sorting behavior is documented and predictable
+
+Implementation notes:
+
+- [x] Master-data list handlers validate `page >= 0`, `size` from `1` through `100`, and `sort` as `field,asc` or `field,desc`.
+- [x] UOM, product, variant, and location list handlers reject unsupported sort fields with `400` error envelopes.
+- [x] `activeOnly` and `includeVariants` query parameters reject non-boolean values with `400` error envelopes.
+- [x] Product `metadata`, product variant `attributes`, and location `address` map database nulls to empty JSON objects.
+- [x] OpenAPI sort descriptions list the supported sort fields for each master-data list endpoint.
 
 ### 02.5 Master Data Verification
 
@@ -170,17 +178,24 @@ Estimate: 1.5-2.5 engineer-days
 
 Tasks:
 
-- [ ] Add repository tests for duplicate checks
-- [ ] Add repository tests for soft delete and hard delete behavior
-- [ ] Add repository tests for not-found behavior
-- [ ] Add HTTP integration tests for all master-data endpoints
-- [ ] Keep Bruno examples aligned after response envelope changes
+- [x] Add repository tests for duplicate checks
+- [x] Add repository tests for soft delete and hard delete behavior
+- [x] Add repository tests for not-found behavior
+- [x] Add HTTP integration tests for all master-data endpoints
+- [x] Keep Bruno examples aligned after response envelope changes
 
 Done when:
 
-- [ ] Master-data happy paths are covered by automated tests
-- [ ] Master-data error paths are covered by automated tests
-- [ ] Bruno collection remains usable for manual verification
+- [x] Master-data happy paths are covered by automated tests
+- [x] Master-data error paths are covered by automated tests
+- [x] Bruno collection remains usable for manual verification
+
+Implementation notes:
+
+- [x] `MasterDataRepositoryTest` covers duplicate checks, delete/not-found behavior, and nullable JSON mapping.
+- [x] `MasterDataHttpIntegrationTest` covers all UOM, product, product variant, and location HTTP endpoints through OpenAPI routers.
+- [x] HTTP integration tests cover duplicate, missing resource, missing parent product, pagination, sort, and boolean validation errors.
+- [x] Bruno master-data scripts read normalized `data` response payloads.
 
 ## Assumptions
 
@@ -191,8 +206,8 @@ Done when:
 
 ## Definition of Done
 
-- [ ] OpenAPI specs match handler behavior exactly
-- [ ] Bruno examples match actual responses
-- [ ] Master-data endpoints have automated success and error tests
-- [ ] Response envelope shape is stable
+- [x] OpenAPI specs match handler behavior exactly
+- [x] Bruno examples match actual responses
+- [x] Master-data endpoints have automated success and error tests
+- [x] Response envelope shape is stable
 - [x] Delete behavior is documented and verified

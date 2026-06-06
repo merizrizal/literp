@@ -51,7 +51,7 @@
           {
             "name": "sort",
             "in": "query",
-            "description": "Sort field and order (e.g., \"code,asc\" or \"name,desc\")",
+            "description": "Sort field and order (field,asc or field,desc). Supported fields: code, name, locationType, location_type, isActive, is_active, createdAt, created_at, updatedAt, updated_at.",
             "schema": {
               "type": "string",
               "default": "code,asc"
@@ -497,7 +497,7 @@
       "PaginationInfo": {
         "type": "object",
         "description": "Pagination metadata for list responses.",
-        "required": ["page", "size", "total", "totalPages", "hasNext", "hasPrevious"],
+        "required": ["page", "size", "totalElements", "totalPages"],
         "properties": {
           "page": {
             "type": "integer",
@@ -509,7 +509,7 @@
             "description": "Number of items per page",
             "example": 20
           },
-          "total": {
+          "totalElements": {
             "type": "integer",
             "description": "Total number of items",
             "example": 45
@@ -518,52 +518,33 @@
             "type": "integer",
             "description": "Total number of pages",
             "example": 3
-          },
-          "hasNext": {
-            "type": "boolean",
-            "description": "Whether there is a next page",
-            "example": true
-          },
-          "hasPrevious": {
-            "type": "boolean",
-            "description": "Whether there is a previous page",
-            "example": false
           }
         }
       },
       "ErrorResponse": {
         "type": "object",
-        "description": "Standard error response.",
-        "required": ["code", "message"],
+        "description": "Standard handler error response.",
+        "required": ["error", "errorCode", "status", "errorId"],
         "properties": {
-          "code": {
-            "type": "string",
-            "description": "Error code identifier",
-            "example": "LOCATION_NOT_FOUND"
-          },
-          "message": {
+          "error": {
             "type": "string",
             "description": "Human-readable error message",
-            "example": "Location with ID 550e8400-e29b-41d4-a716-446655440000 not found"
+            "example": "Location not found"
           },
-          "details": {
-            "type": "object",
-            "nullable": true,
-            "description": "Additional error context",
-            "example": {
-              "field": "locationId",
-              "value": "550e8400-e29b-41d4-a716-446655440000"
-            }
-          },
-          "timestamp": {
+          "errorCode": {
             "type": "string",
-            "format": "date-time",
-            "description": "When the error occurred"
+            "description": "Error code identifier",
+            "example": "RESOURCE_NOT_FOUND"
           },
-          "path": {
+          "status": {
+            "type": "integer",
+            "description": "HTTP status code",
+            "example": 404
+          },
+          "errorId": {
             "type": "string",
-            "description": "API path where error occurred",
-            "example": "/api/v1/locations/550e8400-e29b-41d4-a716-446655440000"
+            "format": "uuid",
+            "description": "Unique error identifier for log correlation"
           }
         }
       }
@@ -577,13 +558,10 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "code": "INVALID_INPUT",
-              "message": "Validation failed",
-              "details": {
-                "field": "code",
-                "message": "Code is required and must be unique"
-              },
-              "timestamp": "2026-02-17T10:30:00Z"
+              "error": "Validation failed",
+              "errorCode": "VALIDATION_ERROR",
+              "status": 400,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
             }
           }
         }
@@ -596,9 +574,10 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "code": "NOT_FOUND",
-              "message": "Location not found",
-              "timestamp": "2026-02-17T10:30:00Z"
+              "error": "Location not found",
+              "errorCode": "RESOURCE_NOT_FOUND",
+              "status": 404,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
             }
           }
         }
@@ -611,9 +590,10 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "code": "INTERNAL_ERROR",
-              "message": "An unexpected error occurred",
-              "timestamp": "2026-02-17T10:30:00Z"
+              "error": "An unexpected error occurred",
+              "errorCode": "INTERNAL_ERROR",
+              "status": 500,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
             }
           }
         }

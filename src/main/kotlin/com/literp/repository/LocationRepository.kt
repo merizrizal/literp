@@ -77,7 +77,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
             }
             .map { result ->
                 val data = result.map { row ->
-                    val address = JsonObject(row.getString("address"))
+                    val address = jsonObjectOrEmpty(row.getString("address"))
 
                     JsonObject()
                         .put("locationId", row.getString("location_id"))
@@ -143,7 +143,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val address = JsonObject(row.getString("address"))
+                    val address = jsonObjectOrEmpty(row.getString("address"))
                     Single.just(
                         JsonObject()
                             .put("locationId", row.getString("location_id"))
@@ -173,7 +173,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val address = JsonObject(row.getString("address"))
+                    val address = jsonObjectOrEmpty(row.getString("address"))
                     Single.just(
                         JsonObject()
                             .put("locationId", row.getString("location_id"))
@@ -210,7 +210,7 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val address = JsonObject(row.getString("address"))
+                    val address = jsonObjectOrEmpty(row.getString("address"))
                     Single.just(
                         JsonObject()
                             .put("locationId", row.getString("location_id"))

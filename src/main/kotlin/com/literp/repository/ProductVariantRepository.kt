@@ -24,6 +24,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
         val sortField = when (rawField.lowercase()) {
             "sku" -> "sku"
             "name" -> "name"
+            "active" -> "active"
             "createdat", "created_at" -> "created_at"
             "updatedat", "updated_at" -> "updated_at"
             else -> "sku"
@@ -32,6 +33,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
         val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "ASC"
 
         val activeFilter = if (activeOnly) " AND active = true" else ""
+        val productQuery = "SELECT COUNT(*) as cnt FROM product WHERE product_id = $1 AND active = true"
         val query = "SELECT COUNT(*) as total FROM product_variant WHERE product_id = $1$activeFilter"
         val dataQuery = """
             SELECT variant_id, product_id, sku, name, attributes, active, created_at, updated_at
@@ -43,8 +45,16 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
 
         var total = 0
 
-        return pool.preparedQuery(query)
+        return pool.preparedQuery(productQuery)
             .rxExecute(Tuple.of(productId))
+            .flatMap { productResult ->
+                if (productResult.first().getInteger("cnt") == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    pool.preparedQuery(query)
+                        .rxExecute(Tuple.of(productId))
+                }
+            }
             .flatMap { countResult ->
                 total = countResult.first().getInteger("total")
                 pool.preparedQuery(dataQuery)
@@ -52,7 +62,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             }
             .map { result ->
                 val data = result.map { row ->
-                    val attributes = JsonObject(row.getString("attributes"))
+                    val attributes = jsonObjectOrEmpty(row.getString("attributes"))
                     JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -106,6 +116,13 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     .put("attributes", attributes ?: JsonObject())
                     .put("active", active)
             }
+            .onErrorResumeNext { error ->
+                if (isForeignKeyViolation(error)) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.error(error)
+                }
+            }
     }
 
     fun getProductVariant(productId: String, variantId: String): Single<JsonObject> {
@@ -122,7 +139,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val attributes = JsonObject(row.getString("attributes"))
+                    val attributes = jsonObjectOrEmpty(row.getString("attributes"))
                     Single.just(JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -158,7 +175,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val attributes = JsonObject(row.getString("attributes"))
+                    val attributes = jsonObjectOrEmpty(row.getString("attributes"))
                     Single.just(JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))

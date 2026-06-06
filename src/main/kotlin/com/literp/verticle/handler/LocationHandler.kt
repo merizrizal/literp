@@ -10,15 +10,13 @@ import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 class LocationHandler(private val locationService: LocationService) : BaseHandler(LocationHandler::class.java) {
 
     fun listLocations(context: RoutingContext) {
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "code,asc"
+        val query = parseListQuery(context, "code,asc", SORT_FIELDS) ?: return
         val code = context.queryParam("code").firstOrNull()
         val name = context.queryParam("name").firstOrNull()
         val locationType = context.queryParam("locationType").firstOrNull()
-        val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
+        val activeOnly = parseBooleanQueryParam(context, "activeOnly", true) ?: return
 
-        locationService.listLocations(page, size, sort, code, name, locationType, activeOnly)
+        locationService.listLocations(query.page, query.size, query.sort, code, name, locationType, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}", error) }
     }
@@ -127,5 +125,20 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
                     conflictMessage = "Location is referenced and cannot be deleted"
                 )
             }
+    }
+
+    private companion object {
+        private val SORT_FIELDS = setOf(
+            "code",
+            "name",
+            "locationType",
+            "location_type",
+            "isActive",
+            "is_active",
+            "createdAt",
+            "created_at",
+            "updatedAt",
+            "updated_at"
+        )
     }
 }

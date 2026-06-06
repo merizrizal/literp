@@ -39,6 +39,7 @@ This branch moves the project from a lightweight skeleton into a documented, tes
 - OpenAPI YAML and JSON contracts
 - OpenAPI README files
 - Bruno collection synchronized with the implemented handlers
+- automated master-data repository and HTTP integration tests
 
 ### Documentation
 

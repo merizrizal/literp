@@ -48,7 +48,7 @@ paths:
             maximum: 100
         - name: sort
           in: query
-          description: Sort field and order (e.g., "code,asc" or "name,desc")
+          description: "Sort field and order (field,asc or field,desc). Supported fields: code, name, createdAt, created_at, updatedAt, updated_at."
           schema:
             type: string
             default: code,asc
@@ -225,7 +225,7 @@ paths:
             maximum: 100
         - name: sort
           in: query
-          description: Sort field and order (e.g., "sku,asc" or "name,desc")
+          description: "Sort field and order (field,asc or field,desc). Supported fields: sku, name, productType, product_type, baseUom, base_uom, active, createdAt, created_at, updatedAt, updated_at."
           schema:
             type: string
             default: sku,asc
@@ -392,12 +392,6 @@ paths:
           description: Product deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          description: Conflict - Product has active relationships
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -434,7 +428,7 @@ paths:
             maximum: 100
         - name: sort
           in: query
-          description: Sort field and order (e.g., "sku,asc" or "name,desc")
+          description: "Sort field and order (field,asc or field,desc). Supported fields: sku, name, active, createdAt, created_at, updatedAt, updated_at."
           schema:
             type: string
             default: sku,asc
@@ -619,12 +613,6 @@ paths:
           description: Product variant deleted successfully
         '404':
           $ref: '#/components/responses/NotFound'
-        '409':
-          description: Conflict - Variant has active relationships
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -974,10 +962,8 @@ components:
       required:
         - page
         - size
-        - total
+        - totalElements
         - totalPages
-        - hasNext
-        - hasPrevious
       properties:
         page:
           type: integer
@@ -987,7 +973,7 @@ components:
           type: integer
           description: Number of items per page
           example: 20
-        total:
+        totalElements:
           type: integer
           description: Total number of items
           example: 150
@@ -995,45 +981,31 @@ components:
           type: integer
           description: Total number of pages
           example: 8
-        hasNext:
-          type: boolean
-          description: Whether there is a next page
-          example: true
-        hasPrevious:
-          type: boolean
-          description: Whether there is a previous page
-          example: false
-
     ErrorResponse:
       type: object
-      description: Standard error response.
+      description: Standard handler error response.
       required:
-        - code
-        - message
+        - error
+        - errorCode
+        - status
+        - errorId
       properties:
-        code:
-          type: string
-          description: Error code identifier
-          example: "PRODUCT_NOT_FOUND"
-        message:
+        error:
           type: string
           description: Human-readable error message
-          example: "Product with ID 660e8400-e29b-41d4-a716-446655440000 not found"
-        details:
-          type: object
-          nullable: true
-          description: Additional error context
-          example:
-            field: "productId"
-            value: "660e8400-e29b-41d4-a716-446655440000"
-        timestamp:
+          example: "Product not found"
+        errorCode:
           type: string
-          format: date-time
-          description: When the error occurred
-        path:
+          description: Error code identifier
+          example: "RESOURCE_NOT_FOUND"
+        status:
+          type: integer
+          description: HTTP status code
+          example: 404
+        errorId:
           type: string
-          description: API path where error occurred
-          example: "/api/v1/products/660e8400-e29b-41d4-a716-446655440000"
+          format: uuid
+          description: Unique error identifier for log correlation
 
   responses:
     BadRequest:
@@ -1043,12 +1015,10 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: "INVALID_INPUT"
-            message: "Validation failed"
-            details:
-              field: "sku"
-              message: "SKU is required and must be unique"
-            timestamp: "2026-02-17T10:30:00Z"
+            error: "Validation failed"
+            errorCode: "VALIDATION_ERROR"
+            status: 400
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
 
     NotFound:
       description: Resource not found
@@ -1057,9 +1027,10 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: "NOT_FOUND"
-            message: "Resource not found"
-            timestamp: "2026-02-17T10:30:00Z"
+            error: "Resource not found"
+            errorCode: "RESOURCE_NOT_FOUND"
+            status: 404
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
 
     InternalServerError:
       description: Internal server error
@@ -1068,9 +1039,10 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
-            code: "INTERNAL_ERROR"
-            message: "An unexpected error occurred"
-            timestamp: "2026-02-17T10:30:00Z"
+            error: "An unexpected error occurred"
+            errorCode: "INTERNAL_ERROR"
+            status: 500
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
 
   securitySchemes:
     bearerAuth:

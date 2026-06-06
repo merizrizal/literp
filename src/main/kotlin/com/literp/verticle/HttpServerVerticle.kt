@@ -33,9 +33,11 @@ import io.vertx.rxjava3.core.Vertx
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.ext.web.Router
 import io.vertx.rxjava3.ext.web.RoutingContext
+import io.vertx.ext.web.handler.HttpException
 import io.vertx.rxjava3.ext.web.handler.HSTSHandler
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 import io.vertx.rxjava3.openapi.contract.OpenAPIContract
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 class HttpServerVerticle(
@@ -127,6 +129,7 @@ class HttpServerVerticle(
 
                     val router = Router.router(vertx).apply {
                         route().handler(HSTSHandler.create())
+                        route().failureHandler(this@HttpServerVerticle::handleFailure)
 
                         get("/").handler(this@HttpServerVerticle::getIndex)
                         get("/health/db").handler(this@HttpServerVerticle::getDatabaseHealth)
@@ -250,6 +253,26 @@ class HttpServerVerticle(
                     )
                 }
             )
+    }
+
+    private fun handleFailure(context: RoutingContext) {
+        val failure = context.failure()
+        val statusCode = when {
+            failure is HttpException -> failure.statusCode
+            context.statusCode() > 0 -> context.statusCode()
+            else -> 500
+        }
+        val message = failure?.message ?: if (statusCode == 400) "Bad request" else "Internal server error"
+
+        putResponse(
+            context,
+            statusCode,
+            JsonObject()
+                .put("error", message)
+                .put("errorCode", ErrorCodes.fromStatus(statusCode))
+                .put("status", statusCode)
+                .put("errorId", UUID.randomUUID().toString())
+        )
     }
 
     private fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {

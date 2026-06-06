@@ -14,14 +14,12 @@ class ProductHandler(
 ) : BaseHandler(ProductHandler::class.java) {
 
     fun listProducts(context: RoutingContext) {
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
+        val query = parseListQuery(context, "sku,asc", PRODUCT_SORT_FIELDS) ?: return
         val sku = context.queryParam("sku").firstOrNull()
         val productType = context.queryParam("productType").firstOrNull()
-        val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
+        val activeOnly = parseBooleanQueryParam(context, "activeOnly", true) ?: return
 
-        productService.listProducts(page, size, sort, sku, productType, activeOnly)
+        productService.listProducts(query.page, query.size, query.sort, sku, productType, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}", error) }
     }
@@ -62,7 +60,7 @@ class ProductHandler(
 
     fun getProduct(context: RoutingContext) {
         val productId = context.pathParam("productId")
-        val includeVariants = context.queryParam("includeVariants").firstOrNull()?.toBoolean() ?: false
+        val includeVariants = parseBooleanQueryParam(context, "includeVariants", false) ?: return
 
         productService.getProduct(productId, includeVariants)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
@@ -120,12 +118,10 @@ class ProductHandler(
 
     fun listProductVariants(context: RoutingContext) {
         val productId = context.pathParam("productId")
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
-        val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
+        val query = parseListQuery(context, "sku,asc", VARIANT_SORT_FIELDS) ?: return
+        val activeOnly = parseBooleanQueryParam(context, "activeOnly", true) ?: return
 
-        variantService.listProductVariants(productId, page, size, sort, activeOnly)
+        variantService.listProductVariants(productId, query.page, query.size, query.sort, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -227,5 +223,22 @@ class ProductHandler(
                     notFoundMessage = "Product variant not found"
                 )
             }
+    }
+
+    private companion object {
+        private val PRODUCT_SORT_FIELDS = setOf(
+            "sku",
+            "name",
+            "productType",
+            "product_type",
+            "baseUom",
+            "base_uom",
+            "active",
+            "createdAt",
+            "created_at",
+            "updatedAt",
+            "updated_at"
+        )
+        private val VARIANT_SORT_FIELDS = setOf("sku", "name", "active", "createdAt", "created_at", "updatedAt", "updated_at")
     }
 }

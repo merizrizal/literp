@@ -32,16 +32,6 @@ DIR=pgsql make env-up
 
 ## Response Shape Note
 
-Master-data endpoints currently wrap the payload twice:
-
-```json
-{
-  "data": {
-    "data": {}
-  }
-}
-```
-
 Master-data list endpoints return:
 
 ```json
@@ -53,6 +43,25 @@ Master-data list endpoints return:
 
 Master-data create/get/update endpoints return the resource under `data`.
 Order-process commands usually return a single `data` envelope.
+
+## Master-data Query Validation
+
+Master-data list endpoints share these query rules:
+
+- `page` defaults to `0` and must be greater than or equal to `0`
+- `size` defaults to `20` and must be from `1` through `100`
+- `sort` must use `field,asc` or `field,desc`
+- unsupported sort fields return `400`
+- `activeOnly` and `includeVariants` must be `true` or `false`
+
+Examples:
+
+```bash
+curl "$BASE_URL/uom?page=-1" | jq
+curl "$BASE_URL/uom?size=101" | jq
+curl "$BASE_URL/uom?sort=unknown,asc" | jq
+curl "$BASE_URL/products?activeOnly=maybe" | jq
+```
 
 ## Utility Endpoints
 
@@ -399,6 +408,21 @@ curl -s "$BASE_URL/orders/$ORDER_ID" | jq
 ```
 
 ## Common Error Cases
+
+### Invalid pagination or sort
+
+```bash
+curl "$BASE_URL/uom?page=-1" | jq
+curl "$BASE_URL/uom?size=101" | jq
+curl "$BASE_URL/uom?sort=unknown,asc" | jq
+```
+
+### Invalid boolean query
+
+```bash
+curl "$BASE_URL/products?activeOnly=maybe" | jq
+curl "$BASE_URL/products/{productId}?includeVariants=maybe" | jq
+```
 
 ### Missing required field
 
