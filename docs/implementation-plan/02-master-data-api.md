@@ -127,17 +127,25 @@ Estimate: 2-3 engineer-days
 
 Tasks:
 
-- [ ] Implement product list filters documented in OpenAPI or remove them from the contract
-- [ ] Apply product update `baseUom` if the contract keeps it writable
-- [ ] Apply product update `active` if the contract keeps it writable
-- [ ] Apply location create/update `isActive` if the contract keeps it writable
-- [ ] Regenerate or update OpenAPI JSON after YAML changes
+- [x] Implement product list filters documented in OpenAPI or remove them from the contract
+- [x] Apply product update `baseUom` if the contract keeps it writable
+- [x] Apply product update `active` if the contract keeps it writable
+- [x] Apply location create/update `isActive` if the contract keeps it writable
+- [x] Regenerate or update OpenAPI JSON after YAML changes
 
 Done when:
 
-- [ ] Product catalog OpenAPI behavior matches handlers
-- [ ] Location OpenAPI behavior matches handlers
-- [ ] OpenAPI YAML and JSON are synchronized
+- [x] Product catalog OpenAPI behavior matches handlers
+- [x] Location OpenAPI behavior matches handlers
+- [x] OpenAPI YAML and JSON are synchronized
+
+Implementation notes:
+
+- [x] Product list supports `sku`, `productType`, and `activeOnly` filters.
+- [x] Product get supports `includeVariants=true`.
+- [x] Product create/update applies optional `active`; update also applies optional `baseUom`.
+- [x] Product variant list supports `sort` and `activeOnly`; variant update/delete are scoped by `productId` and `variantId`.
+- [x] Location create/update applies optional `isActive`.
 
 ### 02.4 Pagination And JSON Robustness
 

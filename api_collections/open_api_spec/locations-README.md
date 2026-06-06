@@ -251,8 +251,8 @@ Content-Type: application/json
 }
 ```
 
-The current handler updates location profile fields only. `isActive` remains documented
-ahead of handler support and is not applied by this update endpoint yet.
+This updates `isActive` to `false`; the location remains in the database and
+can be returned by list requests when `activeOnly=false`.
 
 ### List Locations with Filters
 

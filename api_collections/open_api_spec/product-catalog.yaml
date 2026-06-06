@@ -432,6 +432,12 @@ paths:
             default: 20
             minimum: 1
             maximum: 100
+        - name: sort
+          in: query
+          description: Sort field and order (e.g., "sku,asc" or "name,desc")
+          schema:
+            type: string
+            default: sku,asc
         - name: activeOnly
           in: query
           description: Return only active variants
@@ -693,6 +699,8 @@ components:
     UpdateUnitOfMeasureRequest:
       type: object
       description: Request body to update a unit of measure. Code is immutable.
+      required:
+        - name
       properties:
         name:
           type: string
@@ -830,6 +838,9 @@ components:
     UpdateProductRequest:
       type: object
       description: Request body to update a product. SKU cannot be changed.
+      required:
+        - name
+        - productType
       properties:
         name:
           type: string
@@ -940,6 +951,8 @@ components:
     UpdateProductVariantRequest:
       type: object
       description: Request body to update a product variant. SKU cannot be changed.
+      required:
+        - name
       properties:
         name:
           type: string

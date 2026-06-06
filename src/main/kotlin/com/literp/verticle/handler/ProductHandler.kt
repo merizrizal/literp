@@ -17,8 +17,11 @@ class ProductHandler(
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
         val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
         val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
+        val sku = context.queryParam("sku").firstOrNull()
+        val productType = context.queryParam("productType").firstOrNull()
+        val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
 
-        productService.listProducts(page, size, sort)
+        productService.listProducts(page, size, sort, sku, productType, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}", error) }
     }
@@ -30,6 +33,7 @@ class ProductHandler(
         val name = body?.getString("name")
         val productType = body?.getString("productType")
         val baseUom = body?.getString("baseUom")
+        val active = body?.getBoolean("active") ?: true
         val metadata = body?.getJsonObject("metadata")
 
         if (sku.isNullOrEmpty() || name.isNullOrEmpty() || productType.isNullOrEmpty() || baseUom.isNullOrEmpty()) {
@@ -42,7 +46,7 @@ class ProductHandler(
                 if (exists) {
                     Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
-                    productService.createProduct(sku, name, productType, baseUom, metadata)
+                    productService.createProduct(sku, name, productType, baseUom, active, metadata)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
@@ -58,8 +62,9 @@ class ProductHandler(
 
     fun getProduct(context: RoutingContext) {
         val productId = context.pathParam("productId")
+        val includeVariants = context.queryParam("includeVariants").firstOrNull()?.toBoolean() ?: false
 
-        productService.getProduct(productId)
+        productService.getProduct(productId, includeVariants)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -77,6 +82,8 @@ class ProductHandler(
         val body = validatedRequest.body.jsonObject
         val name = body?.getString("name")
         val productType = body?.getString("productType")
+        val baseUom = body?.getString("baseUom")
+        val active = body?.getBoolean("active")
         val metadata = body?.getJsonObject("metadata")
 
         if (name.isNullOrEmpty() || productType.isNullOrEmpty()) {
@@ -84,7 +91,7 @@ class ProductHandler(
             return
         }
 
-        productService.updateProduct(productId, name, productType, metadata)
+        productService.updateProduct(productId, name, productType, baseUom, active, metadata)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -116,8 +123,9 @@ class ProductHandler(
         val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
         val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
         val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
+        val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
 
-        variantService.listProductVariants(productId, page, size, sort)
+        variantService.listProductVariants(productId, page, size, sort, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -135,6 +143,7 @@ class ProductHandler(
         val body = validatedRequest.body.jsonObject
         val sku = body?.getString("sku")
         val name = body?.getString("name")
+        val active = body?.getBoolean("active") ?: true
         val attributes = body?.getJsonObject("attributes")
 
         if (sku.isNullOrEmpty() || name.isNullOrEmpty()) {
@@ -147,7 +156,7 @@ class ProductHandler(
                 if (exists) {
                     Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
-                    variantService.createProductVariant(productId, sku, name, attributes)
+                    variantService.createProductVariant(productId, sku, name, active, attributes)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
@@ -179,17 +188,20 @@ class ProductHandler(
     }
 
     fun updateProductVariant(context: RoutingContext) {
+        val productId = context.pathParam("productId")
         val variantId = context.pathParam("variantId")
-        val body = context.body().asJsonObject()
-        val name = body.getString("name")
-        val attributes = body.getJsonObject("attributes")
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
+        val name = body?.getString("name")
+        val active = body?.getBoolean("active")
+        val attributes = body?.getJsonObject("attributes")
 
         if (name.isNullOrEmpty()) {
             putErrorResponse(context, 400, "name is required")
             return
         }
 
-        variantService.updateProductVariant(variantId, name, attributes)
+        variantService.updateProductVariant(productId, variantId, name, active, attributes)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(

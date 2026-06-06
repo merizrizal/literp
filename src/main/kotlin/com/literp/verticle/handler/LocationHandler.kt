@@ -29,6 +29,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val code = body?.getString("code")
         val name = body?.getString("name")
         val locationType = body?.getString("locationType")
+        val isActive = body?.getBoolean("isActive") ?: true
         val address = body?.getJsonObject("address")
 
         if (code.isNullOrEmpty() || name.isNullOrEmpty() || locationType.isNullOrEmpty()) {
@@ -41,7 +42,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
                 if (exists) {
                     Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
-                    locationService.createLocation(code, name, locationType, address)
+                    locationService.createLocation(code, name, locationType, isActive, address)
                 }
             }
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
@@ -92,6 +93,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val body = validatedRequest.body.jsonObject
         val name = body?.getString("name")
         val locationType = body?.getString("locationType")
+        val isActive = body?.getBoolean("isActive")
         val address = body?.getJsonObject("address")
 
         if (name.isNullOrEmpty() || locationType.isNullOrEmpty()) {
@@ -99,7 +101,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
             return
         }
 
-        locationService.updateLocation(locationId, name, locationType, address)
+        locationService.updateLocation(locationId, name, locationType, isActive, address)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(

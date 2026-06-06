@@ -145,7 +145,6 @@ literp/
 Current implementation caveats:
 - Master-data responses use top-level `data` and `pagination`.
 - Order-process list responses still use the older outer `data` envelope.
-- `GET /products` only honors `page`, `size`, and `sort` even though the OpenAPI spec documents additional filters.
-- Location `isActive`, product `active`, and product `baseUom` update fields are documented in OpenAPI but not currently applied by the handlers.
+- Master-data OpenAPI contracts are aligned with the implemented handler fields for catalog and location APIs.
 - Order fulfillment writes `inventory_movement.to_location_id` with the same location as `from_location_id` because the schema requires a non-null destination.
 - Confirm, fulfill, and cancel flows are multi-step operations and are not yet wrapped in explicit database transactions.

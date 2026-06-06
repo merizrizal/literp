@@ -363,6 +363,9 @@ components:
     UpdateLocationRequest:
       type: object
       description: Request body to update an inventory location. Code is immutable.
+      required:
+        - name
+        - locationType
       properties:
         name:
           type: string

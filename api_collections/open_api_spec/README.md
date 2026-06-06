@@ -184,7 +184,6 @@ All Literp APIs adhere to these core principles:
 - Products and product variants are deactivated via `active`
 - Unit of Measure and Location delete endpoints hard-delete rows
 - Hard deletes return `409` when existing rows still reference the resource
-- Some `active` / `isActive` fields remain documented ahead of handler support
 - Preserves historical audit trails
 - Prevents breaking existing references
 
@@ -208,9 +207,8 @@ All Literp APIs adhere to these core principles:
 The specs are aligned with the database model defined in:
 - `./python/database/migration/alembic/versions/314b57a8dd0f_00_initial_migration.py`
 
-The implemented handlers are slightly narrower than the specs in a few places:
-product list filters, product update `baseUom` / `active`, and location
-`isActive` create/update behavior are documented but not currently applied.
+The master-data specs are synchronized with the implemented catalog and
+location handlers.
 
 ## Upcoming APIs
 

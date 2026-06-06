@@ -92,8 +92,8 @@ Fulfillment creates inventory movement
 
 ## Important Current Realities
 
-- the OpenAPI contracts are broader than the implemented handler behavior in a few places
-- the Bruno collection has been aligned to the handlers, not the forward-looking fields
+- the master-data OpenAPI contracts are aligned with the implemented catalog and location handlers
+- the Bruno collection has been aligned to the handlers
 - master-data responses are normalized to top-level `data` and `pagination`
 - order-process list responses still need envelope normalization
 - confirm, fulfill, and cancel are not yet wrapped in explicit database transactions
@@ -112,4 +112,4 @@ Fulfillment creates inventory movement
 - refund endpoint flow
 - partial fulfillment endpoint
 - consistent response envelope normalization
-- complete parity between OpenAPI-documented fields and handler behavior
+- complete parity between order-process OpenAPI-documented fields and handler behavior

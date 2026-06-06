@@ -64,7 +64,7 @@ deployment approval delays.
 |---|---|---|---|---:|
 | 00 | `00-implementation-overview.md` | Explain execution plan | Done for initial planning | Documentation only |
 | 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Complete | 0 remaining engineer-days |
-| 02 | `02-master-data-api.md` | Complete catalog and location API parity | In progress: 02.1 and 02.2 complete | 4.5-7 remaining engineer-days |
+| 02 | `02-master-data-api.md` | Complete catalog and location API parity | In progress: 02.1, 02.2, and 02.3 complete | 2.5-4 remaining engineer-days |
 | 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 02 is done | 10-18 remaining engineer-days |
 | 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Queued until earlier phase gates are done | 9-16 remaining engineer-days |
 | 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | Future phase | 18-35 future engineer-days |
@@ -72,7 +72,7 @@ deployment approval delays.
 Estimated remaining MVP hardening:
 
 ```text
-23.5-41 engineer-days
+21.5-38 engineer-days
 ```
 
 The current branch already implements the functional MVP path. The remaining

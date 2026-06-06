@@ -71,10 +71,18 @@ Total API endpoints to verify: `29`
 
 - [ ] Product delete sets `active = false`
 - [ ] Product delete returns `404` for missing or already inactive products
+- [ ] Product list applies `sku`, `productType`, and `activeOnly`
+- [ ] Product get applies `includeVariants=true`
+- [ ] Product create/update applies documented `active`
+- [ ] Product update applies documented `baseUom`
 - [ ] Product variant delete sets `active = false`
 - [ ] Product variant delete returns `404` for missing, mismatched parent product, or already inactive variants
+- [ ] Product variant list applies `sort` and `activeOnly`
+- [ ] Product variant create/update applies documented `active`
+- [ ] Product variant update returns `404` for mismatched parent product
 - [ ] UOM delete removes the row
 - [ ] UOM delete returns `404` for missing rows and `409` for referenced rows
+- [ ] Location create/update applies documented `isActive`
 - [ ] Location delete removes the row
 - [ ] Location delete returns `404` for missing rows and `409` for referenced rows
 - [ ] Draft order creation defaults `salesChannel` to `POS` when omitted
@@ -130,6 +138,6 @@ Total API endpoints to verify: `29`
 ## Known Gaps to Keep in Mind
 
 - [ ] order-process list responses still need envelope normalization
-- [ ] some OpenAPI-documented fields are not applied by handlers yet
+- [ ] order-process OpenAPI parity still needs review after response-envelope normalization
 - [ ] some multi-step order flows still need broader transaction coverage
 - [ ] fulfillment still uses the non-null destination workaround for inventory movement

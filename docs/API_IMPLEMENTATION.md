@@ -209,30 +209,36 @@ Validation:
 ### Products
 
 Supported:
-- list with `page`, `size`, `sort`
+- list with `page`, `size`, `sort`, `sku`, `productType`, and `activeOnly`
 - create with SKU uniqueness check
-- get, update, soft delete
+- get with optional `includeVariants`
+- update
+- soft delete
 
 Validation:
 - create requires `sku`, `name`, `productType`, `baseUom`
 - update requires `name`, `productType`
 
 Important implementation note:
-- handler and repository currently only honor `page`, `size`, and `sort` on list
-- `baseUom` and `active` are not currently applied on update even if sent
+- create applies optional `active`
+- update applies optional `baseUom` and `active`
 
 ### Product Variants
 
 Supported:
-- list nested under product
+- list nested under product with `page`, `size`, `sort`, and `activeOnly`
 - create with SKU uniqueness check
 - get by `productId` and `variantId`
-- update by `variantId`
-- soft delete by `variantId`
+- update by `productId` and `variantId`
+- soft delete by `productId` and `variantId`
 
 Validation:
 - create requires `sku`, `name`
 - update requires `name`
+
+Important implementation note:
+- create applies optional `active`
+- update applies optional `active`
 
 ### Locations
 
@@ -249,7 +255,7 @@ Validation:
 - update requires `name`, `locationType`
 
 Important implementation note:
-- `isActive` is documented in OpenAPI but is not currently used by create or update handlers
+- create and update apply optional `isActive`
 
 ### Order Process
 
@@ -425,14 +431,12 @@ OpenAPI contracts:
 
 Important distinction:
 - the Bruno collection is synchronized to the implemented handlers
-- the OpenAPI specs still include a few forward-looking fields that the current handlers ignore
+- the master-data OpenAPI specs are synchronized with the implemented catalog and location handlers
 
 ## Known Limitations
 
 - confirm, fulfill, and cancel are multi-step flows without explicit database transactions
 - order-process list responses are still double wrapped under `data`
-- product list filtering in OpenAPI is broader than the current implementation
-- location `isActive` and product update `baseUom` / `active` are not currently applied
 - order fulfillment writes `to_location_id` equal to `from_location_id`
 - receipt persistence exists in schema and seed data but is not wired to API operations
 - refunds are not exposed through a dedicated endpoint

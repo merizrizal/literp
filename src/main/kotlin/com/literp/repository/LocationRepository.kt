@@ -103,22 +103,28 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
             }
     }
 
-    fun createLocation(code: String, name: String, locationType: String, address: JsonObject?): Single<JsonObject> {
+    fun createLocation(
+        code: String,
+        name: String,
+        locationType: String,
+        isActive: Boolean,
+        address: JsonObject?
+    ): Single<JsonObject> {
         val locationId = UUID.randomUUID().toString()
         val query = """
             INSERT INTO location (location_id, code, name, location_type, is_active, address, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, true, $5, NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
         """.trimIndent()
 
         return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(locationId, code, name, locationType, address?.encode()))
+            .rxExecute(Tuple.of(locationId, code, name, locationType, isActive, address?.encode()))
             .map {
                 JsonObject()
                     .put("locationId", locationId)
                     .put("code", code)
                     .put("name", name)
                     .put("locationType", locationType)
-                    .put("isActive", true)
+                    .put("isActive", isActive)
                     .put("address", address ?: JsonObject())
             }
     }
@@ -187,17 +193,18 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
         locationId: String,
         name: String,
         locationType: String,
+        isActive: Boolean?,
         address: JsonObject?
     ): Single<JsonObject> {
         val query = """
             UPDATE location
-            SET name = $1, location_type = $2, address = $3, updated_at = NOW()
-            WHERE location_id = $4
+            SET name = $1, location_type = $2, is_active = COALESCE($3, is_active), address = $4, updated_at = NOW()
+            WHERE location_id = $5
             RETURNING location_id, code, name, location_type, is_active, address, created_at, updated_at
         """.trimIndent()
 
         return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(name, locationType, address?.encode(), locationId))
+            .rxExecute(Tuple.of(name, locationType, isActive, address?.encode(), locationId))
             .flatMap { result ->
                 if (result.size() == 0) {
                     Single.error(Exception(ErrorCodes.fromStatus(404)))

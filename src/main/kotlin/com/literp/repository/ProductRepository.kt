@@ -9,7 +9,14 @@ import java.util.*
 
 class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::class.java) {
 
-    fun listProducts(page: Int, size: Int, sort: String): Single<JsonObject> {
+    fun listProducts(
+        page: Int,
+        size: Int,
+        sort: String,
+        sku: String?,
+        productType: String?,
+        activeOnly: Boolean
+    ): Single<JsonObject> {
         val offset = page * size
         val parts = sort.split(",")
         val rawField = parts.getOrNull(0)?.trim() ?: "sku"
@@ -27,11 +34,28 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
 
         val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "ASC"
 
-        val query = "SELECT COUNT(*) as total FROM product WHERE active = true"
+        var whereClause = "WHERE true"
+        val params = mutableListOf<Any?>()
+
+        if (!sku.isNullOrEmpty()) {
+            whereClause += " AND sku ILIKE $${params.size + 1}"
+            params.add("%$sku%")
+        }
+
+        if (!productType.isNullOrEmpty()) {
+            whereClause += " AND product_type = $${params.size + 1}"
+            params.add(productType)
+        }
+
+        if (activeOnly) {
+            whereClause += " AND active = true"
+        }
+
+        val query = "SELECT COUNT(*) as total FROM product $whereClause"
         val dataQuery = """
             SELECT product_id, sku, name, product_type, base_uom, active, metadata, created_at, updated_at
             FROM product
-            WHERE active = true
+            $whereClause
             ORDER BY $sortField $sortOrder
             LIMIT $size OFFSET $offset
         """.trimIndent()
@@ -39,11 +63,11 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
         var total = 0
 
         return pool.preparedQuery(query)
-            .rxExecute()
+            .rxExecute(Tuple.from(params))
             .flatMap { countResult ->
                 total = countResult.first().getInteger("total")
                 pool.preparedQuery(dataQuery)
-                    .rxExecute()
+                    .rxExecute(Tuple.from(params))
             }
             .map { result ->
                 val data = result.map { row ->
@@ -76,23 +100,26 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
         name: String,
         productType: String,
         baseUom: String,
+        active: Boolean,
         metadata: JsonObject?
     ): Single<JsonObject> {
         val productId = UUID.randomUUID().toString()
         val query = """
             INSERT INTO product (product_id, sku, name, product_type, base_uom, active, metadata, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, true, $6, NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
         """.trimIndent()
 
         return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(
-                productId,
-                sku,
-                name,
-                productType,
-                baseUom,
-                metadata?.encode()
-            ))
+            .rxExecute(
+                Tuple.tuple()
+                    .addString(productId)
+                    .addString(sku)
+                    .addString(name)
+                    .addString(productType)
+                    .addString(baseUom)
+                    .addBoolean(active)
+                    .addValue(metadata?.encode())
+            )
             .map {
                 JsonObject()
                     .put("productId", productId)
@@ -100,20 +127,94 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                     .put("name", name)
                     .put("productType", productType)
                     .put("baseUom", baseUom)
-                    .put("active", true)
+                    .put("active", active)
                     .put("metadata", metadata ?: JsonObject())
+            }
+            .onErrorResumeNext { error ->
+                if (isForeignKeyViolation(error)) {
+                    Single.error(Exception("baseUom must be an existing unit of measure"))
+                } else {
+                    Single.error(error)
+                }
             }
     }
 
-    fun getProduct(productId: String): Single<JsonObject> {
+    fun getProduct(productId: String, includeVariants: Boolean): Single<JsonObject> {
         val query = """
             SELECT product_id, sku, name, product_type, base_uom, active, metadata, created_at, updated_at
             FROM product
             WHERE product_id = $1 AND active = true
         """.trimIndent()
 
+        val variantsQuery = """
+            SELECT variant_id, product_id, sku, name, attributes, active, created_at, updated_at
+            FROM product_variant
+            WHERE product_id = $1 AND active = true
+            ORDER BY sku ASC
+        """.trimIndent()
+
         return pool.preparedQuery(query)
             .rxExecute(Tuple.of(productId))
+            .flatMap { result ->
+                if (result.size() == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    val row = result.first()
+                    val metadata = JsonObject(row.getString("metadata"))
+                    val product = JsonObject()
+                        .put("productId", row.getString("product_id"))
+                        .put("sku", row.getString("sku"))
+                        .put("name", row.getString("name"))
+                        .put("productType", row.getString("product_type"))
+                        .put("baseUom", row.getString("base_uom"))
+                        .put("active", row.getBoolean("active"))
+                        .put("metadata", metadata)
+                        .put("createdAt", row.getLocalDateTime("created_at").toString())
+                        .put("updatedAt", row.getLocalDateTime("updated_at").toString())
+
+                    if (!includeVariants) {
+                        Single.just(product)
+                    } else {
+                        pool.preparedQuery(variantsQuery)
+                            .rxExecute(Tuple.of(productId))
+                            .map { variantsResult ->
+                                val variants = variantsResult.map { variantRow ->
+                                    val attributes = JsonObject(variantRow.getString("attributes"))
+                                    JsonObject()
+                                        .put("variantId", variantRow.getString("variant_id"))
+                                        .put("productId", variantRow.getString("product_id"))
+                                        .put("sku", variantRow.getString("sku"))
+                                        .put("name", variantRow.getString("name"))
+                                        .put("attributes", attributes)
+                                        .put("active", variantRow.getBoolean("active"))
+                                        .put("createdAt", variantRow.getLocalDateTime("created_at").toString())
+                                        .put("updatedAt", variantRow.getLocalDateTime("updated_at").toString())
+                                }
+
+                                product.put("variants", variants)
+                            }
+                    }
+                }
+            }
+    }
+
+    fun updateProduct(
+        productId: String,
+        name: String,
+        productType: String,
+        baseUom: String?,
+        active: Boolean?,
+        metadata: JsonObject?
+    ): Single<JsonObject> {
+        val query = """
+            UPDATE product
+            SET name = $1, product_type = $2, base_uom = COALESCE($3, base_uom), active = COALESCE($4, active), metadata = $5, updated_at = NOW()
+            WHERE product_id = $6 AND active = true
+            RETURNING product_id, sku, name, product_type, base_uom, active, metadata, created_at, updated_at
+        """.trimIndent()
+
+        return pool.preparedQuery(query)
+            .rxExecute(Tuple.of(name, productType, baseUom, active, metadata?.encode(), productId))
             .flatMap { result ->
                 if (result.size() == 0) {
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
@@ -133,40 +234,11 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
                     )
                 }
             }
-    }
-
-    fun updateProduct(
-        productId: String,
-        name: String,
-        productType: String,
-        metadata: JsonObject?
-    ): Single<JsonObject> {
-        val query = """
-            UPDATE product
-            SET name = $1, product_type = $2, metadata = $3, updated_at = NOW()
-            WHERE product_id = $4 AND active = true
-            RETURNING product_id, sku, name, product_type, base_uom, active, metadata, created_at, updated_at
-        """.trimIndent()
-
-        return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(name, productType, metadata?.encode(), productId))
-            .flatMap { result ->
-                if (result.size() == 0) {
-                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+            .onErrorResumeNext { error ->
+                if (isForeignKeyViolation(error)) {
+                    Single.error(Exception("baseUom must be an existing unit of measure"))
                 } else {
-                    val row = result.first()
-                    val metadata = JsonObject(row.getString("metadata"))
-                    Single.just(JsonObject()
-                        .put("productId", row.getString("product_id"))
-                        .put("sku", row.getString("sku"))
-                        .put("name", row.getString("name"))
-                        .put("productType", row.getString("product_type"))
-                        .put("baseUom", row.getString("base_uom"))
-                        .put("active", row.getBoolean("active"))
-                        .put("metadata", metadata)
-                        .put("createdAt", row.getLocalDateTime("created_at").toString())
-                        .put("updatedAt", row.getLocalDateTime("updated_at").toString())
-                    )
+                    Single.error(error)
                 }
             }
     }
