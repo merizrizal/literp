@@ -333,7 +333,8 @@ Rules:
 
 ## Response Shapes
 
-Current response shapes are not fully normalized across handlers.
+Master-data response shapes are normalized to the OpenAPI contracts. Utility
+and order-process response shapes are still documented separately below.
 
 ### Utility endpoints
 
@@ -341,37 +342,35 @@ Current response shapes are not fully normalized across handlers.
 
 ### List endpoints
 
-List endpoints currently return:
+Master-data list endpoints return:
 
 ```json
 {
-  "data": {
-    "data": [],
-    "pagination": {
-      "page": 0,
-      "size": 20,
-      "totalElements": 0,
-      "totalPages": 0
-    }
+  "data": [],
+  "pagination": {
+    "page": 0,
+    "size": 20,
+    "totalElements": 0,
+    "totalPages": 0
   }
 }
 ```
 
 ### Master-data single-resource endpoints
 
-Most master-data CRUD reads and writes currently return:
+UOM, Product, Product Variant, and Location create/get/update flows return:
 
 ```json
 {
   "data": {
-    "data": {
-      "id": "..."
-    }
+    "id": "..."
   }
 }
 ```
 
-This applies to UOM, Product, Product Variant, and Location create/get/update flows.
+Migration note for clients: master-data list payloads moved from `data.data` to
+top-level `data`, list pagination moved from `data.pagination` to top-level
+`pagination`, and single-resource payloads moved from `data.data` to `data`.
 
 ### Order-process command endpoints
 
@@ -410,10 +409,10 @@ Order-process commands return a single envelope:
 
 ## Delete Strategy
 
-- UOM: hard delete
-- Product: soft delete via `active = false`
-- Product Variant: soft delete via `active = false`
-- Location: hard delete
+- UOM: hard delete; missing rows return `404`; foreign-key references return `409`
+- Product: soft delete via `active = false`; missing or already inactive rows return `404`
+- Product Variant: soft delete via `active = false`; missing, mismatched parent product, or already inactive rows return `404`
+- Location: hard delete; missing rows return `404`; foreign-key references return `409`
 - Sales Order: lifecycle-driven, not deleted by API
 
 ## Bruno and OpenAPI Assets
@@ -431,7 +430,7 @@ Important distinction:
 ## Known Limitations
 
 - confirm, fulfill, and cancel are multi-step flows without explicit database transactions
-- list responses and some single-resource responses are double wrapped under `data`
+- order-process list responses are still double wrapped under `data`
 - product list filtering in OpenAPI is broader than the current implementation
 - location `isActive` and product update `baseUom` / `active` are not currently applied
 - order fulfillment writes `to_location_id` equal to `from_location_id`

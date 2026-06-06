@@ -32,8 +32,8 @@ class ProductVariantServiceImpl(
         return repository.updateProductVariant(variantId, name, attributes).toVertxFuture()
     }
 
-    override fun deleteProductVariant(variantId: String): Future<Void> {
-        return repository.deleteProductVariant(variantId).toVertxVoidFuture()
+    override fun deleteProductVariant(productId: String, variantId: String): Future<Void> {
+        return repository.deleteProductVariant(productId, variantId).toVertxVoidFuture()
     }
 
     override fun checkSkuExists(sku: String): Future<Boolean> {

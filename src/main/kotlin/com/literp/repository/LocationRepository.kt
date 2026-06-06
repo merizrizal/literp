@@ -224,8 +224,20 @@ class LocationRepository(pool: Pool) : BaseRepository(pool, LocationRepository::
 
         return pool.preparedQuery(query)
             .rxExecute(Tuple.of(locationId))
-            .flatMapCompletable { Single.just(it).ignoreElement() }
-            .toSingle { }
+            .flatMap { result ->
+                if (result.rowCount() == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(Unit)
+                }
+            }
+            .onErrorResumeNext { error ->
+                if (isForeignKeyViolation(error)) {
+                    Single.error(Exception("Location is referenced and cannot be deleted"))
+                } else {
+                    Single.error(error)
+                }
+            }
     }
 
     fun checkCodeExists(code: String): Single<Boolean> {

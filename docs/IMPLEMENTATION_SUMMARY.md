@@ -94,8 +94,8 @@ Fulfillment creates inventory movement
 
 - the OpenAPI contracts are broader than the implemented handler behavior in a few places
 - the Bruno collection has been aligned to the handlers, not the forward-looking fields
-- list responses are double wrapped under `data`
-- some master-data single-resource responses are also double wrapped
+- master-data responses are normalized to top-level `data` and `pagination`
+- order-process list responses still need envelope normalization
 - confirm, fulfill, and cancel are not yet wrapped in explicit database transactions
 
 ## What This Branch Is Good For

@@ -175,13 +175,18 @@ class ProductRepository(pool: Pool) : BaseRepository(pool, ProductRepository::cl
         val query = """
             UPDATE product
             SET active = false, updated_at = NOW()
-            WHERE product_id = $1
+            WHERE product_id = $1 AND active = true
         """.trimIndent()
 
         return pool.preparedQuery(query)
             .rxExecute(Tuple.of(productId))
-            .flatMapCompletable { Single.just(it).ignoreElement() }
-            .toSingle { }
+            .flatMap { result ->
+                if (result.rowCount() == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(Unit)
+                }
+            }
     }
 
     fun checkSkuExists(sku: String): Single<Boolean> {

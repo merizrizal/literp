@@ -37,7 +37,7 @@ Manage core product entities with SKU, pricing, and type.
 - `POST /products` - Create a new product
 - `GET /products/{productId}` - Get product details with optional variants
 - `PUT /products/{productId}` - Update product (SKU is immutable)
-- `DELETE /products/{productId}` - Delete product (if no inventory/orders exist)
+- `DELETE /products/{productId}` - Soft-delete product
 
 **Product Types:**
 - `STOCK` - Inventory-tracked products
@@ -56,7 +56,7 @@ Manage variants like sizes, colors, or other combinations.
 - `POST /products/{productId}/variants` - Create a new variant
 - `GET /products/{productId}/variants/{variantId}` - Get variant details
 - `PUT /products/{productId}/variants/{variantId}` - Update variant (SKU is immutable)
-- `DELETE /products/{productId}/variants/{variantId}` - Delete variant
+- `DELETE /products/{productId}/variants/{variantId}` - Soft-delete variant
 
 **Variant Examples:**
 - A "T-Shirt" product might have variants: "T-Shirt - Small - Red", "T-Shirt - Medium - Blue", etc.
@@ -86,6 +86,7 @@ Manage variants like sizes, colors, or other combinations.
 
 ### 5. Active/Inactive Status
 - Products and variants can be soft-deleted by setting `active = false`
+- Delete endpoints set `active = false`; deleting a missing or already inactive resource returns `404`
 - This prevents hard deletes from breaking historical references
 - Filters default to `activeOnly=true` for cleaner list views
 
@@ -334,7 +335,7 @@ All entity fields, types, enums, and constraints in this spec match the database
 |--------------|----------------|-------|
 | Unit of Measure | `unit_of_measure` | Immutable code |
 | Product | `product` | Soft-delete via active flag |
-| Product Variant | `product_variant` | Cascade delete with product |
+| Product Variant | `product_variant` | Soft-delete via active flag |
 
 ## Future Enhancements
 

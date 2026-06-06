@@ -137,14 +137,14 @@ literp/
 
 ## Implementation Notes
 
-- Products and variants use soft delete.
-- Locations and UOMs use hard delete.
+- Products and variants use soft delete; deleting a missing or already inactive row returns `404`.
+- Locations and UOMs use hard delete; missing rows return `404`, and foreign-key references return `409`.
 - Sales orders use status transitions instead of deletion.
 - Seed data includes catalog, locations, inventory movements, orders, payments, POS records, and manufacturing records.
 
 Current implementation caveats:
-- List endpoints return an outer `data` envelope around the repository payload.
-- Master-data single-resource endpoints currently return `data.data`.
+- Master-data responses use top-level `data` and `pagination`.
+- Order-process list responses still use the older outer `data` envelope.
 - `GET /products` only honors `page`, `size`, and `sort` even though the OpenAPI spec documents additional filters.
 - Location `isActive`, product `active`, and product `baseUom` update fields are documented in OpenAPI but not currently applied by the handlers.
 - Order fulfillment writes `inventory_movement.to_location_id` with the same location as `from_location_id` because the schema requires a non-null destination.

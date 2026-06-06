@@ -42,17 +42,16 @@ Master-data endpoints currently wrap the payload twice:
 }
 ```
 
-List endpoints currently return:
+Master-data list endpoints return:
 
 ```json
 {
-  "data": {
-    "data": [],
-    "pagination": {}
-  }
+  "data": [],
+  "pagination": {}
 }
 ```
 
+Master-data create/get/update endpoints return the resource under `data`.
 Order-process commands usually return a single `data` envelope.
 
 ## Utility Endpoints
@@ -112,6 +111,10 @@ curl -X PUT "$BASE_URL/uom/{uomId}" \
 curl -i -X DELETE "$BASE_URL/uom/{uomId}"
 ```
 
+Expected delete errors:
+- `404` when the UOM does not exist
+- `409` when products still reference the UOM
+
 ## Products
 
 ### List
@@ -164,6 +167,8 @@ curl -X PUT "$BASE_URL/products/{productId}" \
 curl -i -X DELETE "$BASE_URL/products/{productId}"
 ```
 
+Product delete is a soft delete. A missing or already inactive product returns `404`.
+
 ## Product Variants
 
 ### List
@@ -212,6 +217,9 @@ curl -X PUT "$BASE_URL/products/{productId}/variants/{variantId}" \
 ```bash
 curl -i -X DELETE "$BASE_URL/products/{productId}/variants/{variantId}"
 ```
+
+Product variant delete is a soft delete scoped to the parent product. A missing variant,
+mismatched parent product, or already inactive variant returns `404`.
 
 ## Locations
 
@@ -277,6 +285,10 @@ curl -X PUT "$BASE_URL/locations/{locationId}" \
 ```bash
 curl -i -X DELETE "$BASE_URL/locations/{locationId}"
 ```
+
+Expected delete errors:
+- `404` when the location does not exist
+- `409` when inventory, order, POS, or manufacturing records still reference the location
 
 ## Order Process
 

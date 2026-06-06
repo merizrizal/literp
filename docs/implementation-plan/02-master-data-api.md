@@ -80,17 +80,23 @@ Estimate: 1-2 engineer-days
 
 Tasks:
 
-- [ ] Choose the final list response envelope
-- [ ] Normalize list response envelopes
-- [ ] Choose the final single-resource response envelope
-- [ ] Normalize single-resource response envelopes
-- [ ] Update docs and Bruno examples for the final response shape
+- [x] Choose the final list response envelope
+- [x] Normalize list response envelopes
+- [x] Choose the final single-resource response envelope
+- [x] Normalize single-resource response envelopes
+- [x] Update docs and Bruno examples for the final response shape
 
 Done when:
 
-- [ ] UOM, product, variant, and location responses use one documented envelope style
-- [ ] API docs and Bruno examples match the actual response shape
-- [ ] Existing clients have a documented migration note if response shape changes
+- [x] UOM, product, variant, and location responses use one documented envelope style
+- [x] API docs and Bruno examples match the actual response shape
+- [x] Existing clients have a documented migration note if response shape changes
+
+Implementation notes:
+
+- [x] Master-data list responses use `{ "data": [], "pagination": {} }`
+- [x] Master-data create/get/update responses use `{ "data": { ... } }`
+- [x] Client migration note: replace `data.data` reads with `data`, and replace `data.pagination` reads with top-level `pagination`
 
 ### 02.2 Delete Semantics And Error Behavior
 
@@ -98,16 +104,22 @@ Estimate: 1-2 engineer-days
 
 Tasks:
 
-- [ ] Decide final delete policy for UOM and Location
-- [ ] Return `404` when delete requests target missing resources
-- [ ] Handle foreign-key delete conflicts with stable `409` responses
-- [ ] Document hard delete and soft delete behavior per resource
+- [x] Decide final delete policy for UOM and Location
+- [x] Return `404` when delete requests target missing resources
+- [x] Handle foreign-key delete conflicts with stable `409` responses
+- [x] Document hard delete and soft delete behavior per resource
 
 Done when:
 
-- [ ] Delete behavior is explicit for every master-data resource
-- [ ] Missing resources return stable not-found responses
-- [ ] Referential conflicts return stable conflict responses
+- [x] Delete behavior is explicit for every master-data resource
+- [x] Missing resources return stable not-found responses
+- [x] Referential conflicts return stable conflict responses
+
+Implementation notes:
+
+- [x] UOM and location use hard delete; missing rows return `404`, and PostgreSQL foreign-key violations return stable `409` responses.
+- [x] Product and product variant use soft delete via `active = false`; missing or already inactive rows return `404`.
+- [x] Product variant delete is scoped by both `productId` and `variantId`; mismatched parent product paths return `404`.
 
 ### 02.3 OpenAPI And Handler Parity
 
@@ -167,7 +179,7 @@ Done when:
 - Product and variant SKUs remain immutable.
 - UOM code and location code remain immutable.
 - Product and variant soft delete remains the default because order history can reference them.
-- Location and UOM hard delete can remain only if foreign-key conflict behavior is explicit.
+- Location and UOM hard delete remains the current policy because foreign-key conflict behavior is explicit.
 
 ## Definition of Done
 
@@ -175,4 +187,4 @@ Done when:
 - [ ] Bruno examples match actual responses
 - [ ] Master-data endpoints have automated success and error tests
 - [ ] Response envelope shape is stable
-- [ ] Delete behavior is documented and verified
+- [x] Delete behavior is documented and verified

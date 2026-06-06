@@ -4,7 +4,6 @@ import com.literp.common.ErrorCodes
 import com.literp.service.master.ProductService
 import com.literp.service.master.ProductVariantService
 import io.vertx.core.Future
-import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
@@ -20,7 +19,7 @@ class ProductHandler(
         val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
 
         productService.listProducts(page, size, sort)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}", error) }
     }
 
@@ -46,7 +45,7 @@ class ProductHandler(
                     productService.createProduct(sku, name, productType, baseUom, metadata)
                 }
             }
-            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -61,7 +60,7 @@ class ProductHandler(
         val productId = context.pathParam("productId")
 
         productService.getProduct(productId)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -86,7 +85,7 @@ class ProductHandler(
         }
 
         productService.updateProduct(productId, name, productType, metadata)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -119,7 +118,7 @@ class ProductHandler(
         val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
 
         variantService.listProductVariants(productId, page, size, sort)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -151,7 +150,7 @@ class ProductHandler(
                     variantService.createProductVariant(productId, sku, name, attributes)
                 }
             }
-            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -168,7 +167,7 @@ class ProductHandler(
         val variantId = context.pathParam("variantId")
 
         variantService.getProductVariant(productId, variantId)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -191,7 +190,7 @@ class ProductHandler(
         }
 
         variantService.updateProductVariant(variantId, name, attributes)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -203,9 +202,10 @@ class ProductHandler(
     }
 
     fun deleteProductVariant(context: RoutingContext) {
+        val productId = context.pathParam("productId")
         val variantId = context.pathParam("variantId")
 
-        variantService.deleteProductVariant(variantId)
+        variantService.deleteProductVariant(productId, variantId)
             .onSuccess { context.response().setStatusCode(204).end() }
             .onFailure { error ->
                 putMappedErrorResponse(

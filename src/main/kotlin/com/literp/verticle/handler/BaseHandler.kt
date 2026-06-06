@@ -17,13 +17,21 @@ open class BaseHandler(clazz: Class<*>) {
     }
 
     protected fun putSuccessResponse(context: RoutingContext, statusCode: Int, data: JsonObject) {
+        logSuccess(context, statusCode)
+        putResponse(context, statusCode, JsonObject().put("data", data))
+    }
+
+    protected fun putSuccessEnvelopeResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {
+        logSuccess(context, statusCode)
+        putResponse(context, statusCode, response)
+    }
+
+    private fun logSuccess(context: RoutingContext, statusCode: Int) {
         val id = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
         val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
         logger.info("Handling id=$id status=$statusCode method=$method path=$path requestId=$requestId")
-
-        putResponse(context, statusCode, JsonObject().put("data", data))
     }
 
     protected fun putErrorResponse(
@@ -83,6 +91,7 @@ open class BaseHandler(clazz: Class<*>) {
                 || message.equals(ErrorCodes.CONFLICT, ignoreCase = true)
                 || message.contains("already exists", ignoreCase = true)
                 || message.contains("conflict", ignoreCase = true)
+                || message.contains("referenced", ignoreCase = true)
                 || message.contains("cannot cancel", ignoreCase = true)
                 || message.contains("only be captured", ignoreCase = true)
                 || message.contains("only confirmed", ignoreCase = true)

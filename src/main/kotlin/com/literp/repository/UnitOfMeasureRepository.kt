@@ -140,8 +140,20 @@ class UnitOfMeasureRepository(pool: Pool) : BaseRepository(pool, UnitOfMeasureRe
 
         return pool.preparedQuery(query)
             .rxExecute(Tuple.of(uomId))
-            .flatMapCompletable { Single.just(it).ignoreElement() }
-            .toSingle { }
+            .flatMap { result ->
+                if (result.rowCount() == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(Unit)
+                }
+            }
+            .onErrorResumeNext { error ->
+                if (isForeignKeyViolation(error)) {
+                    Single.error(Exception("Unit of measure is referenced and cannot be deleted"))
+                } else {
+                    Single.error(error)
+                }
+            }
     }
 
     fun checkCodeExists(code: String): Single<Boolean> {

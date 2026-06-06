@@ -8,7 +8,8 @@ contract checks, consistent error behavior, and operational visibility.
 ## Scope
 
 This phase covers tests, OpenAPI and Bruno synchronization, response and error
-contracts, logging, health checks, CI, and readiness for client integration.
+contracts, logging, health checks, CI, project structure readiness, and
+readiness for client integration.
 
 ## Current Completed Work
 
@@ -120,12 +121,33 @@ Done when:
 - [ ] The plan states which endpoints must be protected first
 - [ ] Later implementation work is not blocked by an undefined auth strategy
 
+### 04.6 Project Structure Gate
+
+Estimate: 1-2 engineer-days
+
+Tasks:
+
+- [ ] Decide whether to keep the current layer-based backend packages through Phase 05 or move toward domain-based packages first
+- [ ] If restructuring, define the target package layout for catalog, location, order, inventory, POS, and manufacturing code
+- [ ] Decide whether API assets stay under `api_collections` or move to a clearer `api/openapi` and `api/bruno` layout
+- [ ] Move files only after Phase 02 and Phase 03 behavior is covered well enough by automated tests
+- [ ] Update imports, service proxy references, OpenAPI paths, Bruno paths, docs, and CI references if files move
+- [ ] Document the final structure decision in the README and implementation plan
+
+Done when:
+
+- [ ] Phase 05 has a clear package and asset layout before POS and manufacturing code expands
+- [ ] Any structure changes are mechanical and verified by build, tests, OpenAPI validation, and Bruno path checks
+- [ ] Existing feature work is not mixed with structural file moves
+
 ## Assumptions
 
 - Automated tests should target business behavior before broad refactors.
 - OpenAPI remains the external API contract.
 - Bruno remains the manual request collection.
 - Authentication is important, but should follow a stable workflow baseline.
+- The current project structure is acceptable through Phase 02 and Phase 03.
+- A structure refactor should happen only after behavior is test-covered enough to make file moves low risk.
 
 ## Definition of Done
 
@@ -134,3 +156,4 @@ Done when:
 - [ ] Error responses are stable and documented
 - [ ] Logs are useful for tracing a single request through handler and repository work
 - [ ] Documentation updates are part of each API behavior change
+- [ ] Project structure is either confirmed as sufficient for Phase 05 or refactored before Phase 05 starts

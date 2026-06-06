@@ -145,10 +145,10 @@ The OpenAPI contracts describe a normalized envelope:
 }
 ```
 
-The current handlers are not fully normalized yet. List endpoints return an outer
-`data` object around `{ "data": [], "pagination": {} }`, many master-data
-single-resource endpoints return `data.data`, and order-process command
-endpoints usually return a single `data` envelope.
+Master-data handlers now follow this shape. List endpoints return top-level
+`data` and `pagination`; create/get/update endpoints return a top-level `data`
+resource. Order-process list endpoints still use the older outer `data` wrapper
+and should be normalized in the order/inventory phase.
 
 ### Error Format
 The current handlers return error responses in this shape:
@@ -182,7 +182,8 @@ All Literp APIs adhere to these core principles:
 
 ### 2. Soft Deletes
 - Products and product variants are deactivated via `active`
-- Unit of Measure and Location delete endpoints currently hard-delete rows
+- Unit of Measure and Location delete endpoints hard-delete rows
+- Hard deletes return `409` when existing rows still reference the resource
 - Some `active` / `isActive` fields remain documented ahead of handler support
 - Preserves historical audit trails
 - Prevents breaking existing references

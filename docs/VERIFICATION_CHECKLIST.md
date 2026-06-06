@@ -70,9 +70,13 @@ Total API endpoints to verify: `29`
 ## Data and Lifecycle Rules
 
 - [ ] Product delete sets `active = false`
+- [ ] Product delete returns `404` for missing or already inactive products
 - [ ] Product variant delete sets `active = false`
+- [ ] Product variant delete returns `404` for missing, mismatched parent product, or already inactive variants
 - [ ] UOM delete removes the row
+- [ ] UOM delete returns `404` for missing rows and `409` for referenced rows
 - [ ] Location delete removes the row
+- [ ] Location delete returns `404` for missing rows and `409` for referenced rows
 - [ ] Draft order creation defaults `salesChannel` to `POS` when omitted
 - [ ] Add line is blocked for non-`DRAFT` orders
 - [ ] Confirm is blocked when the order has no lines
@@ -86,8 +90,8 @@ Total API endpoints to verify: `29`
 ## Response Verification
 
 - [ ] Utility endpoints return plain JSON objects
-- [ ] List endpoints return outer `data` with nested `data` + `pagination`
-- [ ] Master-data create/get/update responses return `data.data`
+- [ ] Master-data list endpoints return top-level `data` plus top-level `pagination`
+- [ ] Master-data create/get/update responses return the resource under top-level `data`
 - [ ] Order-process command responses return a single `data` envelope
 - [ ] Error responses contain `error`, `errorCode`, `status`, and `errorId`
 
@@ -125,7 +129,7 @@ Total API endpoints to verify: `29`
 
 ## Known Gaps to Keep in Mind
 
-- [ ] response envelopes are still inconsistent across endpoint families
+- [ ] order-process list responses still need envelope normalization
 - [ ] some OpenAPI-documented fields are not applied by handlers yet
 - [ ] some multi-step order flows still need broader transaction coverage
 - [ ] fulfillment still uses the non-null destination workaround for inventory movement

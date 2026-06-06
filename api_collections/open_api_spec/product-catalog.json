@@ -526,7 +526,7 @@
       "delete": {
         "tags": ["Product"],
         "summary": "Delete product",
-        "description": "Delete a product and all its variants. Only allowed if no inventory movements or sales orders exist.",
+        "description": "Soft-delete an active product by setting active to false.",
         "operationId": "deleteProduct",
         "parameters": [
           {
@@ -835,7 +835,7 @@
       "delete": {
         "tags": ["Product Variant"],
         "summary": "Delete product variant",
-        "description": "Delete a product variant. Only allowed if no inventory movements or sales orders exist.",
+        "description": "Soft-delete an active product variant by setting active to false. The variant must belong to the product in the path.",
         "operationId": "deleteProductVariant",
         "parameters": [
           {

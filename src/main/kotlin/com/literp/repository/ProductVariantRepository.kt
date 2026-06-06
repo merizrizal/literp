@@ -162,17 +162,22 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             }
     }
 
-    fun deleteProductVariant(variantId: String): Single<Unit> {
+    fun deleteProductVariant(productId: String, variantId: String): Single<Unit> {
         val query = """
             UPDATE product_variant
             SET active = false, updated_at = NOW()
-            WHERE variant_id = $1
+            WHERE product_id = $1 AND variant_id = $2 AND active = true
         """.trimIndent()
 
         return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(variantId))
-            .flatMapCompletable { Single.just(it).ignoreElement() }
-            .toSingle { }
+            .rxExecute(Tuple.of(productId, variantId))
+            .flatMap { result ->
+                if (result.rowCount() == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(Unit)
+                }
+            }
     }
 
     fun checkSkuExists(sku: String): Single<Boolean> {

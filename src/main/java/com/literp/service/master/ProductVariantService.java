@@ -20,7 +20,7 @@ public interface ProductVariantService {
 
     Future<JsonObject> updateProductVariant(String variantId, String name, JsonObject attributes);
 
-    Future<Void> deleteProductVariant(String variantId);
+    Future<Void> deleteProductVariant(String productId, String variantId);
 
     Future<Boolean> checkSkuExists(String sku);
 

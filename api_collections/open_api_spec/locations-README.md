@@ -64,11 +64,11 @@ Each location type may have different business logic and constraints in upstream
   }
   ```
 
-### 3. Soft Delete via Active Status
-- Locations can be deactivated by setting `isActive = false`
-- Prevents hard deletes from breaking historical references
-- Filters default to `activeOnly=true` for cleaner views
-- Useful for archiving old locations while preserving audit trails
+### 3. Active Status And Delete Behavior
+- Locations expose `isActive` for filtering and future deactivation workflows
+- The current DELETE endpoint hard-deletes rows
+- Deleting a missing location returns `404`
+- Deleting a referenced location returns `409`
 
 ### 4. Multi-Location Support
 - Locations are central to Literp's multi-location inventory model
@@ -251,7 +251,8 @@ Content-Type: application/json
 }
 ```
 
-This performs a soft delete—the location is marked inactive but remains in the database.
+The current handler updates location profile fields only. `isActive` remains documented
+ahead of handler support and is not applied by this update endpoint yet.
 
 ### List Locations with Filters
 
@@ -368,10 +369,9 @@ All error responses follow a consistent format:
 
 | Error Code | Meaning | Example |
 |-----------|---------|---------|
-| `LOCATION_NOT_FOUND` | Location doesn't exist | `GET /locations/invalid-id` |
-| `INVALID_INPUT` | Validation failed | Missing required field |
-| `CODE_ALREADY_EXISTS` | Location code is not unique | Duplicate code in POST |
-| `LOCATION_HAS_RELATIONSHIPS` | Can't delete due to references | Inventory movements exist |
+| `RESOURCE_NOT_FOUND` | Location doesn't exist | `GET /locations/invalid-id` |
+| `VALIDATION_ERROR` | Validation failed | Missing required field |
+| `CONFLICT` | Duplicate code or delete conflict | Duplicate code in POST, referenced row in DELETE |
 | `INTERNAL_ERROR` | Server error | Unexpected exception |
 
 ## Validation Rules
@@ -401,7 +401,7 @@ All error responses follow a consistent format:
 ### Active Status
 - Boolean field
 - Defaults to `true` at creation
-- Use for soft delete (set to `false` instead of hard delete)
+- Currently exposed for reads and filtering; update support is planned
 
 ## Compatibility with Database Schema
 
@@ -421,17 +421,14 @@ This OpenAPI specification is **fully aligned** with the database schema defined
 
 ## Referential Integrity
 
-Locations are referenced by several other entities. Attempting to delete a location that has active relationships will result in a **409 Conflict** error:
+Locations are referenced by several other entities. Attempting to delete a location with existing references returns a **409 Conflict** error:
 
 ```json
 {
-  "code": "LOCATION_HAS_RELATIONSHIPS",
-  "message": "Cannot delete location: it is referenced by 5 inventory movements",
-  "details": {
-    "referencedBy": ["inventory_movement", "sales_order", "pos_terminal"],
-    "count": 5
-  },
-  "timestamp": "2026-02-17T10:30:00Z"
+  "error": "Location is referenced and cannot be deleted",
+  "errorCode": "CONFLICT",
+  "status": 409,
+  "errorId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 

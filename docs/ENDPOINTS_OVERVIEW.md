@@ -120,8 +120,8 @@ FULFILLED -> cannot cancel
 
 ## Current Implementation Caveats
 
-- List responses are wrapped as `data.data` plus pagination under `data.pagination`.
-- Master-data single-resource responses are also wrapped as `data.data`.
+- Master-data list responses return top-level `data` plus top-level `pagination`.
+- Master-data single-resource responses return the resource under top-level `data`.
 - Order-process command responses use a single `data` envelope.
 - Some fields documented in OpenAPI are not currently acted on by handlers:
   - product list filters beyond `page`, `size`, `sort`
