@@ -11,6 +11,12 @@ This phase covers POS terminals, shifts, receipts, refunds, BOMs, work orders,
 production runs, material consumption, production output, and inventory
 movements created by manufacturing operations.
 
+## Entry Gate
+
+- [ ] Phase 04 project structure gate is complete
+- [ ] Backend package layout is confirmed before POS and manufacturing handlers, services, and repositories are added
+- [ ] API asset layout is confirmed before new POS and manufacturing OpenAPI and Bruno files are added
+
 ## Current Completed Work
 
 ### POS Data Foundation
@@ -153,6 +159,7 @@ Done when:
 - Manufacturing produces inventory through the same movement ledger used by sales fulfillment.
 - Work orders should not require changes to sales order semantics.
 - Accounting integration is outside this phase.
+- Phase 05 should not begin large new API additions until the project structure gate is resolved.
 
 ## Definition of Done
 

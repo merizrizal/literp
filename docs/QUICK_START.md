@@ -162,8 +162,8 @@ DB_URL=postgresql://root:pgdevpassword@localhost:55432/literp_test alembic upgra
 
 ## Current Behavior Notes
 
-- Product and variant deletes are soft deletes.
-- UOM and location deletes are hard deletes.
+- Product and variant deletes are soft deletes; deleting a missing or already inactive row returns `404`.
+- UOM and location deletes are hard deletes; missing rows return `404`, and foreign-key references return `409`.
 - Order cancellation is blocked when captured payment exists.
 - Fulfillment requires the order to be `CONFIRMED` and fully captured.
 - The seed data is deterministic and intended for local demos and regression testing.

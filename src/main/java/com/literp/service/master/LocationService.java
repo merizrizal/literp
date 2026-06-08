@@ -22,13 +22,13 @@ public interface LocationService {
         boolean activeOnly
     );
 
-    Future<JsonObject> createLocation(String code, String name, String locationType, JsonObject address);
+    Future<JsonObject> createLocation(String code, String name, String locationType, boolean isActive, JsonObject address);
 
     Future<JsonObject> getLocation(String locationId);
 
     Future<JsonObject> getLocationByCode(String code);
 
-    Future<JsonObject> updateLocation(String locationId, String name, String locationType, JsonObject address);
+    Future<JsonObject> updateLocation(String locationId, String name, String locationType, Boolean isActive, JsonObject address);
 
     Future<Void> deleteLocation(String locationId);
 

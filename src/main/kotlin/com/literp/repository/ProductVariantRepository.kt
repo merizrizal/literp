@@ -9,7 +9,13 @@ import java.util.*
 
 class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariantRepository::class.java) {
 
-    fun listProductVariants(productId: String, page: Int, size: Int, sort: String): Single<JsonObject> {
+    fun listProductVariants(
+        productId: String,
+        page: Int,
+        size: Int,
+        sort: String,
+        activeOnly: Boolean
+    ): Single<JsonObject> {
         val offset = page * size
         val parts = sort.split(",")
         val rawField = parts.getOrNull(0)?.trim() ?: "sku"
@@ -18,6 +24,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
         val sortField = when (rawField.lowercase()) {
             "sku" -> "sku"
             "name" -> "name"
+            "active" -> "active"
             "createdat", "created_at" -> "created_at"
             "updatedat", "updated_at" -> "updated_at"
             else -> "sku"
@@ -25,19 +32,29 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
 
         val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "ASC"
 
-        val query = "SELECT COUNT(*) as total FROM product_variant WHERE product_id = $1 AND active = true"
+        val activeFilter = if (activeOnly) " AND active = true" else ""
+        val productQuery = "SELECT COUNT(*) as cnt FROM product WHERE product_id = $1 AND active = true"
+        val query = "SELECT COUNT(*) as total FROM product_variant WHERE product_id = $1$activeFilter"
         val dataQuery = """
             SELECT variant_id, product_id, sku, name, attributes, active, created_at, updated_at
             FROM product_variant
-            WHERE product_id = $1 AND active = true
+            WHERE product_id = $1$activeFilter
             ORDER BY $sortField $sortOrder
             LIMIT $size OFFSET $offset
         """.trimIndent()
 
         var total = 0
 
-        return pool.preparedQuery(query)
+        return pool.preparedQuery(productQuery)
             .rxExecute(Tuple.of(productId))
+            .flatMap { productResult ->
+                if (productResult.first().getInteger("cnt") == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    pool.preparedQuery(query)
+                        .rxExecute(Tuple.of(productId))
+                }
+            }
             .flatMap { countResult ->
                 total = countResult.first().getInteger("total")
                 pool.preparedQuery(dataQuery)
@@ -45,7 +62,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             }
             .map { result ->
                 val data = result.map { row ->
-                    val attributes = JsonObject(row.getString("attributes"))
+                    val attributes = jsonObjectOrEmpty(row.getString("attributes"))
                     JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -72,12 +89,13 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
         productId: String,
         sku: String,
         name: String,
+        active: Boolean,
         attributes: JsonObject?
     ): Single<JsonObject> {
         val variantId = UUID.randomUUID().toString()
         val query = """
             INSERT INTO product_variant (variant_id, product_id, sku, name, attributes, active, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, true, NOW(), NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
         """.trimIndent()
 
         return pool.preparedQuery(query)
@@ -86,7 +104,8 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                 productId,
                 sku,
                 name,
-                attributes?.encode()
+                attributes?.encode(),
+                active
             ))
             .map {
                 JsonObject()
@@ -95,7 +114,14 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     .put("sku", sku)
                     .put("name", name)
                     .put("attributes", attributes ?: JsonObject())
-                    .put("active", true)
+                    .put("active", active)
+            }
+            .onErrorResumeNext { error ->
+                if (isForeignKeyViolation(error)) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.error(error)
+                }
             }
     }
 
@@ -113,7 +139,7 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val attributes = JsonObject(row.getString("attributes"))
+                    val attributes = jsonObjectOrEmpty(row.getString("attributes"))
                     Single.just(JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -129,25 +155,27 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
     }
 
     fun updateProductVariant(
+        productId: String,
         variantId: String,
         name: String,
+        active: Boolean?,
         attributes: JsonObject?
     ): Single<JsonObject> {
         val query = """
             UPDATE product_variant
-            SET name = $1, attributes = $2, updated_at = NOW()
-            WHERE variant_id = $3 AND active = true
+            SET name = $1, active = COALESCE($2, active), attributes = $3, updated_at = NOW()
+            WHERE product_id = $4 AND variant_id = $5 AND active = true
             RETURNING variant_id, product_id, sku, name, attributes, active, created_at, updated_at
         """.trimIndent()
 
         return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(name, attributes?.encode(), variantId))
+            .rxExecute(Tuple.of(name, active, attributes?.encode(), productId, variantId))
             .flatMap { result ->
                 if (result.size() == 0) {
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
                     val row = result.first()
-                    val attributes = JsonObject(row.getString("attributes"))
+                    val attributes = jsonObjectOrEmpty(row.getString("attributes"))
                     Single.just(JsonObject()
                         .put("variantId", row.getString("variant_id"))
                         .put("productId", row.getString("product_id"))
@@ -162,17 +190,22 @@ class ProductVariantRepository(pool: Pool) : BaseRepository(pool, ProductVariant
             }
     }
 
-    fun deleteProductVariant(variantId: String): Single<Unit> {
+    fun deleteProductVariant(productId: String, variantId: String): Single<Unit> {
         val query = """
             UPDATE product_variant
             SET active = false, updated_at = NOW()
-            WHERE variant_id = $1
+            WHERE product_id = $1 AND variant_id = $2 AND active = true
         """.trimIndent()
 
         return pool.preparedQuery(query)
-            .rxExecute(Tuple.of(variantId))
-            .flatMapCompletable { Single.just(it).ignoreElement() }
-            .toSingle { }
+            .rxExecute(Tuple.of(productId, variantId))
+            .flatMap { result ->
+                if (result.rowCount() == 0) {
+                    Single.error(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(Unit)
+                }
+            }
     }
 
     fun checkSkuExists(sku: String): Single<Boolean> {

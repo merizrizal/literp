@@ -10,6 +10,8 @@ open class BaseHandler(clazz: Class<*>) {
 
     protected val logger = LoggerFactory.getLogger(clazz)
 
+    protected data class ListQueryParams(val page: Int, val size: Int, val sort: String)
+
     protected fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {
         context.response().statusCode = statusCode
         context.response().putHeader("Content-Type", "application/json")
@@ -17,13 +19,21 @@ open class BaseHandler(clazz: Class<*>) {
     }
 
     protected fun putSuccessResponse(context: RoutingContext, statusCode: Int, data: JsonObject) {
+        logSuccess(context, statusCode)
+        putResponse(context, statusCode, JsonObject().put("data", data))
+    }
+
+    protected fun putSuccessEnvelopeResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {
+        logSuccess(context, statusCode)
+        putResponse(context, statusCode, response)
+    }
+
+    private fun logSuccess(context: RoutingContext, statusCode: Int) {
         val id = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
         val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
         logger.info("Handling id=$id status=$statusCode method=$method path=$path requestId=$requestId")
-
-        putResponse(context, statusCode, JsonObject().put("data", data))
     }
 
     protected fun putErrorResponse(
@@ -83,6 +93,7 @@ open class BaseHandler(clazz: Class<*>) {
                 || message.equals(ErrorCodes.CONFLICT, ignoreCase = true)
                 || message.contains("already exists", ignoreCase = true)
                 || message.contains("conflict", ignoreCase = true)
+                || message.contains("referenced", ignoreCase = true)
                 || message.contains("cannot cancel", ignoreCase = true)
                 || message.contains("only be captured", ignoreCase = true)
                 || message.contains("only confirmed", ignoreCase = true)
@@ -114,5 +125,91 @@ open class BaseHandler(clazz: Class<*>) {
             isConflictError(error.message) -> putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
             else -> putErrorResponse(context, 500, "$internalErrorMessage: ${error.message}", error)
         }
+    }
+
+    protected fun parseListQuery(
+        context: RoutingContext,
+        defaultSort: String,
+        allowedSortFields: Set<String>
+    ): ListQueryParams? {
+        val page = parseBoundedIntQueryParam(context, "page", 0, 0, null) ?: return null
+        val size = parseBoundedIntQueryParam(context, "size", 20, 1, 100) ?: return null
+        val sort = parseSortQueryParam(context, defaultSort, allowedSortFields) ?: return null
+
+        return ListQueryParams(page, size, sort)
+    }
+
+    protected fun parseBooleanQueryParam(
+        context: RoutingContext,
+        name: String,
+        defaultValue: Boolean
+    ): Boolean? {
+        val rawValue = context.queryParam(name).firstOrNull()?.trim() ?: return defaultValue
+        return when (rawValue.lowercase()) {
+            "true" -> true
+            "false" -> false
+            else -> {
+                putErrorResponse(context, 400, "$name must be true or false")
+                null
+            }
+        }
+    }
+
+    private fun parseBoundedIntQueryParam(
+        context: RoutingContext,
+        name: String,
+        defaultValue: Int,
+        min: Int,
+        max: Int?
+    ): Int? {
+        val rawValue = context.queryParam(name).firstOrNull()?.trim() ?: return defaultValue
+        val parsed = rawValue.toIntOrNull()
+
+        if (parsed == null) {
+            putErrorResponse(context, 400, "$name must be an integer")
+            return null
+        }
+
+        if (parsed < min) {
+            putErrorResponse(context, 400, "$name must be greater than or equal to $min")
+            return null
+        }
+
+        if (max != null && parsed > max) {
+            putErrorResponse(context, 400, "$name must be less than or equal to $max")
+            return null
+        }
+
+        return parsed
+    }
+
+    private fun parseSortQueryParam(
+        context: RoutingContext,
+        defaultSort: String,
+        allowedSortFields: Set<String>
+    ): String? {
+        val rawSort = context.queryParam("sort").firstOrNull()?.trim() ?: defaultSort
+        val parts = rawSort.split(",")
+
+        if (parts.size != 2) {
+            putErrorResponse(context, 400, "sort must use the format field,asc or field,desc")
+            return null
+        }
+
+        val sortField = parts[0].trim()
+        val sortDirection = parts.getOrNull(1)?.trim()?.lowercase() ?: "asc"
+        val allowedFields = allowedSortFields.map { it.lowercase() }.toSet()
+
+        if (sortField.isBlank() || sortField.lowercase() !in allowedFields) {
+            putErrorResponse(context, 400, "sort field must be one of: ${allowedSortFields.sorted().joinToString(", ")}")
+            return null
+        }
+
+        if (sortDirection != "asc" && sortDirection != "desc") {
+            putErrorResponse(context, 400, "sort direction must be asc or desc")
+            return null
+        }
+
+        return "$sortField,$sortDirection"
     }
 }

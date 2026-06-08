@@ -23,8 +23,14 @@ class LocationServiceImpl(
         return repository.listLocations(page, size, sort, code, name, locationType, activeOnly).toVertxFuture()
     }
 
-    override fun createLocation(code: String, name: String, locationType: String, address: JsonObject?): Future<JsonObject> {
-        return repository.createLocation(code, name, locationType, address).toVertxFuture()
+    override fun createLocation(
+        code: String,
+        name: String,
+        locationType: String,
+        isActive: Boolean,
+        address: JsonObject?
+    ): Future<JsonObject> {
+        return repository.createLocation(code, name, locationType, isActive, address).toVertxFuture()
     }
 
     override fun getLocation(locationId: String): Future<JsonObject> {
@@ -39,9 +45,10 @@ class LocationServiceImpl(
         locationId: String,
         name: String,
         locationType: String,
+        isActive: Boolean?,
         address: JsonObject?
     ): Future<JsonObject> {
-        return repository.updateLocation(locationId, name, locationType, address).toVertxFuture()
+        return repository.updateLocation(locationId, name, locationType, isActive, address).toVertxFuture()
     }
 
     override fun deleteLocation(locationId: String): Future<Void> {

@@ -4,7 +4,6 @@ import com.literp.common.ErrorCodes
 import com.literp.service.master.ProductService
 import com.literp.service.master.ProductVariantService
 import io.vertx.core.Future
-import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
@@ -15,12 +14,13 @@ class ProductHandler(
 ) : BaseHandler(ProductHandler::class.java) {
 
     fun listProducts(context: RoutingContext) {
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
+        val query = parseListQuery(context, "sku,asc", PRODUCT_SORT_FIELDS) ?: return
+        val sku = context.queryParam("sku").firstOrNull()
+        val productType = context.queryParam("productType").firstOrNull()
+        val activeOnly = parseBooleanQueryParam(context, "activeOnly", true) ?: return
 
-        productService.listProducts(page, size, sort)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+        productService.listProducts(query.page, query.size, query.sort, sku, productType, activeOnly)
+            .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}", error) }
     }
 
@@ -31,6 +31,7 @@ class ProductHandler(
         val name = body?.getString("name")
         val productType = body?.getString("productType")
         val baseUom = body?.getString("baseUom")
+        val active = body?.getBoolean("active") ?: true
         val metadata = body?.getJsonObject("metadata")
 
         if (sku.isNullOrEmpty() || name.isNullOrEmpty() || productType.isNullOrEmpty() || baseUom.isNullOrEmpty()) {
@@ -43,10 +44,10 @@ class ProductHandler(
                 if (exists) {
                     Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
-                    productService.createProduct(sku, name, productType, baseUom, metadata)
+                    productService.createProduct(sku, name, productType, baseUom, active, metadata)
                 }
             }
-            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -59,9 +60,10 @@ class ProductHandler(
 
     fun getProduct(context: RoutingContext) {
         val productId = context.pathParam("productId")
+        val includeVariants = parseBooleanQueryParam(context, "includeVariants", false) ?: return
 
-        productService.getProduct(productId)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+        productService.getProduct(productId, includeVariants)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -78,6 +80,8 @@ class ProductHandler(
         val body = validatedRequest.body.jsonObject
         val name = body?.getString("name")
         val productType = body?.getString("productType")
+        val baseUom = body?.getString("baseUom")
+        val active = body?.getBoolean("active")
         val metadata = body?.getJsonObject("metadata")
 
         if (name.isNullOrEmpty() || productType.isNullOrEmpty()) {
@@ -85,8 +89,8 @@ class ProductHandler(
             return
         }
 
-        productService.updateProduct(productId, name, productType, metadata)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+        productService.updateProduct(productId, name, productType, baseUom, active, metadata)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -114,12 +118,11 @@ class ProductHandler(
 
     fun listProductVariants(context: RoutingContext) {
         val productId = context.pathParam("productId")
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "sku,asc"
+        val query = parseListQuery(context, "sku,asc", VARIANT_SORT_FIELDS) ?: return
+        val activeOnly = parseBooleanQueryParam(context, "activeOnly", true) ?: return
 
-        variantService.listProductVariants(productId, page, size, sort)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+        variantService.listProductVariants(productId, query.page, query.size, query.sort, activeOnly)
+            .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -136,6 +139,7 @@ class ProductHandler(
         val body = validatedRequest.body.jsonObject
         val sku = body?.getString("sku")
         val name = body?.getString("name")
+        val active = body?.getBoolean("active") ?: true
         val attributes = body?.getJsonObject("attributes")
 
         if (sku.isNullOrEmpty() || name.isNullOrEmpty()) {
@@ -148,10 +152,10 @@ class ProductHandler(
                 if (exists) {
                     Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
-                    variantService.createProductVariant(productId, sku, name, attributes)
+                    variantService.createProductVariant(productId, sku, name, active, attributes)
                 }
             }
-            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -168,7 +172,7 @@ class ProductHandler(
         val variantId = context.pathParam("variantId")
 
         variantService.getProductVariant(productId, variantId)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -180,18 +184,21 @@ class ProductHandler(
     }
 
     fun updateProductVariant(context: RoutingContext) {
+        val productId = context.pathParam("productId")
         val variantId = context.pathParam("variantId")
-        val body = context.body().asJsonObject()
-        val name = body.getString("name")
-        val attributes = body.getJsonObject("attributes")
+        val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        val body = validatedRequest.body.jsonObject
+        val name = body?.getString("name")
+        val active = body?.getBoolean("active")
+        val attributes = body?.getJsonObject("attributes")
 
         if (name.isNullOrEmpty()) {
             putErrorResponse(context, 400, "name is required")
             return
         }
 
-        variantService.updateProductVariant(variantId, name, attributes)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+        variantService.updateProductVariant(productId, variantId, name, active, attributes)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -203,9 +210,10 @@ class ProductHandler(
     }
 
     fun deleteProductVariant(context: RoutingContext) {
+        val productId = context.pathParam("productId")
         val variantId = context.pathParam("variantId")
 
-        variantService.deleteProductVariant(variantId)
+        variantService.deleteProductVariant(productId, variantId)
             .onSuccess { context.response().setStatusCode(204).end() }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -215,5 +223,22 @@ class ProductHandler(
                     notFoundMessage = "Product variant not found"
                 )
             }
+    }
+
+    private companion object {
+        private val PRODUCT_SORT_FIELDS = setOf(
+            "sku",
+            "name",
+            "productType",
+            "product_type",
+            "baseUom",
+            "base_uom",
+            "active",
+            "createdAt",
+            "created_at",
+            "updatedAt",
+            "updated_at"
+        )
+        private val VARIANT_SORT_FIELDS = setOf("sku", "name", "active", "createdAt", "created_at", "updatedAt", "updated_at")
     }
 }

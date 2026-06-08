@@ -26,10 +26,10 @@ Current completed runtime scope:
 Current important gaps:
 
 - [ ] some multi-step order commands still need broader transaction coverage
-- [ ] response envelopes are not normalized across endpoint families
-- [ ] a few OpenAPI fields and filters are ahead of handler behavior
+- [ ] order-process list responses still need envelope normalization
+- [ ] OpenAPI, Bruno, docs, and handlers need automated drift checks as the API expands
 - [ ] receipt, refund, partial fulfillment, POS operations, and manufacturing APIs are not exposed yet
-- [ ] automated test coverage is not present in the repository
+- [ ] automated test coverage is focused on foundation and master-data behavior; order flow still needs broader tests
 
 ## 00.2 Directory Name
 
@@ -64,15 +64,15 @@ deployment approval delays.
 |---|---|---|---|---:|
 | 00 | `00-implementation-overview.md` | Explain execution plan | Done for initial planning | Documentation only |
 | 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Complete | 0 remaining engineer-days |
-| 02 | `02-master-data-api.md` | Complete catalog and location API parity | Unblocked next | 6-10 remaining engineer-days |
+| 02 | `02-master-data-api.md` | Complete catalog and location API parity | Complete | 0 remaining engineer-days |
 | 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 02 is done | 10-18 remaining engineer-days |
-| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, and operational readiness | Queued until earlier phase gates are done | 8-14 remaining engineer-days |
+| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Queued until earlier phase gates are done | 9-16 remaining engineer-days |
 | 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | Future phase | 18-35 future engineer-days |
 
 Estimated remaining MVP hardening:
 
 ```text
-24-42 engineer-days
+19-34 engineer-days
 ```
 
 The current branch already implements the functional MVP path. The remaining
@@ -94,7 +94,8 @@ Phase discipline:
 - [x] Satisfy the Phase 01 definition of done
 - [x] Re-check this overview and mark Phase 01 as complete
 - [x] Unblock Phase 02 after Phase 01 completion
-- [ ] Complete Phase 02 before starting Phase 03 implementation
+- [x] Complete Phase 02 before starting Phase 03 implementation
+- [ ] Complete the Phase 04 project structure gate before starting Phase 05 implementation
 
 Later phase files may be used for planning and context, but implementation work
 should now continue with Phase 02 before jumping to Phase 03 or later.
@@ -121,6 +122,7 @@ stable enough to protect.
 - [ ] Normalize response envelopes before broad client adoption
 - [ ] Add automated tests before expanding API surface materially
 - [ ] Keep OpenAPI, Bruno, docs, and handlers synchronized with each change
+- [ ] Resolve project structure before POS and manufacturing expand the codebase materially
 
 ## 00.7 Recommended MVP Slice
 

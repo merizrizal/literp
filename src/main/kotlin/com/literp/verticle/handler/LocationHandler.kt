@@ -3,7 +3,6 @@ package com.literp.verticle.handler
 import com.literp.common.ErrorCodes
 import com.literp.service.master.LocationService
 import io.vertx.core.Future
-import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
@@ -11,16 +10,14 @@ import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 class LocationHandler(private val locationService: LocationService) : BaseHandler(LocationHandler::class.java) {
 
     fun listLocations(context: RoutingContext) {
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "code,asc"
+        val query = parseListQuery(context, "code,asc", SORT_FIELDS) ?: return
         val code = context.queryParam("code").firstOrNull()
         val name = context.queryParam("name").firstOrNull()
         val locationType = context.queryParam("locationType").firstOrNull()
-        val activeOnly = context.queryParam("activeOnly").firstOrNull()?.toBoolean() ?: true
+        val activeOnly = parseBooleanQueryParam(context, "activeOnly", true) ?: return
 
-        locationService.listLocations(page, size, sort, code, name, locationType, activeOnly)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+        locationService.listLocations(query.page, query.size, query.sort, code, name, locationType, activeOnly)
+            .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}", error) }
     }
 
@@ -30,6 +27,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val code = body?.getString("code")
         val name = body?.getString("name")
         val locationType = body?.getString("locationType")
+        val isActive = body?.getBoolean("isActive") ?: true
         val address = body?.getJsonObject("address")
 
         if (code.isNullOrEmpty() || name.isNullOrEmpty() || locationType.isNullOrEmpty()) {
@@ -42,10 +40,10 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
                 if (exists) {
                     Future.failedFuture(Exception(ErrorCodes.fromStatus(409)))
                 } else {
-                    locationService.createLocation(code, name, locationType, address)
+                    locationService.createLocation(code, name, locationType, isActive, address)
                 }
             }
-            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -61,7 +59,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val locationId = context.pathParam("locationId")
 
         locationService.getLocation(locationId)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -76,7 +74,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val code = context.pathParam("code")
 
         locationService.getLocationByCode(code)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -93,6 +91,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
         val body = validatedRequest.body.jsonObject
         val name = body?.getString("name")
         val locationType = body?.getString("locationType")
+        val isActive = body?.getBoolean("isActive")
         val address = body?.getJsonObject("address")
 
         if (name.isNullOrEmpty() || locationType.isNullOrEmpty()) {
@@ -100,8 +99,8 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
             return
         }
 
-        locationService.updateLocation(locationId, name, locationType, address)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+        locationService.updateLocation(locationId, name, locationType, isActive, address)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -122,8 +121,24 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
                     context = context,
                     error = error,
                     internalErrorMessage = "Failed to delete location",
-                    notFoundMessage = "Location not found"
+                    notFoundMessage = "Location not found",
+                    conflictMessage = "Location is referenced and cannot be deleted"
                 )
             }
+    }
+
+    private companion object {
+        private val SORT_FIELDS = setOf(
+            "code",
+            "name",
+            "locationType",
+            "location_type",
+            "isActive",
+            "is_active",
+            "createdAt",
+            "created_at",
+            "updatedAt",
+            "updated_at"
+        )
     }
 }

@@ -2,3 +2,4 @@ source ../python/database/envrc
 
 export ROOT_DIR=`(cd ..; pwd)`
 export DOCKER_NETWORK=literp_nw
+export HTTP_PORT=8010

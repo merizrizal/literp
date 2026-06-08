@@ -3,7 +3,6 @@ package com.literp.verticle.handler
 import com.literp.common.ErrorCodes
 import com.literp.service.master.UnitOfMeasureService
 import io.vertx.core.Future
-import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
@@ -11,12 +10,10 @@ import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseHandler(UnitOfMeasureHandler::class.java) {
 
     fun listUnitOfMeasures(context: RoutingContext) {
-        val page = context.queryParam("page").firstOrNull()?.toIntOrNull() ?: 0
-        val size = context.queryParam("size").firstOrNull()?.toIntOrNull() ?: 20
-        val sort = context.queryParam("sort").firstOrNull() ?: "code,asc"
+        val query = parseListQuery(context, "code,asc", SORT_FIELDS) ?: return
 
-        uomService.listUnitOfMeasures(page, size, sort)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+        uomService.listUnitOfMeasures(query.page, query.size, query.sort)
+            .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
             .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM: ${error.message}", error) }
     }
 
@@ -40,7 +37,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
                     uomService.createUnitOfMeasure(code, name, baseUnit)
                 }
             }
-            .onSuccess { result -> putSuccessResponse(context, 201, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -55,7 +52,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         val uomId = context.pathParam("uomId")
 
         uomService.getUnitOfMeasure(uomId)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -79,7 +76,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
         }
 
         uomService.updateUnitOfMeasure(uomId, name, baseUnit)
-            .onSuccess { result -> putSuccessResponse(context, 200, JsonObject().put("data", result)) }
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -100,8 +97,13 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
                     context = context,
                     error = error,
                     internalErrorMessage = "Failed to delete UOM",
-                    notFoundMessage = "UOM not found"
+                    notFoundMessage = "UOM not found",
+                    conflictMessage = "UOM is referenced and cannot be deleted"
                 )
             }
+    }
+
+    private companion object {
+        private val SORT_FIELDS = setOf("code", "name", "createdAt", "created_at", "updatedAt", "updated_at")
     }
 }

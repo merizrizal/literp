@@ -54,6 +54,9 @@ dependencies {
     implementation("io.vertx:vertx-pg-client:$vertxVersion")
     // Scram SASL SCRAM-SHA-256
     implementation("com.ongres.scram:scram-client:3.2")
+
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
 }
 
 val generatedBuildDirectory = layout.buildDirectory.dir("generated/sources/java")
@@ -68,7 +71,7 @@ sourceSets {
 }
 
 tasks.test {
-    // useJUnitPlatform()
+    useJUnitPlatform()
 }
 
 tasks.register<Jar>("kotlinJar") {
