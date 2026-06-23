@@ -260,72 +260,74 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1
         """.trimIndent()
 
-        return pool.preparedQuery(orderQuery)
-            .rxExecute(Tuple.of(orderId))
-            .flatMap { orderResult ->
-                if (orderResult.size() == 0) {
-                    Single.error(Exception(ErrorCodes.fromStatus(404)))
-                } else {
-                    val row = orderResult.first()
-                    val orderStatus = row.getString("status")
-                    val locationId = row.getString("location_id")
-                    if (orderStatus != "DRAFT") {
-                        Single.error(Exception("Only DRAFT orders can be confirmed"))
+        return inTransaction { connection ->
+            connection.preparedQuery(orderQuery)
+                .rxExecute(Tuple.of(orderId))
+                .flatMap { orderResult ->
+                    if (orderResult.size() == 0) {
+                        Single.error(Exception(ErrorCodes.fromStatus(404)))
                     } else {
-                        pool.preparedQuery(linesQuery)
-                            .rxExecute(Tuple.of(orderId))
-                            .flatMap { lineResult ->
-                                if (lineResult.size() == 0) {
-                                    Single.error(Exception("Cannot confirm order without lines"))
-                                } else {
-                                    val lines = lineResult.map { it }
-                                    Observable.fromIterable(lines)
-                                        .concatMapCompletable { line ->
-                                            val quantityOrdered = line.getBigDecimal("quantity_ordered")
-                                            val quantityFulfilled = line.getBigDecimal("quantity_fulfilled")
-                                            val reserveQty = quantityOrdered.subtract(quantityFulfilled)
-                                            if (reserveQty <= BigDecimal.ZERO) {
-                                                pool.preparedQuery(updateLineStatusQuery)
-                                                    .rxExecute(Tuple.of(line.getString("line_id")))
-                                                    .ignoreElement()
-                                            } else {
-                                                pool.preparedQuery(insertReservationQuery)
-                                                    .rxExecute(
-                                                        Tuple.tuple()
-                                                            .addString(UUID.randomUUID().toString())
-                                                            .addString(orderId)
-                                                            .addString(line.getString("line_id"))
-                                                            .addString(line.getString("product_id"))
-                                                            .addString(line.getString("sku"))
-                                                            .addString(locationId)
-                                                            .addValue(reserveQty)
-                                                    )
-                                                    .ignoreElement()
-                                                    .andThen(
-                                                        pool.preparedQuery(updateLineStatusQuery)
-                                                            .rxExecute(Tuple.of(line.getString("line_id")))
-                                                            .ignoreElement()
-                                                    )
+                        val row = orderResult.first()
+                        val orderStatus = row.getString("status")
+                        val locationId = row.getString("location_id")
+                        if (orderStatus != "DRAFT") {
+                            Single.error(Exception("Only DRAFT orders can be confirmed"))
+                        } else {
+                            connection.preparedQuery(linesQuery)
+                                .rxExecute(Tuple.of(orderId))
+                                .flatMap { lineResult ->
+                                    if (lineResult.size() == 0) {
+                                        Single.error(Exception("Cannot confirm order without lines"))
+                                    } else {
+                                        val lines = lineResult.map { it }
+                                        Observable.fromIterable(lines)
+                                            .concatMapCompletable { line ->
+                                                val quantityOrdered = line.getBigDecimal("quantity_ordered")
+                                                val quantityFulfilled = line.getBigDecimal("quantity_fulfilled")
+                                                val reserveQty = quantityOrdered.subtract(quantityFulfilled)
+                                                if (reserveQty <= BigDecimal.ZERO) {
+                                                    connection.preparedQuery(updateLineStatusQuery)
+                                                        .rxExecute(Tuple.of(line.getString("line_id")))
+                                                        .ignoreElement()
+                                                } else {
+                                                    connection.preparedQuery(insertReservationQuery)
+                                                        .rxExecute(
+                                                            Tuple.tuple()
+                                                                .addString(UUID.randomUUID().toString())
+                                                                .addString(orderId)
+                                                                .addString(line.getString("line_id"))
+                                                                .addString(line.getString("product_id"))
+                                                                .addString(line.getString("sku"))
+                                                                .addString(locationId)
+                                                                .addValue(reserveQty)
+                                                        )
+                                                        .ignoreElement()
+                                                        .andThen(
+                                                            connection.preparedQuery(updateLineStatusQuery)
+                                                                .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                .ignoreElement()
+                                                        )
+                                                }
                                             }
-                                        }
-                                        .andThen(
-                                            pool.preparedQuery(updateOrderQuery)
-                                                .rxExecute(Tuple.of(orderId))
-                                                .ignoreElement()
-                                        )
-                                        .andThen(
-                                            Single.just(
-                                                JsonObject()
-                                                    .put("salesOrderId", orderId)
-                                                    .put("status", "CONFIRMED")
-                                                    .put("reservedLineCount", lineResult.size())
+                                            .andThen(
+                                                connection.preparedQuery(updateOrderQuery)
+                                                    .rxExecute(Tuple.of(orderId))
+                                                    .ignoreElement()
                                             )
-                                        )
+                                            .andThen(
+                                                Single.just(
+                                                    JsonObject()
+                                                        .put("salesOrderId", orderId)
+                                                        .put("status", "CONFIRMED")
+                                                        .put("reservedLineCount", lineResult.size())
+                                                )
+                                            )
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
-            }
+        }
     }
 
     fun capturePayment(
@@ -429,90 +431,92 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1
         """.trimIndent()
 
-        return pool.preparedQuery(orderQuery)
-            .rxExecute(Tuple.of(orderId))
-            .flatMap { orderResult ->
-                if (orderResult.size() == 0) {
-                    Single.error(Exception(ErrorCodes.fromStatus(404)))
-                } else {
-                    val orderRow = orderResult.first()
-                    val status = orderRow.getString("status")
-                    val locationId = orderRow.getString("location_id")
-                    val totalAmount = orderRow.getBigDecimal("total_amount")
-
-                    if (status != "CONFIRMED") {
-                        Single.error(Exception("Only CONFIRMED orders can be fulfilled"))
+        return inTransaction { connection ->
+            connection.preparedQuery(orderQuery)
+                .rxExecute(Tuple.of(orderId))
+                .flatMap { orderResult ->
+                    if (orderResult.size() == 0) {
+                        Single.error(Exception(ErrorCodes.fromStatus(404)))
                     } else {
-                        pool.preparedQuery(capturedTotalQuery)
-                            .rxExecute(Tuple.of(orderId))
-                            .flatMap { capturedResult ->
-                                val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
-                                if (totalCaptured < totalAmount) {
-                                    Single.error(Exception("Insufficient captured payment for fulfillment"))
-                                } else {
-                                    pool.preparedQuery(linesQuery)
-                                        .rxExecute(Tuple.of(orderId))
-                                        .flatMap { linesResult ->
-                                            if (linesResult.size() == 0) {
-                                                Single.error(Exception("No fulfillable order lines found"))
-                                            } else {
-                                                val lines = linesResult.map { it }
-                                                Observable.fromIterable(lines)
-                                                    .concatMapCompletable { line ->
-                                                        val ordered = line.getBigDecimal("quantity_ordered")
-                                                        val fulfilled = line.getBigDecimal("quantity_fulfilled")
-                                                        val remaining = ordered.subtract(fulfilled)
-                                                        if (remaining <= BigDecimal.ZERO) {
-                                                            pool.preparedQuery(updateLineQuery)
-                                                                .rxExecute(Tuple.of(line.getString("line_id")))
-                                                                .ignoreElement()
-                                                        } else {
-                                                            pool.preparedQuery(movementInsertQuery)
-                                                                .rxExecute(
-                                                                    Tuple.tuple()
-                                                                        .addString(UUID.randomUUID().toString())
-                                                                        .addString(line.getString("product_id"))
-                                                                        .addString(line.getString("sku"))
-                                                                        .addString(locationId)
-                                                                        .addString(locationId)
-                                                                        .addValue(remaining)
-                                                                        .addString(orderId)
-                                                                        .addValue(notes)
-                                                                        .addValue(createdBy)
-                                                                )
-                                                                .ignoreElement()
-                                                                .andThen(
-                                                                    pool.preparedQuery(updateLineQuery)
-                                                                        .rxExecute(Tuple.of(line.getString("line_id")))
-                                                                        .ignoreElement()
-                                                                )
-                                                                .andThen(
-                                                                    pool.preparedQuery(fulfillReservationQuery)
-                                                                        .rxExecute(Tuple.of(line.getString("line_id")))
-                                                                        .ignoreElement()
-                                                                )
+                        val orderRow = orderResult.first()
+                        val status = orderRow.getString("status")
+                        val locationId = orderRow.getString("location_id")
+                        val totalAmount = orderRow.getBigDecimal("total_amount")
+
+                        if (status != "CONFIRMED") {
+                            Single.error(Exception("Only CONFIRMED orders can be fulfilled"))
+                        } else {
+                            connection.preparedQuery(capturedTotalQuery)
+                                .rxExecute(Tuple.of(orderId))
+                                .flatMap { capturedResult ->
+                                    val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                    if (totalCaptured < totalAmount) {
+                                        Single.error(Exception("Insufficient captured payment for fulfillment"))
+                                    } else {
+                                        connection.preparedQuery(linesQuery)
+                                            .rxExecute(Tuple.of(orderId))
+                                            .flatMap { linesResult ->
+                                                if (linesResult.size() == 0) {
+                                                    Single.error(Exception("No fulfillable order lines found"))
+                                                } else {
+                                                    val lines = linesResult.map { it }
+                                                    Observable.fromIterable(lines)
+                                                        .concatMapCompletable { line ->
+                                                            val ordered = line.getBigDecimal("quantity_ordered")
+                                                            val fulfilled = line.getBigDecimal("quantity_fulfilled")
+                                                            val remaining = ordered.subtract(fulfilled)
+                                                            if (remaining <= BigDecimal.ZERO) {
+                                                                connection.preparedQuery(updateLineQuery)
+                                                                    .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                    .ignoreElement()
+                                                            } else {
+                                                                connection.preparedQuery(movementInsertQuery)
+                                                                    .rxExecute(
+                                                                        Tuple.tuple()
+                                                                            .addString(UUID.randomUUID().toString())
+                                                                            .addString(line.getString("product_id"))
+                                                                            .addString(line.getString("sku"))
+                                                                            .addString(locationId)
+                                                                            .addString(locationId)
+                                                                            .addValue(remaining)
+                                                                            .addString(orderId)
+                                                                            .addValue(notes)
+                                                                            .addValue(createdBy)
+                                                                    )
+                                                                    .ignoreElement()
+                                                                    .andThen(
+                                                                        connection.preparedQuery(updateLineQuery)
+                                                                            .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                            .ignoreElement()
+                                                                    )
+                                                                    .andThen(
+                                                                        connection.preparedQuery(fulfillReservationQuery)
+                                                                            .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                            .ignoreElement()
+                                                                    )
+                                                            }
                                                         }
-                                                    }
-                                                    .andThen(
-                                                        pool.preparedQuery(updateOrderQuery)
-                                                            .rxExecute(Tuple.of(orderId))
-                                                            .ignoreElement()
-                                                    )
-                                                    .andThen(
-                                                        Single.just(
-                                                            JsonObject()
-                                                                .put("salesOrderId", orderId)
-                                                                .put("status", "FULFILLED")
-                                                                .put("fulfilledLineCount", linesResult.size())
+                                                        .andThen(
+                                                            connection.preparedQuery(updateOrderQuery)
+                                                                .rxExecute(Tuple.of(orderId))
+                                                                .ignoreElement()
                                                         )
-                                                    )
+                                                        .andThen(
+                                                            Single.just(
+                                                                JsonObject()
+                                                                    .put("salesOrderId", orderId)
+                                                                    .put("status", "FULFILLED")
+                                                                    .put("fulfilledLineCount", linesResult.size())
+                                                            )
+                                                        )
+                                                }
                                             }
-                                        }
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
-            }
+        }
     }
 
     fun cancelSalesOrder(orderId: String, reason: String?): Single<JsonObject> {
@@ -542,53 +546,55 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1 AND status = 'RESERVED'
         """.trimIndent()
 
-        return pool.preparedQuery(orderQuery)
-            .rxExecute(Tuple.of(orderId))
-            .flatMap { orderResult ->
-                if (orderResult.size() == 0) {
-                    Single.error(Exception(ErrorCodes.fromStatus(404)))
-                } else {
-                    val status = orderResult.first().getString("status")
-                    when (status) {
-                        "FULFILLED" -> Single.error(Exception("Cannot cancel a fulfilled order"))
-                        "CANCELLED" -> Single.just(
-                            JsonObject()
-                                .put("salesOrderId", orderId)
-                                .put("status", "CANCELLED")
-                                .put("message", "Order already cancelled")
-                        )
-                        else -> pool.preparedQuery(capturedQuery)
-                            .rxExecute(Tuple.of(orderId))
-                            .flatMap { capturedResult ->
-                                val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
-                                if (totalCaptured > BigDecimal.ZERO) {
-                                    Single.error(Exception("Cannot cancel order with captured payment"))
-                                } else {
-                                    val nextNotes = if (reason.isNullOrBlank()) {
-                                        null
+        return inTransaction { connection ->
+            connection.preparedQuery(orderQuery)
+                .rxExecute(Tuple.of(orderId))
+                .flatMap { orderResult ->
+                    if (orderResult.size() == 0) {
+                        Single.error(Exception(ErrorCodes.fromStatus(404)))
+                    } else {
+                        val status = orderResult.first().getString("status")
+                        when (status) {
+                            "FULFILLED" -> Single.error(Exception("Cannot cancel a fulfilled order"))
+                            "CANCELLED" -> Single.just(
+                                JsonObject()
+                                    .put("salesOrderId", orderId)
+                                    .put("status", "CANCELLED")
+                                    .put("message", "Order already cancelled")
+                            )
+                            else -> connection.preparedQuery(capturedQuery)
+                                .rxExecute(Tuple.of(orderId))
+                                .flatMap { capturedResult ->
+                                    val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                    if (totalCaptured > BigDecimal.ZERO) {
+                                        Single.error(Exception("Cannot cancel order with captured payment"))
                                     } else {
-                                        "[CANCEL] $reason"
-                                    }
-                                    pool.preparedQuery(updateOrderQuery)
-                                        .rxExecute(Tuple.of(orderId, nextNotes))
-                                        .flatMap {
-                                            pool.preparedQuery(updateLineQuery)
-                                                .rxExecute(Tuple.of(orderId))
-                                                .flatMap {
-                                                    pool.preparedQuery(updateReservationQuery)
-                                                        .rxExecute(Tuple.of(orderId))
-                                                        .map {
-                                                            JsonObject()
-                                                                .put("salesOrderId", orderId)
-                                                                .put("status", "CANCELLED")
-                                                        }
-                                                }
+                                        val nextNotes = if (reason.isNullOrBlank()) {
+                                            null
+                                        } else {
+                                            "[CANCEL] $reason"
                                         }
+                                        connection.preparedQuery(updateOrderQuery)
+                                            .rxExecute(Tuple.of(orderId, nextNotes))
+                                            .flatMap {
+                                                connection.preparedQuery(updateLineQuery)
+                                                    .rxExecute(Tuple.of(orderId))
+                                                    .flatMap {
+                                                        connection.preparedQuery(updateReservationQuery)
+                                                            .rxExecute(Tuple.of(orderId))
+                                                            .map {
+                                                                JsonObject()
+                                                                    .put("salesOrderId", orderId)
+                                                                    .put("status", "CANCELLED")
+                                                            }
+                                                    }
+                                            }
+                                    }
                                 }
-                            }
+                        }
                     }
                 }
-            }
+        }
     }
 
     private fun mapSalesOrderRow(row: Row): JsonObject {
