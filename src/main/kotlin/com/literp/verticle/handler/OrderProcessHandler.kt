@@ -80,7 +80,11 @@ class OrderProcessHandler(
         orderService.getCurrentStock(productId, locationId)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                putErrorResponse(context, 501, error.message ?: "Stock query is not implemented yet")
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get current stock"
+                )
             }
     }
 
@@ -96,7 +100,11 @@ class OrderProcessHandler(
         orderService.getAvailableStock(productId, locationId)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
-                putErrorResponse(context, 501, error.message ?: "Stock query is not implemented yet")
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get available stock"
+                )
             }
     }
 

@@ -232,15 +232,101 @@ class OrderProcessRepositoryTransactionTest {
         }
     }
 
-    private fun createSeedOrder(prefix: String): SeedOrder {
+    @Test
+    fun currentStockCombinesInboundTransfersAndOutboundMovements() {
+        val suffix = suffix()
+        val referenceId = "STOCK-$suffix"
+        val sourceLocation = createLocation("STK-A-$suffix")
+        val targetLocation = createLocation("STK-B-$suffix")
+        val sku = "STK-$suffix"
+        val product = createProduct(sku)
+        val productId = product.getString("productId")
+        val sourceLocationId = sourceLocation.getString("locationId")
+        val targetLocationId = targetLocation.getString("locationId")
+
+        try {
+            insertInventoryMovement(productId, sku, "IN", null, sourceLocationId, 10.toBigDecimal(), referenceId)
+            insertInventoryMovement(productId, sku, "TRANSFER", sourceLocationId, targetLocationId, 3.toBigDecimal(), referenceId)
+            insertInventoryMovement(productId, sku, "OUT", sourceLocationId, sourceLocationId, 2.toBigDecimal(), referenceId)
+
+            val sourceStock = orderRepository.getCurrentStock(productId, sourceLocationId).blockingGet()
+            val targetStock = orderRepository.getCurrentStock(productId, targetLocationId).blockingGet()
+
+            assertStockQuantity(sourceStock, productId, sourceLocationId, "CURRENT", 5.toBigDecimal())
+            assertStockQuantity(targetStock, productId, targetLocationId, "CURRENT", 3.toBigDecimal())
+        } finally {
+            cleanupInventoryMovements(referenceId)
+            deleteProduct(productId)
+            deleteLocation(sourceLocationId)
+            deleteLocation(targetLocationId)
+        }
+    }
+
+    @Test
+    fun availableStockSubtractsReservedQuantity() {
+        val seed = createSeedOrder("STOCKAVL", seedStock = false)
+        val referenceId = "STOCKAVL-${seed.suffix}"
+        val sku1 = queryString("SELECT sku FROM product WHERE product_id = $1", seed.product1Id, "sku")
+        val sku2 = queryString("SELECT sku FROM product WHERE product_id = $1", seed.product2Id, "sku")
+
+        try {
+            insertInventoryMovement(seed.product1Id, sku1, "IN", null, seed.locationId, 5.toBigDecimal(), referenceId)
+            insertInventoryMovement(seed.product2Id, sku2, "IN", null, seed.locationId, 5.toBigDecimal(), referenceId)
+            orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+            val availableStock = orderRepository.getAvailableStock(seed.product1Id, seed.locationId).blockingGet()
+
+            assertStockQuantity(availableStock, seed.product1Id, seed.locationId, "AVAILABLE", 4.toBigDecimal())
+        } finally {
+            cleanupInventoryMovements(referenceId)
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun confirmRejectsWhenAvailableStockIsInsufficient() {
+        val seed = createSeedOrder("STOCKLOW", seedStock = false)
+        val referenceId = "STOCKLOW-${seed.suffix}"
+        val sku = queryString("SELECT sku FROM product WHERE product_id = $1", seed.product1Id, "sku")
+
+        try {
+            insertInventoryMovement(seed.product1Id, sku, "IN", null, seed.locationId, 0.toBigDecimal(), referenceId)
+
+            assertFailsWithMessage("Insufficient available stock") {
+                orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+            }
+
+            assertEquals("DRAFT", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("PENDING", "PENDING"))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1", seed.orderId))
+        } finally {
+            cleanupInventoryMovements(referenceId)
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    private fun createSeedOrder(prefix: String, seedStock: Boolean = true): SeedOrder {
         val suffix = suffix()
         val location = createLocation("$prefix-$suffix")
-        val product1 = createProduct("$prefix-A-$suffix")
-        val product2 = createProduct("$prefix-B-$suffix")
+        val sku1 = "$prefix-A-$suffix"
+        val sku2 = "$prefix-B-$suffix"
+        val product1 = createProduct(sku1)
+        val product2 = createProduct(sku2)
         val order = orderRepository.createSalesOrderDraft("POS", location.getString("locationId"), null, "USD", null).blockingGet()
         val orderId = order.getString("salesOrderId")
         val line1 = orderRepository.addSalesOrderLine(orderId, product1.getString("productId"), null, 1.toBigDecimal(), 10.toBigDecimal()).blockingGet()
         val line2 = orderRepository.addSalesOrderLine(orderId, product2.getString("productId"), null, 1.toBigDecimal(), 20.toBigDecimal()).blockingGet()
+
+        if (seedStock) {
+            insertInventoryMovement(product1.getString("productId"), sku1, "IN", null, location.getString("locationId"), 100.toBigDecimal(), orderId)
+            insertInventoryMovement(product2.getString("productId"), sku2, "IN", null, location.getString("locationId"), 100.toBigDecimal(), orderId)
+        }
 
         return SeedOrder(
             suffix = suffix,
@@ -366,9 +452,65 @@ class OrderProcessRepositoryTransactionTest {
         runCatching { execSql("DROP FUNCTION IF EXISTS $functionName();") }
     }
 
+    private fun insertInventoryMovement(
+        productId: String,
+        sku: String,
+        movementType: String,
+        fromLocationId: String?,
+        toLocationId: String,
+        quantity: java.math.BigDecimal,
+        referenceId: String
+    ) {
+        val referenceType = when (movementType) {
+            "TRANSFER" -> "TRANSFER"
+            "OUT" -> "SALES_ORDER"
+            else -> "ADJUSTMENT"
+        }
+        pool.preparedQuery(
+            """
+            INSERT INTO inventory_movement (movement_id, product_id, sku, movement_type, from_location_id, to_location_id, quantity, reference_type, reference_id, notes, created_by, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'stock calculation test', 'test', NOW())
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.tuple()
+                .addString(UUID.randomUUID().toString())
+                .addString(productId)
+                .addString(sku)
+                .addString(movementType)
+                .addValue(fromLocationId)
+                .addString(toLocationId)
+                .addValue(quantity)
+                .addString(referenceType)
+                .addString(referenceId)
+        ).blockingGet()
+    }
+
+    private fun cleanupInventoryMovements(referenceId: String) {
+        pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1")
+            .rxExecute(Tuple.of(referenceId))
+            .blockingGet()
+    }
+
+    private fun assertStockQuantity(
+        stock: JsonObject,
+        productId: String,
+        locationId: String,
+        quantityType: String,
+        expectedQuantity: java.math.BigDecimal
+    ) {
+        assertEquals(productId, stock.getString("productId"))
+        assertEquals(locationId, stock.getString("locationId"))
+        assertEquals(quantityType, stock.getString("quantityType"))
+        val actualQuantity = stock.getValue("quantity").toString().toBigDecimal()
+        assertTrue(
+            actualQuantity.compareTo(expectedQuantity) == 0,
+            "Expected $expectedQuantity but was $actualQuantity"
+        )
+    }
+
     private fun cleanupOrderGraph(orderId: String) {
         execSql("DELETE FROM payment WHERE sales_order_id = '$orderId';")
-        execSql("DELETE FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = '$orderId';")
+        cleanupInventoryMovements(orderId)
         execSql("DELETE FROM sales_order WHERE sales_order_id = '$orderId';")
     }
 

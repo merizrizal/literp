@@ -99,6 +99,7 @@ open class BaseHandler(clazz: Class<*>) {
                 || message.contains("only confirmed", ignoreCase = true)
                 || message.contains("draft", ignoreCase = true)
                 || message.contains("insufficient captured payment", ignoreCase = true)
+                || message.contains("insufficient available stock", ignoreCase = true)
     }
 
     protected fun isValidationError(message: String?): Boolean {
