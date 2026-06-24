@@ -115,13 +115,18 @@ class OrderProcessHandler(
         val paymentMethod = body.getString("paymentMethod")
         val amount = body.getValue("amount")?.toString()
         val transactionRef = body.getString("transactionRef")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 
         if (paymentMethod.isNullOrBlank() || amount.isNullOrBlank()) {
             putErrorResponse(context, 400, "paymentMethod and amount are required")
             return
         }
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
 
-        orderService.capturePayment(orderId, paymentMethod, amount, transactionRef)
+        orderService.capturePayment(orderId, paymentMethod, amount, transactionRef, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(

@@ -64,9 +64,10 @@ class OrderProcessServiceImpl(
         salesOrderId: String,
         paymentMethod: String,
         amount: String,
-        transactionRef: String?
+        transactionRef: String?,
+        idempotencyKey: String
     ): Future<JsonObject> {
-        return repository.capturePayment(salesOrderId, paymentMethod, BigDecimal(amount), transactionRef).toVertxFuture()
+        return repository.capturePayment(salesOrderId, paymentMethod, BigDecimal(amount), transactionRef, idempotencyKey).toVertxFuture()
     }
 
     override fun fulfillSalesOrder(salesOrderId: String, createdBy: String?, notes: String?): Future<JsonObject> {

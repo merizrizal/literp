@@ -6,6 +6,7 @@ import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Row
+import io.vertx.rxjava3.sqlclient.SqlConnection
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.math.BigDecimal
 import java.time.LocalDateTime
@@ -94,25 +95,26 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         notes: String?
     ): Single<JsonObject> {
         val orderId = UUID.randomUUID().toString()
-        val orderNumber = generateOrderNumber()
         val query = """
             INSERT INTO sales_order (sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at)
             VALUES ($1, $2, NOW(), $3, $4, $5, 'DRAFT', 0, $6, $7, NOW(), NOW())
             RETURNING sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at
         """.trimIndent()
 
-        return pool.preparedQuery(query)
-            .rxExecute(
-                Tuple.tuple()
-                    .addString(orderId)
-                    .addString(orderNumber)
-                    .addString(salesChannel.uppercase())
-                    .addValue(customerId)
-                    .addString(locationId)
-                    .addString(currency.uppercase())
-                    .addValue(notes)
-            )
-            .map { result -> mapSalesOrderRow(result.first()) }
+        return generateOrderNumber().flatMap { orderNumber ->
+            pool.preparedQuery(query)
+                .rxExecute(
+                    Tuple.tuple()
+                        .addString(orderId)
+                        .addString(orderNumber)
+                        .addString(salesChannel.uppercase())
+                        .addValue(customerId)
+                        .addString(locationId)
+                        .addString(currency.uppercase())
+                        .addValue(notes)
+                )
+                .map { result -> mapSalesOrderRow(result.first()) }
+        }
     }
 
     fun getSalesOrder(orderId: String): Single<JsonObject> {
@@ -334,8 +336,18 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         orderId: String,
         paymentMethod: String,
         amount: BigDecimal,
-        transactionRef: String?
+        transactionRef: String?,
+        idempotencyKey: String
     ): Single<JsonObject> {
+        val normalizedPaymentMethod = paymentMethod.uppercase()
+        val normalizedTransactionRef = transactionRef?.trim()?.takeIf { it.isNotBlank() }
+        val idempotencyKeyValue = idempotencyKey.trim()
+        val commandName = "capturePayment"
+        val requestFingerprint = listOf(
+            normalizedPaymentMethod,
+            amount.toPlainString(),
+            normalizedTransactionRef ?: ""
+        ).joinToString("|")
         val orderQuery = """
             SELECT sales_order_id, status, total_amount
             FROM sales_order
@@ -355,44 +367,63 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         if (amount <= BigDecimal.ZERO) {
             return Single.error(Exception("amount must be > 0"))
         }
+        if (idempotencyKeyValue.isBlank()) {
+            return Single.error(Exception("Idempotency-Key is required"))
+        }
 
-        return pool.preparedQuery(orderQuery)
-            .rxExecute(Tuple.of(orderId))
-            .flatMap { orderResult ->
-                if (orderResult.size() == 0) {
-                    Single.error(Exception(ErrorCodes.fromStatus(404)))
-                } else {
-                    val row = orderResult.first()
-                    val status = row.getString("status")
-                    val totalAmount = row.getBigDecimal("total_amount")
-                    if (status != "CONFIRMED" && status != "FULFILLED") {
-                        Single.error(Exception("Payment can only be captured for CONFIRMED or FULFILLED orders"))
-                    } else {
-                        pool.preparedQuery(paymentInsertQuery)
-                            .rxExecute(
-                                Tuple.of(
-                                    UUID.randomUUID().toString(),
-                                    orderId,
-                                    paymentMethod.uppercase(),
-                                    amount,
-                                    transactionRef
-                                )
-                            )
-                            .flatMap { paymentInsertResult ->
-                                pool.preparedQuery(capturedTotalQuery)
-                                    .rxExecute(Tuple.of(orderId))
-                                    .map { capturedResult ->
-                                        val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
-                                        JsonObject()
-                                            .put("payment", mapPaymentRow(paymentInsertResult.first()))
-                                            .put("totalAmount", totalAmount)
-                                            .put("totalCaptured", totalCaptured)
-                                            .put("balance", totalAmount.subtract(totalCaptured))
-                                    }
+        return inTransaction { connection ->
+            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
+                .flatMap { state ->
+                    state.responsePayload?.let { storedResponse ->
+                        Single.just(storedResponse)
+                    } ?: connection.preparedQuery(orderQuery)
+                        .rxExecute(Tuple.of(orderId))
+                        .flatMap { orderResult ->
+                            if (orderResult.size() == 0) {
+                                Single.error(Exception(ErrorCodes.fromStatus(404)))
+                            } else {
+                                val row = orderResult.first()
+                                val status = row.getString("status")
+                                val totalAmount = row.getBigDecimal("total_amount")
+                                if (status != "CONFIRMED" && status != "FULFILLED") {
+                                    Single.error(Exception("Payment can only be captured for CONFIRMED or FULFILLED orders"))
+                                } else {
+                                    connection.preparedQuery(paymentInsertQuery)
+                                        .rxExecute(
+                                            Tuple.of(
+                                                UUID.randomUUID().toString(),
+                                                orderId,
+                                                normalizedPaymentMethod,
+                                                amount,
+                                                normalizedTransactionRef
+                                            )
+                                        )
+                                        .flatMap { paymentInsertResult ->
+                                            connection.preparedQuery(capturedTotalQuery)
+                                                .rxExecute(Tuple.of(orderId))
+                                                .flatMap { capturedResult ->
+                                                    val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                                    val response = JsonObject()
+                                                        .put("payment", mapPaymentRow(paymentInsertResult.first()))
+                                                        .put("totalAmount", totalAmount)
+                                                        .put("totalCaptured", totalCaptured)
+                                                        .put("balance", totalAmount.subtract(totalCaptured))
+                                                    storeCommandIdempotency(
+                                                        connection,
+                                                        orderId,
+                                                        commandName,
+                                                        idempotencyKeyValue,
+                                                        requestFingerprint,
+                                                        201,
+                                                        response
+                                                    )
+                                                }
+                                        }
+                                }
                             }
-                    }
+                        }
                 }
-            }
+        }
     }
 
     fun fulfillSalesOrder(orderId: String, createdBy: String?, notes: String?): Single<JsonObject> {
@@ -654,9 +685,134 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .put("updatedAt", row.getLocalDateTime("updated_at")?.toString())
     }
 
-    private fun generateOrderNumber(): String {
-        val epoch = LocalDateTime.now().toString().replace(":", "").replace("-", "").replace(".", "")
-        val suffix = UUID.randomUUID().toString().substring(0, 6).uppercase()
-        return "SO-$epoch-$suffix"
+    private data class CommandIdempotencyState(
+        val responsePayload: JsonObject?
+    )
+
+    private fun loadCommandIdempotency(
+        connection: SqlConnection,
+        orderId: String,
+        commandName: String,
+        idempotencyKey: String,
+        requestFingerprint: String
+    ): Single<CommandIdempotencyState> {
+        val selectQuery = """
+            SELECT request_fingerprint, response_payload
+            FROM order_command_idempotency
+            WHERE sales_order_id = $1 AND command_name = $2 AND idempotency_key = $3
+        """.trimIndent()
+        val insertQuery = """
+            INSERT INTO order_command_idempotency (
+                idempotency_id,
+                sales_order_id,
+                command_name,
+                idempotency_key,
+                request_fingerprint,
+                response_status,
+                response_payload,
+                created_at,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, NULL, NULL, NOW(), NOW())
+            ON CONFLICT (sales_order_id, command_name, idempotency_key) DO NOTHING
+            RETURNING idempotency_id
+        """.trimIndent()
+
+        return connection.preparedQuery(selectQuery)
+            .rxExecute(Tuple.of(orderId, commandName, idempotencyKey))
+            .flatMap { result ->
+                if (result.size() > 0) {
+                    val row = result.first()
+                    val storedFingerprint = row.getString("request_fingerprint")
+                    if (storedFingerprint != requestFingerprint) {
+                        Single.error(Exception("Idempotency key conflict"))
+                    } else {
+                        val storedResponse = row.getJsonObject("response_payload")
+                        if (storedResponse == null) {
+                            Single.error(Exception("Idempotency key conflict"))
+                        } else {
+                            Single.just(CommandIdempotencyState(storedResponse))
+                        }
+                    }
+                } else {
+                    connection.preparedQuery(insertQuery)
+                        .rxExecute(
+                            Tuple.tuple()
+                                .addString(UUID.randomUUID().toString())
+                                .addString(orderId)
+                                .addString(commandName)
+                                .addString(idempotencyKey)
+                                .addString(requestFingerprint)
+                        )
+                        .flatMap { insertResult ->
+                            if (insertResult.size() > 0) {
+                                Single.just(CommandIdempotencyState(null))
+                            } else {
+                                connection.preparedQuery(selectQuery)
+                                    .rxExecute(Tuple.of(orderId, commandName, idempotencyKey))
+                                    .map { retryResult ->
+                                        if (retryResult.size() == 0) {
+                                            throw IllegalStateException("Failed to claim idempotency key")
+                                        }
+                                        val row = retryResult.first()
+                                        val storedFingerprint = row.getString("request_fingerprint")
+                                        if (storedFingerprint != requestFingerprint) {
+                                            throw IllegalStateException("Idempotency key conflict")
+                                        }
+                                        val storedResponse = row.getJsonObject("response_payload")
+                                            ?: throw IllegalStateException("Idempotency key conflict")
+                                        CommandIdempotencyState(storedResponse)
+                                    }
+                            }
+                        }
+                }
+            }
+    }
+
+    private fun storeCommandIdempotency(
+        connection: SqlConnection,
+        orderId: String,
+        commandName: String,
+        idempotencyKey: String,
+        requestFingerprint: String,
+        responseStatus: Int,
+        responsePayload: JsonObject
+    ): Single<JsonObject> {
+        val updateQuery = """
+            UPDATE order_command_idempotency
+            SET response_status = $4, response_payload = $5, updated_at = NOW()
+            WHERE sales_order_id = $1 AND command_name = $2 AND idempotency_key = $3 AND request_fingerprint = $6
+        """.trimIndent()
+
+        return connection.preparedQuery(updateQuery)
+            .rxExecute(
+                Tuple.tuple()
+                    .addString(orderId)
+                    .addString(commandName)
+                    .addString(idempotencyKey)
+                    .addValue(responseStatus)
+                    .addValue(responsePayload)
+                    .addString(requestFingerprint)
+            )
+            .flatMap { updateResult ->
+                if (updateResult.rowCount() == 0) {
+                    Single.error(Exception("Idempotency key conflict"))
+                } else {
+                    Single.just(responsePayload)
+                }
+            }
+    }
+
+    private fun generateOrderNumber(): Single<String> {
+        val sequenceQuery = "SELECT nextval('sales_order_number_seq') AS sequence_value"
+        return pool.preparedQuery(sequenceQuery)
+            .rxExecute(Tuple.tuple())
+            .map { result ->
+                val sequenceValue = result.first().getLong("sequence_value")
+                    ?: throw IllegalStateException("sales_order_number_seq did not return a value")
+                val epoch = LocalDateTime.now().toString().replace(":", "").replace("-", "").replace(".", "")
+                val suffix = sequenceValue.toString().padStart(6, '0')
+                "SO-$epoch-$suffix"
+            }
     }
 }
