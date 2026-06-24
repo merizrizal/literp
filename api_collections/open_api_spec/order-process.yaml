@@ -289,6 +289,76 @@ paths:
         '500':
           $ref: '#/components/responses/InternalServerError'
 
+  /stock/current:
+    get:
+      tags: [Inventory]
+      summary: Get current stock for a product at a location
+      operationId: getCurrentStock
+      parameters:
+        - name: productId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: locationId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Current stock retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/StockQuantity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '501':
+          description: Stock calculation is not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /stock/available:
+    get:
+      tags: [Inventory]
+      summary: Get available stock for a product at a location
+      operationId: getAvailableStock
+      parameters:
+        - name: productId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: locationId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Available stock retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/StockQuantity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '501':
+          description: Stock calculation is not implemented yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
 components:
   schemas:
     SalesOrder:
@@ -403,6 +473,19 @@ components:
         reason:
           type: string
           nullable: true
+
+    StockQuantity:
+      type: object
+      properties:
+        productId:
+          type: string
+        locationId:
+          type: string
+        quantity:
+          type: number
+        quantityType:
+          type: string
+          enum: [CURRENT, AVAILABLE]
 
     PaginationInfo:
       type: object

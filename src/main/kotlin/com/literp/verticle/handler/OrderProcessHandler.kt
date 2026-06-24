@@ -68,6 +68,38 @@ class OrderProcessHandler(
             }
     }
 
+    fun getCurrentStock(context: RoutingContext) {
+        val productId = context.queryParam("productId").firstOrNull()?.trim()
+        val locationId = context.queryParam("locationId").firstOrNull()?.trim()
+
+        if (productId.isNullOrBlank() || locationId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "productId and locationId are required")
+            return
+        }
+
+        orderService.getCurrentStock(productId, locationId)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                putErrorResponse(context, 501, error.message ?: "Stock query is not implemented yet")
+            }
+    }
+
+    fun getAvailableStock(context: RoutingContext) {
+        val productId = context.queryParam("productId").firstOrNull()?.trim()
+        val locationId = context.queryParam("locationId").firstOrNull()?.trim()
+
+        if (productId.isNullOrBlank() || locationId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "productId and locationId are required")
+            return
+        }
+
+        orderService.getAvailableStock(productId, locationId)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                putErrorResponse(context, 501, error.message ?: "Stock query is not implemented yet")
+            }
+    }
+
     fun addSalesOrderLine(context: RoutingContext) {
         val orderId = context.pathParam("salesOrderId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)

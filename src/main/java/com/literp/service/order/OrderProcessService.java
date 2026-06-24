@@ -20,6 +20,10 @@ public interface OrderProcessService {
 
     Future<JsonObject> addSalesOrderLine(String salesOrderId, String productId, String sku, String quantityOrdered, String unitPrice);
 
+    Future<JsonObject> getCurrentStock(String productId, String locationId);
+
+    Future<JsonObject> getAvailableStock(String productId, String locationId);
+
     Future<JsonObject> confirmSalesOrder(String salesOrderId, String idempotencyKey);
 
     Future<JsonObject> capturePayment(String salesOrderId, String paymentMethod, String amount, String transactionRef, String idempotencyKey);

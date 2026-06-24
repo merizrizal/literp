@@ -172,6 +172,21 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             }
     }
 
+    fun getCurrentStock(productId: String, locationId: String): Single<JsonObject> {
+        return stockQueryNotImplemented(productId, locationId)
+    }
+
+    fun getAvailableStock(productId: String, locationId: String): Single<JsonObject> {
+        return stockQueryNotImplemented(productId, locationId)
+    }
+
+    private fun stockQueryNotImplemented(productId: String, locationId: String): Single<JsonObject> {
+        if (productId.isBlank() || locationId.isBlank()) {
+            return Single.error(Exception("productId and locationId are required"))
+        }
+        return Single.error(UnsupportedOperationException("Stock query is not implemented yet"))
+    }
+
     fun addSalesOrderLine(
         orderId: String,
         productId: String,
