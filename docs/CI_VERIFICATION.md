@@ -7,7 +7,7 @@ before merging implementation work.
 
 | Check | Runtime | Command |
 |---|---|---|
-| Build | Java 25, Gradle wrapper 9.5.0 | `./gradlew build` |
+| Build | Java 25, Gradle wrapper 9.5.1 | `./gradlew build` |
 | Migration Verification | Python 3.13, PostgreSQL 18 | `python scripts/verify_migrations.py` |
 
 The migration check runs Alembic to `head`, verifies the database revision

@@ -22,7 +22,7 @@ public interface OrderProcessService {
 
     Future<JsonObject> confirmSalesOrder(String salesOrderId);
 
-    Future<JsonObject> capturePayment(String salesOrderId, String paymentMethod, String amount, String transactionRef);
+    Future<JsonObject> capturePayment(String salesOrderId, String paymentMethod, String amount, String transactionRef, String idempotencyKey);
 
     Future<JsonObject> fulfillSalesOrder(String salesOrderId, String createdBy, String notes);
 

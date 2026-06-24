@@ -309,6 +309,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "description": "Unique idempotency key for payment retries",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {

@@ -95,7 +95,7 @@ class OrderProcessRepositoryTransactionTest {
     fun fulfillRollsBackMovementWritesOnFailure() {
         val seed = createSeedOrder("FULFILL")
         orderRepository.confirmSalesOrder(seed.orderId).blockingGet()
-        orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}").blockingGet()
+        orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "PAY-${seed.suffix}").blockingGet()
         installMovementFailureTrigger(seed.orderId, seed.product2Id, seed.suffix)
 
         try {
@@ -109,6 +109,27 @@ class OrderProcessRepositoryTransactionTest {
             assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1 AND status = 'RESERVED'", seed.orderId))
         } finally {
             cleanupTrigger("trg_fail_fulfill_${seed.suffix}", "fn_fail_fulfill_${seed.suffix}")
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun capturePaymentIsIdempotentForRepeatedRequests() {
+        val seed = createSeedOrder("IDEM")
+        orderRepository.confirmSalesOrder(seed.orderId).blockingGet()
+
+        try {
+            val first = orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "IDEM-${seed.suffix}").blockingGet()
+            val second = orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "IDEM-${seed.suffix}").blockingGet()
+
+            assertEquals(first.getJsonObject("payment").getString("paymentId"), second.getJsonObject("payment").getString("paymentId"))
+            assertEquals(first.getJsonObject("payment").getString("transactionRef"), second.getJsonObject("payment").getString("transactionRef"))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'capturePayment'", seed.orderId))
+        } finally {
             cleanupOrderGraph(seed.orderId)
             deleteProduct(seed.product1Id)
             deleteProduct(seed.product2Id)
