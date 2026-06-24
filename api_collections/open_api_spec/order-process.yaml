@@ -151,6 +151,11 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique idempotency key for confirm retries
+          schema: { type: string }
       responses:
         '200':
           description: Sales order confirmed
@@ -218,6 +223,11 @@ paths:
           in: path
           required: true
           schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique idempotency key for fulfillment retries
+          schema: { type: string }
       requestBody:
         required: false
         content:
@@ -250,6 +260,11 @@ paths:
         - name: salesOrderId
           in: path
           required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique idempotency key for cancellation retries
           schema: { type: string }
       requestBody:
         required: false

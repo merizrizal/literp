@@ -76,7 +76,7 @@ class OrderProcessRepositoryTransactionTest {
 
         try {
             assertFailsWithMessage("forced confirm failure") {
-                orderRepository.confirmSalesOrder(seed.orderId).blockingGet()
+                orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
             }
 
             assertEquals("DRAFT", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
@@ -92,15 +92,38 @@ class OrderProcessRepositoryTransactionTest {
     }
 
     @Test
+    fun confirmSalesOrderIsIdempotentAndWritesAuditEvent() {
+        val seed = createSeedOrder("CONFIDEM")
+
+        try {
+            val first = orderRepository.confirmSalesOrder(seed.orderId, "CONFIDEM-${seed.suffix}").blockingGet()
+            val second = orderRepository.confirmSalesOrder(seed.orderId, "CONFIDEM-${seed.suffix}").blockingGet()
+
+            assertEquals("CONFIRMED", first.getString("status"))
+            assertEquals(first.getString("salesOrderId"), second.getString("salesOrderId"))
+            assertEquals(first.getString("status"), second.getString("status"))
+            assertEquals(first.getInteger("reservedLineCount"), second.getInteger("reservedLineCount"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'confirmSalesOrder'", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_CONFIRMED'", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
     fun fulfillRollsBackMovementWritesOnFailure() {
         val seed = createSeedOrder("FULFILL")
-        orderRepository.confirmSalesOrder(seed.orderId).blockingGet()
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
         orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "PAY-${seed.suffix}").blockingGet()
         installMovementFailureTrigger(seed.orderId, seed.product2Id, seed.suffix)
 
         try {
             assertFailsWithMessage("forced fulfill failure") {
-                orderRepository.fulfillSalesOrder(seed.orderId, "tester", "rollback check").blockingGet()
+                orderRepository.fulfillSalesOrder(seed.orderId, "tester", "rollback check", "FULFILL-${seed.suffix}").blockingGet()
             }
 
             assertEquals("CONFIRMED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
@@ -117,9 +140,35 @@ class OrderProcessRepositoryTransactionTest {
     }
 
     @Test
+    fun fulfillSalesOrderIsIdempotentAndWritesAuditEvent() {
+        val seed = createSeedOrder("FULIDEM")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+        orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "PAY-${seed.suffix}").blockingGet()
+
+        try {
+            val first = orderRepository.fulfillSalesOrder(seed.orderId, "tester", "ship now", "FULIDEM-${seed.suffix}").blockingGet()
+            val second = orderRepository.fulfillSalesOrder(seed.orderId, "tester", "ship now", "FULIDEM-${seed.suffix}").blockingGet()
+
+            assertEquals("FULFILLED", first.getString("status"))
+            assertEquals(first.getString("salesOrderId"), second.getString("salesOrderId"))
+            assertEquals(first.getString("status"), second.getString("status"))
+            assertEquals(first.getInteger("fulfilledLineCount"), second.getInteger("fulfilledLineCount"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1 AND status = 'FULFILLED'", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'fulfillSalesOrder'", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_FULFILLED'", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
     fun capturePaymentIsIdempotentForRepeatedRequests() {
         val seed = createSeedOrder("IDEM")
-        orderRepository.confirmSalesOrder(seed.orderId).blockingGet()
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
 
         try {
             val first = orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "IDEM-${seed.suffix}").blockingGet()
@@ -144,13 +193,38 @@ class OrderProcessRepositoryTransactionTest {
 
         try {
             assertFailsWithMessage("forced cancel failure") {
-                orderRepository.cancelSalesOrder(seed.orderId, "rollback check").blockingGet()
+                orderRepository.cancelSalesOrder(seed.orderId, "rollback check", "CANCEL-${seed.suffix}").blockingGet()
             }
 
             assertEquals("DRAFT", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
             assertLineStatuses(seed.orderId, listOf("PENDING", "PENDING"))
         } finally {
             cleanupTrigger("trg_fail_cancel_${seed.suffix}", "fn_fail_cancel_${seed.suffix}")
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun cancelSalesOrderIsIdempotentAndWritesAuditEvent() {
+        val seed = createSeedOrder("CANIDEM")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+        try {
+            val first = orderRepository.cancelSalesOrder(seed.orderId, "customer changed mind", "CANIDEM-${seed.suffix}").blockingGet()
+            val second = orderRepository.cancelSalesOrder(seed.orderId, "customer changed mind", "CANIDEM-${seed.suffix}").blockingGet()
+
+            assertEquals("CANCELLED", first.getString("status"))
+            assertEquals(first.getString("salesOrderId"), second.getString("salesOrderId"))
+            assertEquals(first.getString("status"), second.getString("status"))
+            assertEquals("CANCELLED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("CANCELLED", "CANCELLED"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1 AND status = 'CANCELLED'", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'cancelSalesOrder'", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_CANCELLED'", seed.orderId))
+        } finally {
             cleanupOrderGraph(seed.orderId)
             deleteProduct(seed.product1Id)
             deleteProduct(seed.product2Id)

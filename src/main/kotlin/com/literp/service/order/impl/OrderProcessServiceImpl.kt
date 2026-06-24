@@ -56,8 +56,8 @@ class OrderProcessServiceImpl(
             .toVertxFuture()
     }
 
-    override fun confirmSalesOrder(salesOrderId: String): Future<JsonObject> {
-        return repository.confirmSalesOrder(salesOrderId).toVertxFuture()
+    override fun confirmSalesOrder(salesOrderId: String, idempotencyKey: String): Future<JsonObject> {
+        return repository.confirmSalesOrder(salesOrderId, idempotencyKey).toVertxFuture()
     }
 
     override fun capturePayment(
@@ -70,11 +70,11 @@ class OrderProcessServiceImpl(
         return repository.capturePayment(salesOrderId, paymentMethod, BigDecimal(amount), transactionRef, idempotencyKey).toVertxFuture()
     }
 
-    override fun fulfillSalesOrder(salesOrderId: String, createdBy: String?, notes: String?): Future<JsonObject> {
-        return repository.fulfillSalesOrder(salesOrderId, createdBy, notes).toVertxFuture()
+    override fun fulfillSalesOrder(salesOrderId: String, createdBy: String?, notes: String?, idempotencyKey: String): Future<JsonObject> {
+        return repository.fulfillSalesOrder(salesOrderId, createdBy, notes, idempotencyKey).toVertxFuture()
     }
 
-    override fun cancelSalesOrder(salesOrderId: String, reason: String?): Future<JsonObject> {
-        return repository.cancelSalesOrder(salesOrderId, reason).toVertxFuture()
+    override fun cancelSalesOrder(salesOrderId: String, reason: String?, idempotencyKey: String): Future<JsonObject> {
+        return repository.cancelSalesOrder(salesOrderId, reason, idempotencyKey).toVertxFuture()
     }
 }

@@ -96,7 +96,14 @@ class OrderProcessHandler(
 
     fun confirmSalesOrder(context: RoutingContext) {
         val orderId = context.pathParam("salesOrderId")
-        orderService.confirmSalesOrder(orderId)
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
+
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        orderService.confirmSalesOrder(orderId, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -142,8 +149,14 @@ class OrderProcessHandler(
         val body = context.body().asJsonObject() ?: io.vertx.core.json.JsonObject()
         val createdBy = body.getString("createdBy")
         val notes = body.getString("notes")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 
-        orderService.fulfillSalesOrder(orderId, createdBy, notes)
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        orderService.fulfillSalesOrder(orderId, createdBy, notes, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -158,8 +171,14 @@ class OrderProcessHandler(
         val orderId = context.pathParam("salesOrderId")
         val body = context.body().asJsonObject() ?: io.vertx.core.json.JsonObject()
         val reason = body.getString("reason")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 
-        orderService.cancelSalesOrder(orderId, reason)
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        orderService.cancelSalesOrder(orderId, reason, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
