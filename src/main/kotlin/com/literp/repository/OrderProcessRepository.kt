@@ -240,7 +240,10 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
-    fun confirmSalesOrder(orderId: String): Single<JsonObject> {
+    fun confirmSalesOrder(orderId: String, idempotencyKey: String): Single<JsonObject> {
+        val idempotencyKeyValue = idempotencyKey.trim()
+        val commandName = "confirmSalesOrder"
+        val requestFingerprint = commandName
         val orderQuery = "SELECT sales_order_id, status, location_id FROM sales_order WHERE sales_order_id = $1"
         val linesQuery = """
             SELECT line_id, product_id, sku, quantity_ordered, quantity_fulfilled
@@ -262,72 +265,103 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1
         """.trimIndent()
 
+        if (idempotencyKeyValue.isBlank()) {
+            return Single.error(Exception("Idempotency-Key is required"))
+        }
+
         return inTransaction { connection ->
-            connection.preparedQuery(orderQuery)
-                .rxExecute(Tuple.of(orderId))
-                .flatMap { orderResult ->
-                    if (orderResult.size() == 0) {
-                        Single.error(Exception(ErrorCodes.fromStatus(404)))
-                    } else {
-                        val row = orderResult.first()
-                        val orderStatus = row.getString("status")
-                        val locationId = row.getString("location_id")
-                        if (orderStatus != "DRAFT") {
-                            Single.error(Exception("Only DRAFT orders can be confirmed"))
-                        } else {
-                            connection.preparedQuery(linesQuery)
-                                .rxExecute(Tuple.of(orderId))
-                                .flatMap { lineResult ->
-                                    if (lineResult.size() == 0) {
-                                        Single.error(Exception("Cannot confirm order without lines"))
-                                    } else {
-                                        val lines = lineResult.map { it }
-                                        Observable.fromIterable(lines)
-                                            .concatMapCompletable { line ->
-                                                val quantityOrdered = line.getBigDecimal("quantity_ordered")
-                                                val quantityFulfilled = line.getBigDecimal("quantity_fulfilled")
-                                                val reserveQty = quantityOrdered.subtract(quantityFulfilled)
-                                                if (reserveQty <= BigDecimal.ZERO) {
-                                                    connection.preparedQuery(updateLineStatusQuery)
-                                                        .rxExecute(Tuple.of(line.getString("line_id")))
-                                                        .ignoreElement()
-                                                } else {
-                                                    connection.preparedQuery(insertReservationQuery)
-                                                        .rxExecute(
-                                                            Tuple.tuple()
-                                                                .addString(UUID.randomUUID().toString())
-                                                                .addString(orderId)
-                                                                .addString(line.getString("line_id"))
-                                                                .addString(line.getString("product_id"))
-                                                                .addString(line.getString("sku"))
-                                                                .addString(locationId)
-                                                                .addValue(reserveQty)
-                                                        )
-                                                        .ignoreElement()
-                                                        .andThen(
+            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
+                .flatMap { state ->
+                    state.responsePayload?.let { storedResponse ->
+                        Single.just(storedResponse)
+                    } ?: connection.preparedQuery(orderQuery)
+                        .rxExecute(Tuple.of(orderId))
+                        .flatMap { orderResult ->
+                            if (orderResult.size() == 0) {
+                                Single.error(Exception(ErrorCodes.fromStatus(404)))
+                            } else {
+                                val row = orderResult.first()
+                                val orderStatus = row.getString("status")
+                                val locationId = row.getString("location_id")
+                                if (orderStatus != "DRAFT") {
+                                    Single.error(Exception("Only DRAFT orders can be confirmed"))
+                                } else {
+                                    connection.preparedQuery(linesQuery)
+                                        .rxExecute(Tuple.of(orderId))
+                                        .flatMap { lineResult ->
+                                            if (lineResult.size() == 0) {
+                                                Single.error(Exception("Cannot confirm order without lines"))
+                                            } else {
+                                                val lines = lineResult.map { it }
+                                                Observable.fromIterable(lines)
+                                                    .concatMapCompletable { line ->
+                                                        val quantityOrdered = line.getBigDecimal("quantity_ordered")
+                                                        val quantityFulfilled = line.getBigDecimal("quantity_fulfilled")
+                                                        val reserveQty = quantityOrdered.subtract(quantityFulfilled)
+                                                        if (reserveQty <= BigDecimal.ZERO) {
                                                             connection.preparedQuery(updateLineStatusQuery)
                                                                 .rxExecute(Tuple.of(line.getString("line_id")))
                                                                 .ignoreElement()
+                                                        } else {
+                                                            connection.preparedQuery(insertReservationQuery)
+                                                                .rxExecute(
+                                                                    Tuple.tuple()
+                                                                        .addString(UUID.randomUUID().toString())
+                                                                        .addString(orderId)
+                                                                        .addString(line.getString("line_id"))
+                                                                        .addString(line.getString("product_id"))
+                                                                        .addString(line.getString("sku"))
+                                                                        .addString(locationId)
+                                                                        .addValue(reserveQty)
+                                                                )
+                                                                .ignoreElement()
+                                                                .andThen(
+                                                                    connection.preparedQuery(updateLineStatusQuery)
+                                                                        .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                        .ignoreElement()
+                                                                )
+                                                        }
+                                                    }
+                                                    .andThen(
+                                                        connection.preparedQuery(updateOrderQuery)
+                                                            .rxExecute(Tuple.of(orderId))
+                                                            .ignoreElement()
+                                                    )
+                                                    .andThen(
+                                                        insertSalesOrderEvent(
+                                                            connection,
+                                                            orderId,
+                                                            "ORDER_CONFIRMED",
+                                                            orderStatus,
+                                                            "CONFIRMED",
+                                                            commandName,
+                                                            idempotencyKeyValue,
+                                                            null,
+                                                            null
                                                         )
-                                                }
+                                                    )
+                                                    .andThen(
+                                                        Single.defer {
+                                                            val response = JsonObject()
+                                                                .put("salesOrderId", orderId)
+                                                                .put("status", "CONFIRMED")
+                                                                .put("reservedLineCount", lineResult.size())
+                                                            storeCommandIdempotency(
+                                                                connection,
+                                                                orderId,
+                                                                commandName,
+                                                                idempotencyKeyValue,
+                                                                requestFingerprint,
+                                                                200,
+                                                                response
+                                                            )
+                                                        }
+                                                    )
                                             }
-                                            .andThen(
-                                                connection.preparedQuery(updateOrderQuery)
-                                                    .rxExecute(Tuple.of(orderId))
-                                                    .ignoreElement()
-                                            )
-                                            .andThen(
-                                                Single.just(
-                                                    JsonObject()
-                                                        .put("salesOrderId", orderId)
-                                                        .put("status", "CONFIRMED")
-                                                        .put("reservedLineCount", lineResult.size())
-                                                )
-                                            )
-                                    }
+                                        }
                                 }
+                            }
                         }
-                    }
                 }
         }
     }
@@ -426,7 +460,12 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
-    fun fulfillSalesOrder(orderId: String, createdBy: String?, notes: String?): Single<JsonObject> {
+    fun fulfillSalesOrder(orderId: String, createdBy: String?, notes: String?, idempotencyKey: String): Single<JsonObject> {
+        val createdByValue = createdBy?.trim()?.takeIf { it.isNotBlank() }
+        val notesValue = notes?.trim()?.takeIf { it.isNotBlank() }
+        val idempotencyKeyValue = idempotencyKey.trim()
+        val commandName = "fulfillSalesOrder"
+        val requestFingerprint = listOf(createdByValue ?: "", notesValue ?: "").joinToString("|")
         val orderQuery = """
             SELECT sales_order_id, status, location_id, total_amount
             FROM sales_order
@@ -462,95 +501,130 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1
         """.trimIndent()
 
-        return inTransaction { connection ->
-            connection.preparedQuery(orderQuery)
-                .rxExecute(Tuple.of(orderId))
-                .flatMap { orderResult ->
-                    if (orderResult.size() == 0) {
-                        Single.error(Exception(ErrorCodes.fromStatus(404)))
-                    } else {
-                        val orderRow = orderResult.first()
-                        val status = orderRow.getString("status")
-                        val locationId = orderRow.getString("location_id")
-                        val totalAmount = orderRow.getBigDecimal("total_amount")
+        if (idempotencyKeyValue.isBlank()) {
+            return Single.error(Exception("Idempotency-Key is required"))
+        }
 
-                        if (status != "CONFIRMED") {
-                            Single.error(Exception("Only CONFIRMED orders can be fulfilled"))
-                        } else {
-                            connection.preparedQuery(capturedTotalQuery)
-                                .rxExecute(Tuple.of(orderId))
-                                .flatMap { capturedResult ->
-                                    val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
-                                    if (totalCaptured < totalAmount) {
-                                        Single.error(Exception("Insufficient captured payment for fulfillment"))
-                                    } else {
-                                        connection.preparedQuery(linesQuery)
-                                            .rxExecute(Tuple.of(orderId))
-                                            .flatMap { linesResult ->
-                                                if (linesResult.size() == 0) {
-                                                    Single.error(Exception("No fulfillable order lines found"))
-                                                } else {
-                                                    val lines = linesResult.map { it }
-                                                    Observable.fromIterable(lines)
-                                                        .concatMapCompletable { line ->
-                                                            val ordered = line.getBigDecimal("quantity_ordered")
-                                                            val fulfilled = line.getBigDecimal("quantity_fulfilled")
-                                                            val remaining = ordered.subtract(fulfilled)
-                                                            if (remaining <= BigDecimal.ZERO) {
-                                                                connection.preparedQuery(updateLineQuery)
-                                                                    .rxExecute(Tuple.of(line.getString("line_id")))
-                                                                    .ignoreElement()
-                                                            } else {
-                                                                connection.preparedQuery(movementInsertQuery)
-                                                                    .rxExecute(
-                                                                        Tuple.tuple()
-                                                                            .addString(UUID.randomUUID().toString())
-                                                                            .addString(line.getString("product_id"))
-                                                                            .addString(line.getString("sku"))
-                                                                            .addString(locationId)
-                                                                            .addString(locationId)
-                                                                            .addValue(remaining)
-                                                                            .addString(orderId)
-                                                                            .addValue(notes)
-                                                                            .addValue(createdBy)
-                                                                    )
-                                                                    .ignoreElement()
-                                                                    .andThen(
+        return inTransaction { connection ->
+            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
+                .flatMap { state ->
+                    state.responsePayload?.let { storedResponse ->
+                        Single.just(storedResponse)
+                    } ?: connection.preparedQuery(orderQuery)
+                        .rxExecute(Tuple.of(orderId))
+                        .flatMap { orderResult ->
+                            if (orderResult.size() == 0) {
+                                Single.error(Exception(ErrorCodes.fromStatus(404)))
+                            } else {
+                                val orderRow = orderResult.first()
+                                val status = orderRow.getString("status")
+                                val locationId = orderRow.getString("location_id")
+                                val totalAmount = orderRow.getBigDecimal("total_amount")
+
+                                if (status != "CONFIRMED") {
+                                    Single.error(Exception("Only CONFIRMED orders can be fulfilled"))
+                                } else {
+                                    connection.preparedQuery(capturedTotalQuery)
+                                        .rxExecute(Tuple.of(orderId))
+                                        .flatMap { capturedResult ->
+                                            val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                            if (totalCaptured < totalAmount) {
+                                                Single.error(Exception("Insufficient captured payment for fulfillment"))
+                                            } else {
+                                                connection.preparedQuery(linesQuery)
+                                                    .rxExecute(Tuple.of(orderId))
+                                                    .flatMap { linesResult ->
+                                                        if (linesResult.size() == 0) {
+                                                            Single.error(Exception("No fulfillable order lines found"))
+                                                        } else {
+                                                            val lines = linesResult.map { it }
+                                                            Observable.fromIterable(lines)
+                                                                .concatMapCompletable { line ->
+                                                                    val ordered = line.getBigDecimal("quantity_ordered")
+                                                                    val fulfilled = line.getBigDecimal("quantity_fulfilled")
+                                                                    val remaining = ordered.subtract(fulfilled)
+                                                                    if (remaining <= BigDecimal.ZERO) {
                                                                         connection.preparedQuery(updateLineQuery)
                                                                             .rxExecute(Tuple.of(line.getString("line_id")))
                                                                             .ignoreElement()
-                                                                    )
-                                                                    .andThen(
-                                                                        connection.preparedQuery(fulfillReservationQuery)
-                                                                            .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                    } else {
+                                                                        connection.preparedQuery(movementInsertQuery)
+                                                                            .rxExecute(
+                                                                                Tuple.tuple()
+                                                                                    .addString(UUID.randomUUID().toString())
+                                                                                    .addString(line.getString("product_id"))
+                                                                                    .addString(line.getString("sku"))
+                                                                                    .addString(locationId)
+                                                                                    .addString(locationId)
+                                                                                    .addValue(remaining)
+                                                                                    .addString(orderId)
+                                                                                    .addValue(notesValue)
+                                                                                    .addValue(createdByValue)
+                                                                            )
                                                                             .ignoreElement()
+                                                                            .andThen(
+                                                                                connection.preparedQuery(updateLineQuery)
+                                                                                    .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                                    .ignoreElement()
+                                                                            )
+                                                                            .andThen(
+                                                                                connection.preparedQuery(fulfillReservationQuery)
+                                                                                    .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                                    .ignoreElement()
+                                                                            )
+                                                                    }
+                                                                }
+                                                                .andThen(
+                                                                    connection.preparedQuery(updateOrderQuery)
+                                                                        .rxExecute(Tuple.of(orderId))
+                                                                        .ignoreElement()
+                                                                )
+                                                                .andThen(
+                                                                    insertSalesOrderEvent(
+                                                                        connection,
+                                                                        orderId,
+                                                                        "ORDER_FULFILLED",
+                                                                        status,
+                                                                        "FULFILLED",
+                                                                        commandName,
+                                                                        idempotencyKeyValue,
+                                                                        notesValue,
+                                                                        createdByValue
                                                                     )
-                                                            }
+                                                                )
+                                                                .andThen(
+                                                                    Single.defer {
+                                                                        val response = JsonObject()
+                                                                            .put("salesOrderId", orderId)
+                                                                            .put("status", "FULFILLED")
+                                                                            .put("fulfilledLineCount", linesResult.size())
+                                                                        storeCommandIdempotency(
+                                                                            connection,
+                                                                            orderId,
+                                                                            commandName,
+                                                                            idempotencyKeyValue,
+                                                                            requestFingerprint,
+                                                                            200,
+                                                                            response
+                                                                        )
+                                                                    }
+                                                                )
                                                         }
-                                                        .andThen(
-                                                            connection.preparedQuery(updateOrderQuery)
-                                                                .rxExecute(Tuple.of(orderId))
-                                                                .ignoreElement()
-                                                        )
-                                                        .andThen(
-                                                            Single.just(
-                                                                JsonObject()
-                                                                    .put("salesOrderId", orderId)
-                                                                    .put("status", "FULFILLED")
-                                                                    .put("fulfilledLineCount", linesResult.size())
-                                                            )
-                                                        )
-                                                }
+                                                    }
                                             }
-                                    }
+                                        }
                                 }
+                            }
                         }
-                    }
                 }
         }
     }
 
-    fun cancelSalesOrder(orderId: String, reason: String?): Single<JsonObject> {
+    fun cancelSalesOrder(orderId: String, reason: String?, idempotencyKey: String): Single<JsonObject> {
+        val reasonValue = reason?.trim()?.takeIf { it.isNotBlank() }
+        val idempotencyKeyValue = idempotencyKey.trim()
+        val commandName = "cancelSalesOrder"
+        val requestFingerprint = reasonValue ?: ""
         val orderQuery = """
             SELECT sales_order_id, status
             FROM sales_order
@@ -577,53 +651,92 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1 AND status = 'RESERVED'
         """.trimIndent()
 
+        if (idempotencyKeyValue.isBlank()) {
+            return Single.error(Exception("Idempotency-Key is required"))
+        }
+
         return inTransaction { connection ->
-            connection.preparedQuery(orderQuery)
-                .rxExecute(Tuple.of(orderId))
-                .flatMap { orderResult ->
-                    if (orderResult.size() == 0) {
-                        Single.error(Exception(ErrorCodes.fromStatus(404)))
-                    } else {
-                        val status = orderResult.first().getString("status")
-                        when (status) {
-                            "FULFILLED" -> Single.error(Exception("Cannot cancel a fulfilled order"))
-                            "CANCELLED" -> Single.just(
-                                JsonObject()
-                                    .put("salesOrderId", orderId)
-                                    .put("status", "CANCELLED")
-                                    .put("message", "Order already cancelled")
-                            )
-                            else -> connection.preparedQuery(capturedQuery)
-                                .rxExecute(Tuple.of(orderId))
-                                .flatMap { capturedResult ->
-                                    val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
-                                    if (totalCaptured > BigDecimal.ZERO) {
-                                        Single.error(Exception("Cannot cancel order with captured payment"))
-                                    } else {
-                                        val nextNotes = if (reason.isNullOrBlank()) {
-                                            null
-                                        } else {
-                                            "[CANCEL] $reason"
-                                        }
-                                        connection.preparedQuery(updateOrderQuery)
-                                            .rxExecute(Tuple.of(orderId, nextNotes))
-                                            .flatMap {
-                                                connection.preparedQuery(updateLineQuery)
-                                                    .rxExecute(Tuple.of(orderId))
+            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
+                .flatMap { state ->
+                    state.responsePayload?.let { storedResponse ->
+                        Single.just(storedResponse)
+                    } ?: connection.preparedQuery(orderQuery)
+                        .rxExecute(Tuple.of(orderId))
+                        .flatMap { orderResult ->
+                            if (orderResult.size() == 0) {
+                                Single.error(Exception(ErrorCodes.fromStatus(404)))
+                            } else {
+                                val status = orderResult.first().getString("status")
+                                when (status) {
+                                    "FULFILLED" -> Single.error(Exception("Cannot cancel a fulfilled order"))
+                                    "CANCELLED" -> {
+                                        val response = JsonObject()
+                                            .put("salesOrderId", orderId)
+                                            .put("status", "CANCELLED")
+                                            .put("message", "Order already cancelled")
+                                        storeCommandIdempotency(
+                                            connection,
+                                            orderId,
+                                            commandName,
+                                            idempotencyKeyValue,
+                                            requestFingerprint,
+                                            200,
+                                            response
+                                        )
+                                    }
+                                    else -> connection.preparedQuery(capturedQuery)
+                                        .rxExecute(Tuple.of(orderId))
+                                        .flatMap { capturedResult ->
+                                            val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                            if (totalCaptured > BigDecimal.ZERO) {
+                                                Single.error(Exception("Cannot cancel order with captured payment"))
+                                            } else {
+                                                val nextNotes = reasonValue?.let { "[CANCEL] $it" }
+                                                connection.preparedQuery(updateOrderQuery)
+                                                    .rxExecute(Tuple.of(orderId, nextNotes))
                                                     .flatMap {
-                                                        connection.preparedQuery(updateReservationQuery)
+                                                        connection.preparedQuery(updateLineQuery)
                                                             .rxExecute(Tuple.of(orderId))
-                                                            .map {
-                                                                JsonObject()
-                                                                    .put("salesOrderId", orderId)
-                                                                    .put("status", "CANCELLED")
+                                                            .flatMap {
+                                                                connection.preparedQuery(updateReservationQuery)
+                                                                    .rxExecute(Tuple.of(orderId))
+                                                                    .ignoreElement()
+                                                                    .andThen(
+                                                                        insertSalesOrderEvent(
+                                                                            connection,
+                                                                            orderId,
+                                                                            "ORDER_CANCELLED",
+                                                                            status,
+                                                                            "CANCELLED",
+                                                                            commandName,
+                                                                            idempotencyKeyValue,
+                                                                            reasonValue,
+                                                                            null
+                                                                        )
+                                                                    )
+                                                                    .andThen(
+                                                                        Single.defer {
+                                                                            val response = JsonObject()
+                                                                                .put("salesOrderId", orderId)
+                                                                                .put("status", "CANCELLED")
+                                                                            storeCommandIdempotency(
+                                                                                connection,
+                                                                                orderId,
+                                                                                commandName,
+                                                                                idempotencyKeyValue,
+                                                                                requestFingerprint,
+                                                                                200,
+                                                                                response
+                                                                            )
+                                                                        }
+                                                                    )
                                                             }
                                                     }
                                             }
-                                    }
+                                        }
                                 }
+                            }
                         }
-                    }
                 }
         }
     }
@@ -684,6 +797,47 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .put("createdAt", row.getLocalDateTime("created_at")?.toString())
             .put("updatedAt", row.getLocalDateTime("updated_at")?.toString())
     }
+
+    private fun insertSalesOrderEvent(
+        connection: SqlConnection,
+        orderId: String,
+        eventType: String,
+        previousStatus: String?,
+        newStatus: String?,
+        commandName: String?,
+        idempotencyKey: String?,
+        notes: String?,
+        createdBy: String?
+    ) = connection.preparedQuery(
+        """
+        INSERT INTO sales_order_event (
+            event_id,
+            sales_order_id,
+            event_type,
+            previous_status,
+            new_status,
+            command_name,
+            idempotency_key,
+            notes,
+            created_by,
+            created_at
+        )
+        VALUES ($1, $2, $3, $4::order_status, $5::order_status, $6, $7, $8, $9, NOW())
+        """.trimIndent()
+    )
+        .rxExecute(
+            Tuple.tuple()
+                .addString(UUID.randomUUID().toString())
+                .addString(orderId)
+                .addString(eventType)
+                .addString(previousStatus)
+                .addString(newStatus)
+                .addString(commandName)
+                .addString(idempotencyKey)
+                .addString(notes)
+                .addString(createdBy)
+        )
+        .ignoreElement()
 
     private data class CommandIdempotencyState(
         val responsePayload: JsonObject?
