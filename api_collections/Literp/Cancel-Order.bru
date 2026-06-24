@@ -10,6 +10,10 @@ post {
   auth: inherit
 }
 
+headers {
+  Idempotency-Key: {{cancelIdempotencyKey}}
+}
+
 body:json {
   {
     "reason": "Customer changed mind"

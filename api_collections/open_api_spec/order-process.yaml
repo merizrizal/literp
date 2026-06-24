@@ -315,12 +315,6 @@ paths:
                     $ref: '#/components/schemas/StockQuantity'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '501':
-          description: Stock calculation is not implemented yet
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -350,12 +344,6 @@ paths:
                     $ref: '#/components/schemas/StockQuantity'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '501':
-          description: Stock calculation is not implemented yet
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
