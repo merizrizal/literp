@@ -657,7 +657,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                                                                                     .addString(line.getString("product_id"))
                                                                                     .addString(line.getString("sku"))
                                                                                     .addString(locationId)
-                                                                                    .addString(locationId)
+                                                                                    .addValue(null)
                                                                                     .addValue(remaining)
                                                                                     .addString(orderId)
                                                                                     .addValue(notesValue)

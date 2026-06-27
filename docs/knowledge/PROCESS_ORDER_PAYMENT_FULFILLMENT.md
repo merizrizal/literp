@@ -141,10 +141,11 @@ Abort order prior to physical completion.
 | Add lines | Update order total | Create/update lines | None | None | None |
 | Confirm | Set confirmed | Move to reserved lifecycle | Create reserved rows | None | None |
 | Payment | No mandatory state change | No mandatory change | No mandatory change | Create payment rows | None |
-| Fulfill | Set fulfilled | Set fulfilled quantities/status | Set fulfilled | No mandatory change | Create OUT movement rows |
+| Fulfill | Set fulfilled | Set fulfilled quantities/status | Set fulfilled | No mandatory change | Create OUT movement rows from the source location with no internal destination |
 | Cancel | Set cancelled | Cancel non-fulfilled lines | Cancel reserved rows | Governed by payment policy | None |
 
 ## Implementation Notes
 - Multi-step state changes should be treated as atomic business transactions.
 - Reservation and movement records are critical for auditability.
+- Fulfillment records `OUT` movements with `from_location_id` set to the source location and `to_location_id` left null.
 - Receipt generation and refund orchestration are separate extensions of this process.

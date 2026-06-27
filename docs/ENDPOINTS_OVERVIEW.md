@@ -124,7 +124,7 @@ FULFILLED -> cannot cancel
 - Master-data single-resource responses return the resource under top-level `data`.
 - Order-process command responses use a single `data` envelope.
 - Master-data OpenAPI fields are aligned with the implemented catalog and location handlers.
-- Fulfillment currently writes `from_location_id` and `to_location_id` with the same location.
+- Fulfillment writes `from_location_id` for the source location and leaves `to_location_id` null for sales `OUT` movements.
 
 ## Test Assets
 

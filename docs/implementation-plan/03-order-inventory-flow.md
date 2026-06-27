@@ -114,16 +114,16 @@ Estimate: 1-2 engineer-days
 
 Tasks:
 
-- [ ] Replace the fulfillment `to_location_id = from_location_id` workaround with explicit movement semantics or schema change
-- [ ] Update inventory movement documentation for sales fulfillment
-- [ ] Update seed or test data if movement semantics change
-- [ ] Verify stock rollup queries still produce correct results
+- [x] Replace the fulfillment `to_location_id = from_location_id` workaround with explicit movement semantics or schema change
+- [x] Update inventory movement documentation for sales fulfillment
+- [x] Update seed or test data if movement semantics change
+- [x] Verify stock rollup queries still produce correct results
 
 Done when:
 
-- [ ] Sales fulfillment movements are semantically clear
-- [ ] Stock rollups handle sales `OUT` movements correctly
-- [ ] OpenAPI, docs, and tests reflect the chosen movement semantics
+- [x] Sales fulfillment movements are semantically clear
+- [x] Stock rollups handle sales `OUT` movements correctly
+- [x] OpenAPI, docs, and tests reflect the chosen movement semantics
 
 ### 03.5 Payment, Receipt, And Partial Flow Design
 
@@ -131,16 +131,16 @@ Estimate: 2-4 engineer-days
 
 Tasks:
 
-- [ ] Add receipt generation after successful POS fulfillment or explicitly move it to Phase 05
-- [ ] Add refund flow and payment reversal rules or explicitly move them to Phase 05
-- [ ] Add partial fulfillment support or explicitly defer it
-- [ ] Add partial payment rules if needed by POS and B2B channels
+- [x] Document receipt generation as Phase 05 ownership (`05.3 Receipt And Refund API`)
+- [x] Document refund flow and payment reversal as Phase 05 ownership (`05.3 Receipt And Refund API`)
+- [x] Document partial fulfillment as deferred to a later phase
+- [x] Document partial payment rules: multiple captured payment rows may exist; fulfillment still requires captured total to cover order total
 
 Done when:
 
-- [ ] Receipt, refund, partial fulfillment, and partial payment decisions are documented
-- [ ] Any flow kept in Phase 03 has implementation tasks and tests
-- [ ] Any deferred flow is linked to the later phase that owns it
+- [x] Receipt, refund, partial fulfillment, and partial payment decisions are documented and linked to their owning phase or guardrail
+- [x] Any flow kept in Phase 03 has implementation tasks and tests
+- [x] Any deferred flow is linked to the later phase that owns it
 
 ### 03.6 Order Flow Verification
 
@@ -148,17 +148,17 @@ Estimate: 2-3 engineer-days
 
 Tasks:
 
-- [ ] Add integration tests for every valid state transition
-- [ ] Add integration tests for invalid state transitions
-- [ ] Add integration tests for inventory movement side effects
-- [ ] Add integration tests for payment guardrails
+- [x] Add integration tests for every valid state transition
+- [x] Add integration tests for invalid state transitions
+- [x] Add integration tests for inventory movement side effects
+- [x] Add integration tests for payment guardrails
 - [x] Keep Bruno order workflow examples aligned with final behavior
 
 Done when:
 
-- [ ] Order lifecycle happy path is automated-test covered
-- [ ] Order lifecycle guardrails are automated-test covered
-- [ ] Inventory and payment side effects are verified from the database
+- [x] Order lifecycle happy path is automated-test covered
+- [x] Order lifecycle guardrails are automated-test covered
+- [x] Inventory and payment side effects are verified from the database
 
 ## Assumptions
 
@@ -172,6 +172,6 @@ Done when:
 
 - [x] The full order lifecycle is atomic where writes span multiple tables
 - [x] Stock availability is computed from movements minus active reservations
-- [ ] Fulfillment creates auditable movement records with correct location semantics
-- [ ] Payment, cancellation, and fulfillment guardrails are automated-test covered
+- [x] Fulfillment creates auditable movement records with correct location semantics
+- [x] Payment, cancellation, and fulfillment guardrails are automated-test covered
 - [x] Order process docs, OpenAPI, and Bruno collection match actual behavior
