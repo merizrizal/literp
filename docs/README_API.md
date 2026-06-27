@@ -67,7 +67,7 @@ This directory documents the current implementation on this branch.
 ## Current Implementation Snapshot
 
 - Kotlin `2.4.0`
-- Vert.x `5.1.2`
+- Vert.x `5.1.3`
 - Java `25`
 - 29 implemented API endpoints
 - 2 utility endpoints

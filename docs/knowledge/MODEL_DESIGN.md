@@ -80,7 +80,7 @@ Immutable log of all stock movements. Stock levels are derived by summing moveme
   - TRANSFER: between locations
   - ADJUSTMENT: inventory correction
 - `from_location_id` (FK → `location.location_id`, nullable) – source location
-- `to_location_id` (FK → `location.location_id`) – destination location
+- `to_location_id` (FK → `location.location_id`, nullable for OUT rows) – destination location
 - `quantity` (decimal)
 - `reference_type` (ENUM: SALES_ORDER | WORK_ORDER | PURCHASE_ORDER | ADJUSTMENT | TRANSFER)
 - `reference_id` (string) – reference to order/work-order/etc. (not FK due to polymorphic nature)

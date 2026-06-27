@@ -5,7 +5,7 @@ This document describes the implementation that exists on the current branch, no
 ## Stack
 
 - Kotlin `2.4.0`
-- Vert.x `5.1.2`
+- Vert.x `5.1.3`
 - Java `25`
 - RxJava3
 - PostgreSQL
@@ -458,7 +458,7 @@ Important distinction:
 
 - confirm, fulfill, and cancel are multi-step flows without explicit database transactions
 - order-process list responses are still double wrapped under `data`
-- order fulfillment writes `to_location_id` equal to `from_location_id`
-- receipt persistence exists in schema and seed data but is not wired to API operations
-- refunds are not exposed through a dedicated endpoint
-- partial fulfillment is not exposed through a dedicated endpoint
+- order fulfillment writes `from_location_id` as the source location and leaves `to_location_id` null for sales `OUT` movements
+- receipt persistence exists in schema and seed data, but receipt generation and lookup are owned by Phase 05 (`05.3 Receipt And Refund API`)
+- refunds are owned by Phase 05 (`05.3 Receipt And Refund API`)
+- partial fulfillment remains deferred until a later phase

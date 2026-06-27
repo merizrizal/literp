@@ -203,6 +203,6 @@ GET /api/v1/stock/available?productId={productId}&locationId={locationId}
 
 ## Notes
 
-- This API writes movement rows during fulfillment (`movement_type = OUT`).
+- This API writes movement rows during fulfillment (`movement_type = OUT`) with `from_location_id` set to the source location and `to_location_id` left null.
 - Receipt persistence and refund lifecycle endpoints are not included in this spec yet.
 - For deeper technical behavior, refer to `docs/API_IMPLEMENTATION.md`.

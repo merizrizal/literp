@@ -154,9 +154,250 @@ class OrderProcessRepositoryTransactionTest {
             assertEquals(first.getString("status"), second.getString("status"))
             assertEquals(first.getInteger("fulfilledLineCount"), second.getInteger("fulfilledLineCount"))
             assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1 AND to_location_id IS NULL", seed.orderId))
             assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1 AND status = 'FULFILLED'", seed.orderId))
             assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'fulfillSalesOrder'", seed.orderId))
             assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_FULFILLED'", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun draftSalesOrderCanBeCancelledWithoutReservationsOrMovements() {
+        val seed = createSeedOrder("DRAFTCAN")
+
+        try {
+            val result = orderRepository.cancelSalesOrder(seed.orderId, "customer changed mind", "DRAFTCAN-${seed.suffix}").blockingGet()
+
+            assertEquals("CANCELLED", result.getString("status"))
+            assertEquals("CANCELLED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("CANCELLED", "CANCELLED"))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1", seed.orderId))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun confirmedSalesOrderCanBeCancelledWithoutCapturedPayment() {
+        val seed = createSeedOrder("CONFCAN")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+        try {
+            val result = orderRepository.cancelSalesOrder(seed.orderId, "customer changed mind", "CONFCAN-${seed.suffix}").blockingGet()
+
+            assertEquals("CANCELLED", result.getString("status"))
+            assertEquals("CANCELLED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("CANCELLED", "CANCELLED"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1 AND status = 'CANCELLED'", seed.orderId))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun confirmedSalesOrderCanBeFulfilledWithSplitCapturesAndWritesExplicitOutMovements() {
+        val seed = createSeedOrder("FULSPLIT")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+        assertEquals("CONFIRMED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+        orderRepository.capturePayment(seed.orderId, "CARD", 10.toBigDecimal(), "TXN1-${seed.suffix}", "PAY1-${seed.suffix}").blockingGet()
+        orderRepository.capturePayment(seed.orderId, "CARD", 20.toBigDecimal(), "TXN2-${seed.suffix}", "PAY2-${seed.suffix}").blockingGet()
+
+        try {
+            val totalCaptured = queryDecimal(
+                "SELECT COALESCE(SUM(amount), 0) AS total_captured FROM payment WHERE sales_order_id = $1 AND status = 'CAPTURED'",
+                seed.orderId,
+                "total_captured"
+            )
+
+            assertTrue(totalCaptured.compareTo(30.toBigDecimal()) == 0)
+
+            val result = orderRepository.fulfillSalesOrder(seed.orderId, "tester", "ship now", "FULSPLIT-${seed.suffix}").blockingGet()
+
+            assertEquals("FULFILLED", result.getString("status"))
+            assertEquals("FULFILLED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("FULFILLED", "FULFILLED"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1 AND to_location_id IS NULL", seed.orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement im JOIN sales_order so ON so.sales_order_id = im.reference_id WHERE im.reference_type = 'SALES_ORDER' AND im.reference_id = $1 AND im.from_location_id = so.location_id", seed.orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1 AND status = 'CAPTURED'", seed.orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1 AND status = 'FULFILLED'", seed.orderId))
+
+            val product1Stock = orderRepository.getCurrentStock(seed.product1Id, seed.locationId).blockingGet()
+            val product2Stock = orderRepository.getCurrentStock(seed.product2Id, seed.locationId).blockingGet()
+            assertStockQuantity(product1Stock, seed.product1Id, seed.locationId, "CURRENT", 99.toBigDecimal())
+            assertStockQuantity(product2Stock, seed.product2Id, seed.locationId, "CURRENT", 99.toBigDecimal())
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun addLineRejectsWhenOrderIsNotDraft() {
+        val seed = createSeedOrder("ADDLINE")
+
+        try {
+            orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+            assertFailsWithMessage("Order line can only be added to DRAFT orders") {
+                orderRepository.addSalesOrderLine(seed.orderId, seed.product1Id, null, 1.toBigDecimal(), 10.toBigDecimal()).blockingGet()
+            }
+
+            assertEquals("CONFIRMED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_line WHERE sales_order_id = $1", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun confirmRejectsWhenOrderIsNotDraft() {
+        val seed = createSeedOrder("CONFNON")
+
+        try {
+            orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+            assertFailsWithMessage("Only DRAFT orders can be confirmed") {
+                orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM2-${seed.suffix}").blockingGet()
+            }
+
+            assertEquals("CONFIRMED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_reservation WHERE sales_order_id = $1", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun fulfillRejectsWhenCapturedPaymentDoesNotCoverOrderTotal() {
+        val seed = createSeedOrder("FULLOW")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+        orderRepository.capturePayment(seed.orderId, "CARD", 10.toBigDecimal(), "TXN-${seed.suffix}", "PAY-${seed.suffix}").blockingGet()
+
+        try {
+            assertFailsWithMessage("Insufficient captured payment for fulfillment") {
+                orderRepository.fulfillSalesOrder(seed.orderId, "tester", "ship now", "FULLOW-${seed.suffix}").blockingGet()
+            }
+
+            assertEquals("CONFIRMED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("RESERVED", "RESERVED"))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1 AND status = 'CAPTURED'", seed.orderId))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun cancelRejectsFulfilledOrders() {
+        val seed = createSeedOrder("CANCF")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+        orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "PAY-${seed.suffix}").blockingGet()
+        orderRepository.fulfillSalesOrder(seed.orderId, "tester", "ship now", "FUL-${seed.suffix}").blockingGet()
+
+        try {
+            assertFailsWithMessage("Cannot cancel a fulfilled order") {
+                orderRepository.cancelSalesOrder(seed.orderId, "customer changed mind", "CANCF-${seed.suffix}").blockingGet()
+            }
+
+            assertEquals("FULFILLED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_CANCELLED'", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun cancelRejectsOrdersWithCapturedPayment() {
+        val seed = createSeedOrder("CANPAY")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+        orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), "TXN-${seed.suffix}", "PAY-${seed.suffix}").blockingGet()
+
+        try {
+            assertFailsWithMessage("Cannot cancel order with captured payment") {
+                orderRepository.cancelSalesOrder(seed.orderId, "customer changed mind", "CANPAY-${seed.suffix}").blockingGet()
+            }
+
+            assertEquals("CONFIRMED", queryString("SELECT status FROM sales_order WHERE sales_order_id = $1", seed.orderId, "status"))
+            assertLineStatuses(seed.orderId, listOf("RESERVED", "RESERVED"))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1 AND status = 'CAPTURED'", seed.orderId))
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_CANCELLED'", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun capturePaymentRejectsInvalidAmountsAndBlankIdempotencyKey() {
+        val seed = createSeedOrder("PAYGUARD")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+        try {
+            assertFailsWithMessage("amount must be > 0") {
+                orderRepository.capturePayment(seed.orderId, "CARD", 0.toBigDecimal(), "TXN0-${seed.suffix}", "PAY0-${seed.suffix}").blockingGet()
+            }
+            assertFailsWithMessage("amount must be > 0") {
+                orderRepository.capturePayment(seed.orderId, "CARD", (-5).toBigDecimal(), "TXNNEG-${seed.suffix}", "PAYNEG-${seed.suffix}").blockingGet()
+            }
+            assertFailsWithMessage("Idempotency-Key is required") {
+                orderRepository.capturePayment(seed.orderId, "CARD", 5.toBigDecimal(), "TXNBLANK-${seed.suffix}", "  ").blockingGet()
+            }
+
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", seed.orderId))
+        } finally {
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
+    fun capturePaymentRejectsIdempotencyKeyConflict() {
+        val seed = createSeedOrder("PAYCON")
+        orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+
+        try {
+            val first = orderRepository.capturePayment(seed.orderId, "CARD", 10.toBigDecimal(), "TXN-${seed.suffix}", "PAYCON-${seed.suffix}").blockingGet()
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", seed.orderId))
+
+            assertFailsWithMessage("Idempotency key conflict") {
+                orderRepository.capturePayment(seed.orderId, "CARD", 20.toBigDecimal(), "TXN-${seed.suffix}", "PAYCON-${seed.suffix}").blockingGet()
+            }
+
+            assertEquals(first.getJsonObject("payment").getString("paymentId"), queryString("SELECT payment_id FROM payment WHERE sales_order_id = $1", seed.orderId, "payment_id"))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'capturePayment'", seed.orderId))
         } finally {
             cleanupOrderGraph(seed.orderId)
             deleteProduct(seed.product1Id)
@@ -247,7 +488,7 @@ class OrderProcessRepositoryTransactionTest {
         try {
             insertInventoryMovement(productId, sku, "IN", null, sourceLocationId, 10.toBigDecimal(), referenceId)
             insertInventoryMovement(productId, sku, "TRANSFER", sourceLocationId, targetLocationId, 3.toBigDecimal(), referenceId)
-            insertInventoryMovement(productId, sku, "OUT", sourceLocationId, sourceLocationId, 2.toBigDecimal(), referenceId)
+            insertInventoryMovement(productId, sku, "OUT", sourceLocationId, null, 2.toBigDecimal(), referenceId)
 
             val sourceStock = orderRepository.getCurrentStock(productId, sourceLocationId).blockingGet()
             val targetStock = orderRepository.getCurrentStock(productId, targetLocationId).blockingGet()
@@ -457,7 +698,7 @@ class OrderProcessRepositoryTransactionTest {
         sku: String,
         movementType: String,
         fromLocationId: String?,
-        toLocationId: String,
+        toLocationId: String?,
         quantity: java.math.BigDecimal,
         referenceId: String
     ) {
@@ -478,7 +719,7 @@ class OrderProcessRepositoryTransactionTest {
                 .addString(sku)
                 .addString(movementType)
                 .addValue(fromLocationId)
-                .addString(toLocationId)
+                .addValue(toLocationId)
                 .addValue(quantity)
                 .addString(referenceType)
                 .addString(referenceId)
