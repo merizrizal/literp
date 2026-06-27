@@ -25,10 +25,17 @@ Manage customer order flow and related stock/payment transitions.
 - `POST /orders` - Create sales order draft
 - `GET /orders/{salesOrderId}` - Get order details (lines, reservations, payments)
 - `POST /orders/{salesOrderId}/lines` - Add line to draft order
-- `POST /orders/{salesOrderId}/confirm` - Confirm order and create reservations
+- `POST /orders/{salesOrderId}/confirm` - Confirm order and create reservations after stock availability check
 - `POST /orders/{salesOrderId}/payments` - Capture payment
 - `POST /orders/{salesOrderId}/fulfill` - Fulfill order and write inventory movement
 - `POST /orders/{salesOrderId}/cancel` - Cancel order
+
+#### Inventory (`/stock`)
+Inspect stock quantities by product and location.
+
+**Operations:**
+- `GET /stock/current?productId={productId}&locationId={locationId}` - Current stock from movement ledger
+- `GET /stock/available?productId={productId}&locationId={locationId}` - Current stock minus active reservations
 
 ## Implemented Process Model
 
@@ -41,6 +48,9 @@ Manage customer order flow and related stock/payment transitions.
 ### Business constraints currently enforced
 - Order lines can only be added while order is `DRAFT`
 - Confirm requires at least one order line
+- Confirm requires enough available stock for every line; Phase 03 uses a no-oversell policy
+- Confirm, payment capture, fulfillment, and cancellation require an `Idempotency-Key` header so retries do not duplicate command effects
+- Available stock is current stock from `inventory_movement` minus active `RESERVED` rows in `inventory_reservation`
 - Fulfillment requires:
   - order status `CONFIRMED`
   - captured payment total >= order total
@@ -99,7 +109,10 @@ Content-Type: application/json
 
 ```bash
 POST /api/v1/orders/{salesOrderId}/confirm
+Idempotency-Key: confirm-<unique-client-key>
 ```
+
+Returns `409 Conflict` when available stock is below the requested reservation quantity. The order remains `DRAFT` and no reservation rows are created.
 
 ### Capture Payment
 
@@ -107,6 +120,7 @@ POST /api/v1/orders/{salesOrderId}/confirm
 ```bash
 POST /api/v1/orders/{salesOrderId}/payments
 Content-Type: application/json
+Idempotency-Key: payment-<unique-client-key>
 
 {
   "paymentMethod": "CASH",
@@ -120,6 +134,7 @@ Content-Type: application/json
 ```bash
 POST /api/v1/orders/{salesOrderId}/fulfill
 Content-Type: application/json
+Idempotency-Key: fulfill-<unique-client-key>
 
 {
   "createdBy": "cashier-001",
@@ -132,9 +147,46 @@ Content-Type: application/json
 ```bash
 POST /api/v1/orders/{salesOrderId}/cancel
 Content-Type: application/json
+Idempotency-Key: cancel-<unique-client-key>
 
 {
   "reason": "Customer requested cancellation"
+}
+```
+
+### Current Stock
+
+```bash
+GET /api/v1/stock/current?productId={productId}&locationId={locationId}
+```
+
+**Response (200)**
+```json
+{
+  "data": {
+    "productId": "660e8400-e29b-41d4-a716-446655440000",
+    "locationId": "550e8400-e29b-41d4-a716-446655440000",
+    "quantity": 12,
+    "quantityType": "CURRENT"
+  }
+}
+```
+
+### Available Stock
+
+```bash
+GET /api/v1/stock/available?productId={productId}&locationId={locationId}
+```
+
+**Response (200)**
+```json
+{
+  "data": {
+    "productId": "660e8400-e29b-41d4-a716-446655440000",
+    "locationId": "550e8400-e29b-41d4-a716-446655440000",
+    "quantity": 10,
+    "quantityType": "AVAILABLE"
+  }
 }
 ```
 

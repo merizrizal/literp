@@ -1,0 +1,16 @@
+meta {
+  name: Get-Available-Stock
+  type: http
+  seq: 33
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/stock/available?productId={{productId}}&locationId={{locationId}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

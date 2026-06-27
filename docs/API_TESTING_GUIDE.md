@@ -343,14 +343,18 @@ curl -X POST "$BASE_URL/orders/{salesOrderId}/lines" \
 ### Confirm
 
 ```bash
-curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" | jq
+curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" \
+  -H "Idempotency-Key: confirm-test-001" | jq
 ```
+
+Confirm creates `RESERVED` inventory reservations only when available stock is sufficient. Phase 03 uses a no-oversell policy; insufficient stock returns `409` and leaves the order in `DRAFT`.
 
 ### Capture payment
 
 ```bash
 curl -X POST "$BASE_URL/orders/{salesOrderId}/payments" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: payment-test-001" \
   -d '{
     "paymentMethod": "CASH",
     "amount": 39.98,
@@ -363,6 +367,7 @@ curl -X POST "$BASE_URL/orders/{salesOrderId}/payments" \
 ```bash
 curl -X POST "$BASE_URL/orders/{salesOrderId}/fulfill" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fulfill-test-001" \
   -d '{
     "createdBy": "manual-test",
     "notes": "Handed over to customer"
@@ -374,10 +379,25 @@ curl -X POST "$BASE_URL/orders/{salesOrderId}/fulfill" \
 ```bash
 curl -X POST "$BASE_URL/orders/{salesOrderId}/cancel" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: cancel-test-001" \
   -d '{
     "reason": "Customer changed mind"
   }' | jq
 ```
+
+### Current stock
+
+```bash
+curl "$BASE_URL/stock/current?productId={productId}&locationId={locationId}" | jq
+```
+
+### Available stock
+
+```bash
+curl "$BASE_URL/stock/available?productId={productId}&locationId={locationId}" | jq
+```
+
+Available stock is current stock from inventory movements minus active `RESERVED` inventory reservations.
 
 ## End-to-End Happy Path
 
@@ -394,14 +414,17 @@ curl -s -X POST "$BASE_URL/orders/$ORDER_ID/lines" \
   -H "Content-Type: application/json" \
   -d "{\"productId\":\"$PRODUCT_ID\",\"quantityOrdered\":2,\"unitPrice\":19.99}" | jq
 
-curl -s -X POST "$BASE_URL/orders/$ORDER_ID/confirm" | jq
+curl -s -X POST "$BASE_URL/orders/$ORDER_ID/confirm" \
+  -H "Idempotency-Key: confirm-$ORDER_ID" | jq
 
 curl -s -X POST "$BASE_URL/orders/$ORDER_ID/payments" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: payment-$ORDER_ID" \
   -d '{"paymentMethod":"CASH","amount":39.98}' | jq
 
 curl -s -X POST "$BASE_URL/orders/$ORDER_ID/fulfill" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: fulfill-$ORDER_ID" \
   -d '{"createdBy":"manual-test"}' | jq
 
 curl -s "$BASE_URL/orders/$ORDER_ID" | jq
@@ -448,13 +471,24 @@ curl -X POST "$BASE_URL/products" \
 ### Confirm order with no lines
 
 ```bash
-curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" | jq
+curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" \
+  -H "Idempotency-Key: confirm-empty-order" | jq
 ```
+
+### Confirm order with insufficient stock
+
+```bash
+curl -X POST "$BASE_URL/orders/{salesOrderId}/confirm" \
+  -H "Idempotency-Key: confirm-insufficient-stock" | jq
+```
+
+Expected result: `409 Conflict`; no reservations are created and the order remains `DRAFT`.
 
 ### Fulfill before full payment
 
 ```bash
-curl -X POST "$BASE_URL/orders/{salesOrderId}/fulfill" | jq
+curl -X POST "$BASE_URL/orders/{salesOrderId}/fulfill" \
+  -H "Idempotency-Key: fulfill-before-payment" | jq
 ```
 
 ### Cancel order with captured payment

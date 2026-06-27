@@ -49,7 +49,9 @@ availability behavior.
 - [x] order process OpenAPI YAML exists
 - [x] order process OpenAPI JSON exists
 - [x] Bruno requests exist for the order lifecycle
+- [x] Bruno requests exist for current and available stock queries
 - [x] API testing guide includes end-to-end curl workflow
+- [x] API testing guide documents idempotent order commands and stock availability checks
 
 ## Ordered Tasks
 
@@ -59,17 +61,17 @@ Estimate: 3-5 engineer-days
 
 Tasks:
 
-- [ ] Wrap add-line total recalculation in a transaction
-- [ ] Wrap confirm reservation and status updates in a transaction
-- [ ] Wrap fulfillment movement, reservation, line, and order updates in a transaction
-- [ ] Wrap cancellation line, reservation, and order updates in a transaction
-- [ ] Add rollback tests for at least one failure point in each multi-step command
+- [x] Wrap add-line total recalculation in a transaction
+- [x] Wrap confirm reservation and status updates in a transaction
+- [x] Wrap fulfillment movement, reservation, line, and order updates in a transaction
+- [x] Wrap cancellation line, reservation, and order updates in a transaction
+- [x] Add rollback tests for at least one failure point in each multi-step command
 
 Done when:
 
-- [ ] Multi-table order commands commit or roll back as one unit
-- [ ] Partial reservation, payment, movement, line, or order-state writes cannot persist after command failure
-- [ ] Transaction behavior is covered by integration tests
+- [x] Multi-table order commands commit or roll back as one unit
+- [x] Partial reservation, payment, movement, line, or order-state writes cannot persist after command failure
+- [x] Transaction behavior is covered by integration tests
 
 ### 03.2 Command Idempotency And Order Auditability
 
@@ -77,16 +79,16 @@ Estimate: 2-4 engineer-days
 
 Tasks:
 
-- [ ] Add idempotency strategy for confirm, payment, fulfill, and cancel commands
-- [ ] Add robust order number generation strategy, preferably database-backed
-- [ ] Add order event history or audit notes for state transitions
-- [ ] Document idempotency behavior for clients
+- [x] Add idempotency strategy for confirm, payment, fulfill, and cancel commands
+- [x] Add robust order number generation strategy, preferably database-backed
+- [x] Add order event history or audit notes for state transitions
+- [x] Document idempotency behavior for clients
 
 Done when:
 
-- [ ] Retried command requests cannot duplicate reservations, payments, or movements
-- [ ] Order numbers remain unique under concurrent creation
-- [ ] State transitions leave a readable audit trail
+- [x] Retried command requests cannot duplicate reservations, payments, or movements
+- [x] Order numbers remain unique under concurrent creation
+- [x] State transitions leave a readable audit trail
 
 ### 03.3 Stock Availability And Reservation Policy
 
@@ -94,17 +96,17 @@ Estimate: 2-4 engineer-days
 
 Tasks:
 
-- [ ] Add current-stock query API
-- [ ] Add available-stock query API
-- [ ] Compute available stock from movements minus active reservations
-- [ ] Enforce stock availability before reservation creation
-- [ ] Decide whether reservations can oversell by channel or policy
+- [x] Add current-stock query API
+- [x] Add available-stock query API
+- [x] Compute available stock from movements minus active reservations
+- [x] Enforce stock availability before reservation creation
+- [x] Decide whether reservations can oversell by channel or policy
 
 Done when:
 
-- [ ] Clients can inspect current and available stock by product and location
-- [ ] Confirmation cannot reserve more stock than policy allows
-- [ ] Reservation policy is documented and tested
+- [x] Clients can inspect current and available stock by product and location
+- [x] Confirmation cannot reserve more stock than policy allows
+- [x] Reservation policy is documented and tested
 
 ### 03.4 Fulfillment Movement Semantics
 
@@ -150,7 +152,7 @@ Tasks:
 - [ ] Add integration tests for invalid state transitions
 - [ ] Add integration tests for inventory movement side effects
 - [ ] Add integration tests for payment guardrails
-- [ ] Keep Bruno order workflow examples aligned with final behavior
+- [x] Keep Bruno order workflow examples aligned with final behavior
 
 Done when:
 
@@ -168,8 +170,8 @@ Done when:
 
 ## Definition of Done
 
-- [ ] The full order lifecycle is atomic where writes span multiple tables
-- [ ] Stock availability is computed from movements minus active reservations
+- [x] The full order lifecycle is atomic where writes span multiple tables
+- [x] Stock availability is computed from movements minus active reservations
 - [ ] Fulfillment creates auditable movement records with correct location semantics
 - [ ] Payment, cancellation, and fulfillment guardrails are automated-test covered
-- [ ] Order process docs, OpenAPI, and Bruno collection match actual behavior
+- [x] Order process docs, OpenAPI, and Bruno collection match actual behavior

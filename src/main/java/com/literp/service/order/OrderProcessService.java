@@ -20,13 +20,17 @@ public interface OrderProcessService {
 
     Future<JsonObject> addSalesOrderLine(String salesOrderId, String productId, String sku, String quantityOrdered, String unitPrice);
 
-    Future<JsonObject> confirmSalesOrder(String salesOrderId);
+    Future<JsonObject> getCurrentStock(String productId, String locationId);
 
-    Future<JsonObject> capturePayment(String salesOrderId, String paymentMethod, String amount, String transactionRef);
+    Future<JsonObject> getAvailableStock(String productId, String locationId);
 
-    Future<JsonObject> fulfillSalesOrder(String salesOrderId, String createdBy, String notes);
+    Future<JsonObject> confirmSalesOrder(String salesOrderId, String idempotencyKey);
 
-    Future<JsonObject> cancelSalesOrder(String salesOrderId, String reason);
+    Future<JsonObject> capturePayment(String salesOrderId, String paymentMethod, String amount, String transactionRef, String idempotencyKey);
+
+    Future<JsonObject> fulfillSalesOrder(String salesOrderId, String createdBy, String notes, String idempotencyKey);
+
+    Future<JsonObject> cancelSalesOrder(String salesOrderId, String reason, String idempotencyKey);
 
     static OrderProcessService createProxy(Vertx vertx) {
         return new OrderProcessServiceVertxEBProxy(vertx, ADDRESS);

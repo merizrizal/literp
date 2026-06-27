@@ -56,24 +56,33 @@ class OrderProcessServiceImpl(
             .toVertxFuture()
     }
 
-    override fun confirmSalesOrder(salesOrderId: String): Future<JsonObject> {
-        return repository.confirmSalesOrder(salesOrderId).toVertxFuture()
+    override fun getCurrentStock(productId: String, locationId: String): Future<JsonObject> {
+        return repository.getCurrentStock(productId, locationId).toVertxFuture()
+    }
+
+    override fun getAvailableStock(productId: String, locationId: String): Future<JsonObject> {
+        return repository.getAvailableStock(productId, locationId).toVertxFuture()
+    }
+
+    override fun confirmSalesOrder(salesOrderId: String, idempotencyKey: String): Future<JsonObject> {
+        return repository.confirmSalesOrder(salesOrderId, idempotencyKey).toVertxFuture()
     }
 
     override fun capturePayment(
         salesOrderId: String,
         paymentMethod: String,
         amount: String,
-        transactionRef: String?
+        transactionRef: String?,
+        idempotencyKey: String
     ): Future<JsonObject> {
-        return repository.capturePayment(salesOrderId, paymentMethod, BigDecimal(amount), transactionRef).toVertxFuture()
+        return repository.capturePayment(salesOrderId, paymentMethod, BigDecimal(amount), transactionRef, idempotencyKey).toVertxFuture()
     }
 
-    override fun fulfillSalesOrder(salesOrderId: String, createdBy: String?, notes: String?): Future<JsonObject> {
-        return repository.fulfillSalesOrder(salesOrderId, createdBy, notes).toVertxFuture()
+    override fun fulfillSalesOrder(salesOrderId: String, createdBy: String?, notes: String?, idempotencyKey: String): Future<JsonObject> {
+        return repository.fulfillSalesOrder(salesOrderId, createdBy, notes, idempotencyKey).toVertxFuture()
     }
 
-    override fun cancelSalesOrder(salesOrderId: String, reason: String?): Future<JsonObject> {
-        return repository.cancelSalesOrder(salesOrderId, reason).toVertxFuture()
+    override fun cancelSalesOrder(salesOrderId: String, reason: String?, idempotencyKey: String): Future<JsonObject> {
+        return repository.cancelSalesOrder(salesOrderId, reason, idempotencyKey).toVertxFuture()
     }
 }

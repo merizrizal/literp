@@ -68,6 +68,46 @@ class OrderProcessHandler(
             }
     }
 
+    fun getCurrentStock(context: RoutingContext) {
+        val productId = context.queryParam("productId").firstOrNull()?.trim()
+        val locationId = context.queryParam("locationId").firstOrNull()?.trim()
+
+        if (productId.isNullOrBlank() || locationId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "productId and locationId are required")
+            return
+        }
+
+        orderService.getCurrentStock(productId, locationId)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get current stock"
+                )
+            }
+    }
+
+    fun getAvailableStock(context: RoutingContext) {
+        val productId = context.queryParam("productId").firstOrNull()?.trim()
+        val locationId = context.queryParam("locationId").firstOrNull()?.trim()
+
+        if (productId.isNullOrBlank() || locationId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "productId and locationId are required")
+            return
+        }
+
+        orderService.getAvailableStock(productId, locationId)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get available stock"
+                )
+            }
+    }
+
     fun addSalesOrderLine(context: RoutingContext) {
         val orderId = context.pathParam("salesOrderId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
@@ -96,7 +136,14 @@ class OrderProcessHandler(
 
     fun confirmSalesOrder(context: RoutingContext) {
         val orderId = context.pathParam("salesOrderId")
-        orderService.confirmSalesOrder(orderId)
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
+
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        orderService.confirmSalesOrder(orderId, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -115,13 +162,18 @@ class OrderProcessHandler(
         val paymentMethod = body.getString("paymentMethod")
         val amount = body.getValue("amount")?.toString()
         val transactionRef = body.getString("transactionRef")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 
         if (paymentMethod.isNullOrBlank() || amount.isNullOrBlank()) {
             putErrorResponse(context, 400, "paymentMethod and amount are required")
             return
         }
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
 
-        orderService.capturePayment(orderId, paymentMethod, amount, transactionRef)
+        orderService.capturePayment(orderId, paymentMethod, amount, transactionRef, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -137,8 +189,14 @@ class OrderProcessHandler(
         val body = context.body().asJsonObject() ?: io.vertx.core.json.JsonObject()
         val createdBy = body.getString("createdBy")
         val notes = body.getString("notes")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 
-        orderService.fulfillSalesOrder(orderId, createdBy, notes)
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        orderService.fulfillSalesOrder(orderId, createdBy, notes, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
@@ -153,8 +211,14 @@ class OrderProcessHandler(
         val orderId = context.pathParam("salesOrderId")
         val body = context.body().asJsonObject() ?: io.vertx.core.json.JsonObject()
         val reason = body.getString("reason")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 
-        orderService.cancelSalesOrder(orderId, reason)
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        orderService.cancelSalesOrder(orderId, reason, idempotencyKey)
             .onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(

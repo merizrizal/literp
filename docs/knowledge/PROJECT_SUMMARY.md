@@ -5,7 +5,7 @@ Literp is currently a Kotlin and Vert.x backend that implements a lightweight ER
 ### Current runtime characteristics
 
 - Kotlin `2.4.0` on Java `25`
-- Vert.x `5.1.1`
+- Vert.x `5.1.2`
 - PostgreSQL via Vert.x PG client
 - RxJava3 for asynchronous repository flows
 - OpenAPI-based routing
