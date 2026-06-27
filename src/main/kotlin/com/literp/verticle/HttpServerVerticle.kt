@@ -202,6 +202,8 @@ class HttpServerVerticle(
         routerBuilder.getRoute("listSalesOrders").addHandler(orderProcessHandler::listSalesOrders)
         routerBuilder.getRoute("createSalesOrderDraft").addHandler(orderProcessHandler::createSalesOrderDraft)
         routerBuilder.getRoute("getSalesOrder").addHandler(orderProcessHandler::getSalesOrder)
+        routerBuilder.getRoute("getCurrentStock").addHandler(orderProcessHandler::getCurrentStock)
+        routerBuilder.getRoute("getAvailableStock").addHandler(orderProcessHandler::getAvailableStock)
         routerBuilder.getRoute("addSalesOrderLine").addHandler(orderProcessHandler::addSalesOrderLine)
         routerBuilder.getRoute("confirmSalesOrder").addHandler(orderProcessHandler::confirmSalesOrder)
         routerBuilder.getRoute("capturePayment").addHandler(orderProcessHandler::capturePayment)

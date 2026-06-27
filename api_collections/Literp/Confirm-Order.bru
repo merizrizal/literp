@@ -10,6 +10,10 @@ post {
   auth: inherit
 }
 
+headers {
+  Idempotency-Key: {{confirmIdempotencyKey}}
+}
+
 settings {
   encodeUrl: true
   timeout: 0

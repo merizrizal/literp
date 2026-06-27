@@ -1,0 +1,16 @@
+meta {
+  name: Get-Current-Stock
+  type: http
+  seq: 32
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/stock/current?productId={{productId}}&locationId={{locationId}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -172,6 +172,98 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             }
     }
 
+    fun getCurrentStock(productId: String, locationId: String): Single<JsonObject> {
+        if (productId.isBlank() || locationId.isBlank()) {
+            return Single.error(Exception("productId and locationId are required"))
+        }
+
+        val query = """
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN movement_type IN ('IN', 'ADJUSTMENT') AND to_location_id = $2 THEN quantity
+                    WHEN movement_type = 'TRANSFER' AND to_location_id = $2 THEN quantity
+                    WHEN movement_type = 'TRANSFER' AND from_location_id = $2 THEN -quantity
+                    WHEN movement_type = 'OUT' AND from_location_id = $2 THEN -quantity
+                    ELSE 0
+                END
+            ), 0) AS quantity
+            FROM inventory_movement
+            WHERE product_id = $1 AND (to_location_id = $2 OR from_location_id = $2)
+        """.trimIndent()
+
+        return pool.preparedQuery(query)
+            .rxExecute(Tuple.of(productId, locationId))
+            .map { result -> stockQuantity(productId, locationId, result.first().getBigDecimal("quantity"), "CURRENT") }
+    }
+
+    fun getAvailableStock(productId: String, locationId: String): Single<JsonObject> {
+        if (productId.isBlank() || locationId.isBlank()) {
+            return Single.error(Exception("productId and locationId are required"))
+        }
+
+        val query = """
+            WITH current_stock AS (
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN movement_type IN ('IN', 'ADJUSTMENT') AND to_location_id = $2 THEN quantity
+                        WHEN movement_type = 'TRANSFER' AND to_location_id = $2 THEN quantity
+                        WHEN movement_type = 'TRANSFER' AND from_location_id = $2 THEN -quantity
+                        WHEN movement_type = 'OUT' AND from_location_id = $2 THEN -quantity
+                        ELSE 0
+                    END
+                ), 0) AS quantity
+                FROM inventory_movement
+                WHERE product_id = $1 AND (to_location_id = $2 OR from_location_id = $2)
+            ), active_reservations AS (
+                SELECT COALESCE(SUM(quantity), 0) AS quantity
+                FROM inventory_reservation
+                WHERE product_id = $1 AND location_id = $2 AND status = 'RESERVED'
+            )
+            SELECT current_stock.quantity - active_reservations.quantity AS quantity
+            FROM current_stock, active_reservations
+        """.trimIndent()
+
+        return pool.preparedQuery(query)
+            .rxExecute(Tuple.of(productId, locationId))
+            .map { result -> stockQuantity(productId, locationId, result.first().getBigDecimal("quantity"), "AVAILABLE") }
+    }
+
+    private fun stockQuantity(productId: String, locationId: String, quantity: BigDecimal, quantityType: String): JsonObject {
+        return JsonObject()
+            .put("productId", productId)
+            .put("locationId", locationId)
+            .put("quantity", quantity)
+            .put("quantityType", quantityType)
+    }
+
+    private fun getAvailableStockQuantity(connection: SqlConnection, productId: String, locationId: String): Single<BigDecimal> {
+        val query = """
+            WITH current_stock AS (
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN movement_type IN ('IN', 'ADJUSTMENT') AND to_location_id = $2 THEN quantity
+                        WHEN movement_type = 'TRANSFER' AND to_location_id = $2 THEN quantity
+                        WHEN movement_type = 'TRANSFER' AND from_location_id = $2 THEN -quantity
+                        WHEN movement_type = 'OUT' AND from_location_id = $2 THEN -quantity
+                        ELSE 0
+                    END
+                ), 0) AS quantity
+                FROM inventory_movement
+                WHERE product_id = $1 AND (to_location_id = $2 OR from_location_id = $2)
+            ), active_reservations AS (
+                SELECT COALESCE(SUM(quantity), 0) AS quantity
+                FROM inventory_reservation
+                WHERE product_id = $1 AND location_id = $2 AND status = 'RESERVED'
+            )
+            SELECT current_stock.quantity - active_reservations.quantity AS quantity
+            FROM current_stock, active_reservations
+        """.trimIndent()
+
+        return connection.preparedQuery(query)
+            .rxExecute(Tuple.of(productId, locationId))
+            .map { result -> result.first().getBigDecimal("quantity") }
+    }
+
     fun addSalesOrderLine(
         orderId: String,
         productId: String,
@@ -303,23 +395,33 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                                                                 .rxExecute(Tuple.of(line.getString("line_id")))
                                                                 .ignoreElement()
                                                         } else {
-                                                            connection.preparedQuery(insertReservationQuery)
-                                                                .rxExecute(
-                                                                    Tuple.tuple()
-                                                                        .addString(UUID.randomUUID().toString())
-                                                                        .addString(orderId)
-                                                                        .addString(line.getString("line_id"))
-                                                                        .addString(line.getString("product_id"))
-                                                                        .addString(line.getString("sku"))
-                                                                        .addString(locationId)
-                                                                        .addValue(reserveQty)
-                                                                )
-                                                                .ignoreElement()
-                                                                .andThen(
-                                                                    connection.preparedQuery(updateLineStatusQuery)
-                                                                        .rxExecute(Tuple.of(line.getString("line_id")))
-                                                                        .ignoreElement()
-                                                                )
+                                                            val productId = line.getString("product_id")
+                                                            getAvailableStockQuantity(connection, productId, locationId)
+                                                                .flatMapCompletable { availableQty ->
+                                                                    if (availableQty < reserveQty) {
+                                                                        io.reactivex.rxjava3.core.Completable.error(
+                                                                            Exception("Insufficient available stock for product $productId at location $locationId")
+                                                                        )
+                                                                    } else {
+                                                                        connection.preparedQuery(insertReservationQuery)
+                                                                            .rxExecute(
+                                                                                Tuple.tuple()
+                                                                                    .addString(UUID.randomUUID().toString())
+                                                                                    .addString(orderId)
+                                                                                    .addString(line.getString("line_id"))
+                                                                                    .addString(productId)
+                                                                                    .addString(line.getString("sku"))
+                                                                                    .addString(locationId)
+                                                                                    .addValue(reserveQty)
+                                                                            )
+                                                                            .ignoreElement()
+                                                                            .andThen(
+                                                                                connection.preparedQuery(updateLineStatusQuery)
+                                                                                    .rxExecute(Tuple.of(line.getString("line_id")))
+                                                                                    .ignoreElement()
+                                                                            )
+                                                                    }
+                                                                }
                                                         }
                                                     }
                                                     .andThen(

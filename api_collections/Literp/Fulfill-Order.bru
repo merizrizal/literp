@@ -10,6 +10,10 @@ post {
   auth: inherit
 }
 
+headers {
+  Idempotency-Key: {{fulfillIdempotencyKey}}
+}
+
 body:json {
   {
     "createdBy": "bruno",

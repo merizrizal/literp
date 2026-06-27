@@ -68,6 +68,46 @@ class OrderProcessHandler(
             }
     }
 
+    fun getCurrentStock(context: RoutingContext) {
+        val productId = context.queryParam("productId").firstOrNull()?.trim()
+        val locationId = context.queryParam("locationId").firstOrNull()?.trim()
+
+        if (productId.isNullOrBlank() || locationId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "productId and locationId are required")
+            return
+        }
+
+        orderService.getCurrentStock(productId, locationId)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get current stock"
+                )
+            }
+    }
+
+    fun getAvailableStock(context: RoutingContext) {
+        val productId = context.queryParam("productId").firstOrNull()?.trim()
+        val locationId = context.queryParam("locationId").firstOrNull()?.trim()
+
+        if (productId.isNullOrBlank() || locationId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "productId and locationId are required")
+            return
+        }
+
+        orderService.getAvailableStock(productId, locationId)
+            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+            .onFailure { error ->
+                putMappedErrorResponse(
+                    context = context,
+                    error = error,
+                    internalErrorMessage = "Failed to get available stock"
+                )
+            }
+    }
+
     fun addSalesOrderLine(context: RoutingContext) {
         val orderId = context.pathParam("salesOrderId")
         val validatedRequest: ValidatedRequest = context.get(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)

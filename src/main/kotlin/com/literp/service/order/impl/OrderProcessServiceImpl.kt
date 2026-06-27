@@ -56,6 +56,14 @@ class OrderProcessServiceImpl(
             .toVertxFuture()
     }
 
+    override fun getCurrentStock(productId: String, locationId: String): Future<JsonObject> {
+        return repository.getCurrentStock(productId, locationId).toVertxFuture()
+    }
+
+    override fun getAvailableStock(productId: String, locationId: String): Future<JsonObject> {
+        return repository.getAvailableStock(productId, locationId).toVertxFuture()
+    }
+
     override fun confirmSalesOrder(salesOrderId: String, idempotencyKey: String): Future<JsonObject> {
         return repository.confirmSalesOrder(salesOrderId, idempotencyKey).toVertxFuture()
     }
