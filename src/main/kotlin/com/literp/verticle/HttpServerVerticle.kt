@@ -217,7 +217,7 @@ class HttpServerVerticle(
         val response = JsonObject().apply {
             put("success", true)
             put("message", "Literp API Server")
-            put("version", "1.0.0")
+            put("version", "0.0.1")
         }
 
         putResponse(context, 200, response)

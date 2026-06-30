@@ -61,7 +61,7 @@ class HttpTestSupport(
         val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
         val rawBody = response.body()
         val json = rawBody.takeIf { it.isNotBlank() }?.let { JsonObject(it) }
-        return HttpResult(response.statusCode(), rawBody, json)
+        return HttpResult(response.statusCode(), rawBody, json, response.headers().map())
     }
 
     companion object {
@@ -96,4 +96,14 @@ class HttpTestSupport(
     }
 }
 
-data class HttpResult(val status: Int, val rawBody: String, val json: JsonObject?)
+data class HttpResult(
+    val status: Int,
+    val rawBody: String,
+    val json: JsonObject?,
+    val headers: Map<String, List<String>> = emptyMap()
+) {
+    fun header(name: String): String? = headers.entries
+        .firstOrNull { it.key.equals(name, ignoreCase = true) }
+        ?.value
+        ?.firstOrNull()
+}
