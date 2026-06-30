@@ -44,6 +44,29 @@ Master-data list endpoints return:
 Master-data create/get/update endpoints return the resource under `data`.
 Order-process commands usually return a single `data` envelope.
 
+## Automated Verification
+
+Start the isolated PostgreSQL test database:
+
+```bash
+cd docker
+source envrc
+make network
+DIR=pgsql-test make env-up
+```
+
+Run the current Phase 04.1–04.2 baseline:
+
+```bash
+./gradlew test --tests com.literp.verticle.MasterDataHttpIntegrationTest \
+  --tests com.literp.verticle.OrderProcessHttpIntegrationTest \
+  --tests com.literp.contract.OpenApiOperationIdRegistrationTest
+./gradlew test
+./gradlew build
+```
+
+These Vert.x integration tests use `src/test/kotlin/com/literp/test/TestDatabase.kt`, which defaults to `127.0.0.1:55432/literp_test`. If PostgreSQL is unavailable, the database-backed tests are skipped via a JUnit assumption and should be rerun after `DIR=pgsql-test make env-up`.
+
 ## Master-data Query Validation
 
 Master-data list endpoints share these query rules:
