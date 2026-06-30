@@ -9,6 +9,8 @@ import com.literp.service.master.impl.LocationServiceImpl
 import com.literp.service.master.impl.ProductServiceImpl
 import com.literp.service.master.impl.ProductVariantServiceImpl
 import com.literp.service.master.impl.UnitOfMeasureServiceImpl
+import com.literp.test.HttpResult
+import com.literp.test.HttpTestSupport
 import com.literp.test.TestDatabase
 import com.literp.verticle.handler.LocationHandler
 import com.literp.verticle.handler.ProductHandler
@@ -25,15 +27,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
 import java.util.UUID
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 import io.vertx.rxjava3.core.Vertx as RxVertx
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -43,7 +37,7 @@ class MasterDataHttpIntegrationTest {
     private lateinit var pool: Pool
     private lateinit var server: HttpServer
     private lateinit var baseUrl: String
-    private val client = HttpClient.newHttpClient()
+    private lateinit var http: HttpTestSupport
 
     @BeforeAll
     fun setUp() {
@@ -57,6 +51,7 @@ class MasterDataHttpIntegrationTest {
             .rxListen(0, "127.0.0.1")
             .blockingGet()
         baseUrl = "http://127.0.0.1:${server.actualPort()}/api/v1"
+        http = HttpTestSupport(baseUrl)
     }
 
     @AfterAll
@@ -297,60 +292,8 @@ class MasterDataHttpIntegrationTest {
         }
     }
 
-    private fun expect(method: String, path: String, status: Int, body: JsonObject? = null): HttpResult {
-        val result = request(method, path, body)
-        assertEquals(status, result.status, "Unexpected status for $method $path with body ${result.rawBody}")
-        if (status != 204) {
-            assertNotNull(result.json, "Expected JSON body for $method $path")
-        }
-        val json = result.json
-        if (status >= 400 && json != null) {
-            assertErrorEnvelope(json, status)
-        }
-        if (status == 200 && json?.containsKey("pagination") == true) {
-            assertListEnvelope(json)
-        }
-        return result
-    }
-
-    private fun assertListEnvelope(json: JsonObject) {
-        assertNotNull(json.getJsonArray("data"), "Expected top-level data array")
-        val pagination = json.getJsonObject("pagination")
-        assertNotNull(pagination, "Expected top-level pagination object")
-        assertTrue(pagination.containsKey("page"), "Expected pagination.page")
-        assertTrue(pagination.containsKey("size"), "Expected pagination.size")
-        assertTrue(pagination.containsKey("totalElements"), "Expected pagination.totalElements")
-        assertTrue(pagination.containsKey("totalPages"), "Expected pagination.totalPages")
-        assertFalse(pagination.containsKey("total"), "Unexpected pagination.total")
-        assertFalse(pagination.containsKey("hasNext"), "Unexpected pagination.hasNext")
-        assertFalse(pagination.containsKey("hasPrevious"), "Unexpected pagination.hasPrevious")
-    }
-
-    private fun assertErrorEnvelope(json: JsonObject, status: Int) {
-        assertTrue(!json.getString("error").isNullOrBlank(), "Expected error message")
-        assertTrue(!json.getString("errorCode").isNullOrBlank(), "Expected errorCode")
-        assertEquals(status, json.getInteger("status"), "Expected error status")
-        assertTrue(!json.getString("errorId").isNullOrBlank(), "Expected errorId")
-        assertFalse(json.containsKey("code"), "Unexpected legacy error code field")
-        assertFalse(json.containsKey("message"), "Unexpected legacy error message field")
-    }
-
-    private fun request(method: String, path: String, body: JsonObject?): HttpResult {
-        val builder = HttpRequest.newBuilder(URI.create("$baseUrl$path"))
-        if (body == null) {
-            builder.method(method, HttpRequest.BodyPublishers.noBody())
-        } else {
-            builder.header("Content-Type", "application/json")
-            builder.method(method, HttpRequest.BodyPublishers.ofString(body.encode()))
-        }
-
-        val response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString())
-        val rawBody = response.body()
-        val json = rawBody.takeIf { it.isNotBlank() }?.let { JsonObject(it) }
-        return HttpResult(response.statusCode(), rawBody, json)
-    }
+    private fun expect(method: String, path: String, status: Int, body: JsonObject? = null): HttpResult =
+        http.expect(method, path, status, body)
 
     private fun suffix(): String = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
-
-    private data class HttpResult(val status: Int, val rawBody: String, val json: JsonObject?)
 }
