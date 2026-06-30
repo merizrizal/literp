@@ -40,16 +40,16 @@ Estimate: 2-3 engineer-days
 
 Tasks:
 
-- [ ] Add unit tests for repository query builders and validation edge cases
-- [ ] Add integration tests against PostgreSQL
-- [ ] Add test fixtures for seeded and newly created data
-- [ ] Document how to run unit and integration tests locally
+- [x] Add unit tests for repository query builders and validation edge cases
+- [x] Add integration tests against PostgreSQL
+- [x] Add test fixtures for seeded and newly created data
+- [x] Document how to run unit and integration tests locally
 
 Done when:
 
-- [ ] Tests can run from a clean checkout
-- [ ] Repository behavior has focused test coverage
-- [ ] PostgreSQL integration tests are isolated from local development data
+- [x] Tests can run from a clean checkout
+- [x] Repository behavior has focused test coverage
+- [x] PostgreSQL integration tests are isolated from local development data
 
 ### 04.2 API And Contract Verification
 
@@ -57,17 +57,17 @@ Estimate: 2-4 engineer-days
 
 Tasks:
 
-- [ ] Add HTTP tests for all 29 implemented endpoints
-- [ ] Add end-to-end order lifecycle tests
-- [ ] Add contract tests that verify OpenAPI operation IDs are registered by handlers
-- [ ] Add response snapshot or schema tests for normalized response envelopes
-- [ ] Add error response tests for validation, not found, conflict, database timeout, and internal failures
+- [x] Add HTTP tests for all 29 implemented endpoints
+- [x] Add end-to-end order lifecycle tests
+- [x] Add contract tests that verify OpenAPI operation IDs are registered by handlers
+- [x] Add response snapshot or schema tests for normalized response envelopes
+- [x] Add error response tests for validation, not found, conflict, database timeout, and internal failures
 
 Done when:
 
-- [ ] Public endpoint behavior is automated-test covered
-- [ ] OpenAPI operation IDs cannot drift silently from handler registration
-- [ ] Response and error contracts are verified by tests
+- [x] Public endpoint behavior is automated-test covered
+- [x] OpenAPI operation IDs cannot drift silently from handler registration
+- [x] Response and error contracts are verified by tests
 
 ### 04.3 CI And Artifact Synchronization
 

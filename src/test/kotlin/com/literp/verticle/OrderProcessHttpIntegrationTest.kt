@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.math.BigDecimal
 import java.util.UUID
+import java.util.concurrent.TimeoutException
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -247,6 +248,68 @@ class OrderProcessHttpIntegrationTest {
         }
     }
 
+    @Test
+    fun orderProcessEndpointsExposeNormalizedSuccessAndErrorContracts() {
+        val seed = createCatalogSeed("CONTRACT")
+        var orderId: String? = null
+
+        try {
+            val listOrders = expect("GET", "/orders?page=0&size=10&sort=orderDate,desc", 200)
+            val listOrdersJson = requireNotNull(listOrders.json)
+            assertTrue(listOrdersJson.containsKey("data"))
+
+            orderId = createDraftOrder(seed, "contract path").getString("salesOrderId")
+
+            val order = expect("GET", "/orders/$orderId", 200).json!!.getJsonObject("data")
+            assertEquals(orderId, order.getString("salesOrderId"))
+
+            val currentStock = expect("GET", "/stock/current?productId=${seed.productId}&locationId=${seed.locationId}", 200)
+                .json!!.getJsonObject("data")
+            assertStock(currentStock, seed.productId, seed.locationId, "CURRENT", "10")
+
+            val availableStock = expect("GET", "/stock/available?productId=${seed.productId}&locationId=${seed.locationId}", 200)
+                .json!!.getJsonObject("data")
+            assertStock(availableStock, seed.productId, seed.locationId, "AVAILABLE", "10")
+
+            expect(
+                "POST",
+                "/orders",
+                400,
+                JsonObject().put("currency", "USD")
+            )
+            expect("GET", "/orders/${UUID.randomUUID()}", 404)
+
+            addLine(orderId, seed.productId, 1, 15)
+            expect(
+                "POST",
+                "/orders/$orderId/confirm",
+                200,
+                headers = mapOf("Idempotency-Key" to "CONFIRM-${seed.suffix}")
+            )
+            expect(
+                "POST",
+                "/orders/$orderId/lines",
+                409,
+                JsonObject()
+                    .put("productId", seed.productId)
+                    .put("quantityOrdered", 1)
+                    .put("unitPrice", 10)
+            )
+
+            val internalError = http.request("GET", "/_contract/internal-error")
+            assertEquals(500, internalError.status)
+            val internalErrorJson = requireNotNull(internalError.json)
+            HttpTestSupport.assertErrorEnvelope(internalErrorJson, 500, ErrorCodes.INTERNAL_ERROR)
+
+            val timeoutError = http.request("GET", "/_contract/timeout")
+            assertEquals(503, timeoutError.status)
+            val timeoutErrorJson = requireNotNull(timeoutError.json)
+            HttpTestSupport.assertErrorEnvelope(timeoutErrorJson, 503, ErrorCodes.DB_TIMEOUT)
+        } finally {
+            cleanup(seed, orderId)
+        }
+    }
+
     private fun createRouter(): Router {
         val orderHandler = OrderProcessHandler(OrderProcessServiceImpl(orderRepository))
         val orderContract = OpenAPIContract.rxFrom(rxVertx, "api_collections/open_api_spec/order-process.yaml").blockingGet()
@@ -267,21 +330,30 @@ class OrderProcessHttpIntegrationTest {
             route().failureHandler { context ->
                 val failure = context.failure()
                 val statusCode = when {
+                    failure is TimeoutException -> 503
                     failure is HttpException -> failure.statusCode
                     context.statusCode() > 0 -> context.statusCode()
                     else -> 500
                 }
+                val errorCode = if (failure is TimeoutException) ErrorCodes.DB_TIMEOUT else ErrorCodes.fromStatus(statusCode)
+
                 context.response()
                     .setStatusCode(statusCode)
                     .putHeader("Content-Type", "application/json")
                     .end(
                         JsonObject()
                             .put("error", failure?.message ?: "Bad request")
-                            .put("errorCode", ErrorCodes.fromStatus(statusCode))
+                            .put("errorCode", errorCode)
                             .put("status", statusCode)
                             .put("errorId", UUID.randomUUID().toString())
                             .encode()
                     )
+            }
+            route("/api/v1/_contract/internal-error").handler { context ->
+                context.fail(RuntimeException("simulated internal failure"))
+            }
+            route("/api/v1/_contract/timeout").handler { context ->
+                context.fail(TimeoutException("simulated timeout"))
             }
             route("/api/v1/*").subRouter(orderRouterBuilder.createRouter())
         }

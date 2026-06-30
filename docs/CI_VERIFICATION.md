@@ -8,6 +8,7 @@ before merging implementation work.
 | Check | Runtime | Command |
 |---|---|---|
 | Build | Java 25, Gradle wrapper 9.6.0 | `./gradlew build` |
+| Test Baseline | Java 25, Gradle wrapper 9.6.0 | `./gradlew test` |
 | Migration Verification | Python 3.13, PostgreSQL 18 | `python scripts/verify_migrations.py` |
 
 The migration check runs Alembic to `head`, verifies the database revision
@@ -21,6 +22,22 @@ Build check:
 ```bash
 ./gradlew build
 ```
+
+Phase 04.1–04.2 test baseline against the isolated test database:
+
+```bash
+cd docker
+source envrc
+make network
+DIR=pgsql-test make env-up
+cd ..
+./gradlew test --tests com.literp.verticle.MasterDataHttpIntegrationTest \
+  --tests com.literp.verticle.OrderProcessHttpIntegrationTest \
+  --tests com.literp.contract.OpenApiOperationIdRegistrationTest
+./gradlew test
+```
+
+If `literp_test` is unavailable on `127.0.0.1:55432`, the DB-backed tests are skipped by `TestDatabase.assumeAvailable(...)` and should be rerun after the isolated test database is started.
 
 Migration check against the isolated test database:
 

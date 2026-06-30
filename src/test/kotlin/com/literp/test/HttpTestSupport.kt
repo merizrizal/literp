@@ -30,8 +30,12 @@ class HttpTestSupport(
         if (status >= 400 && json != null) {
             assertErrorEnvelope(json, status)
         }
-        if (status == 200 && json?.containsKey("pagination") == true) {
-            assertListEnvelope(json)
+        if (status == 200 && json != null) {
+            if (json.containsKey("pagination")) {
+                assertListEnvelope(json)
+            } else {
+                assertDataEnvelope(json)
+            }
         }
         return result
     }
