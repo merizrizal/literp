@@ -33,8 +33,8 @@ script:post-response {
     const body = res.getBody();
     const locationId = body.data.locationId;
     console.log(`Location ID = ${locationId}`);
-    bru.setEnvVar('locationId', locationId);
-    console.log(`Env var locationId = ${bru.getEnvVar('locationId')}`);
+    bru.setVar('locationId', locationId);
+    console.log(`Env var locationId = ${bru.getVar('locationId')}`);
   }
 }
 

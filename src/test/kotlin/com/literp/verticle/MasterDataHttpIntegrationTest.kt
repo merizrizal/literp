@@ -9,6 +9,7 @@ import com.literp.service.master.impl.LocationServiceImpl
 import com.literp.service.master.impl.ProductServiceImpl
 import com.literp.service.master.impl.ProductVariantServiceImpl
 import com.literp.service.master.impl.UnitOfMeasureServiceImpl
+import com.literp.observability.HttpMetrics
 import com.literp.test.HttpResult
 import com.literp.test.HttpTestSupport
 import com.literp.test.TestDatabase
@@ -38,6 +39,7 @@ class MasterDataHttpIntegrationTest {
     private lateinit var server: HttpServer
     private lateinit var baseUrl: String
     private lateinit var http: HttpTestSupport
+    private lateinit var healthHttp: HttpTestSupport
 
     @BeforeAll
     fun setUp() {
@@ -50,8 +52,10 @@ class MasterDataHttpIntegrationTest {
             .requestHandler(createRouter())
             .rxListen(0, "127.0.0.1")
             .blockingGet()
-        baseUrl = "http://127.0.0.1:${server.actualPort()}/api/v1"
+        val rootUrl = "http://127.0.0.1:${server.actualPort()}"
+        baseUrl = "$rootUrl/api/v1"
         http = HttpTestSupport(baseUrl)
+        healthHttp = HttpTestSupport(rootUrl)
     }
 
     @AfterAll
@@ -169,6 +173,59 @@ class MasterDataHttpIntegrationTest {
     }
 
     @Test
+    fun healthEndpointsCoverLivenessAndReadiness() {
+        val liveResponse = healthHttp.request("GET", "/health/live")
+        check(liveResponse.status == 200) { "Unexpected status for GET /health/live with body ${liveResponse.rawBody}" }
+        val live = requireNotNull(liveResponse.json)
+        check(live.getString("status") == "UP")
+        check(!live.containsKey("database"))
+
+        val readyResponse = healthHttp.request("GET", "/health/ready")
+        check(readyResponse.status == 200) { "Unexpected status for GET /health/ready with body ${readyResponse.rawBody}" }
+        val ready = requireNotNull(readyResponse.json)
+        check(ready.getString("status") == "UP")
+        check(ready.getString("database") == "UP")
+
+        val dbResponse = healthHttp.request("GET", "/health/db")
+        check(dbResponse.status == 200) { "Unexpected status for GET /health/db with body ${dbResponse.rawBody}" }
+        val db = requireNotNull(dbResponse.json)
+        check(db.getString("status") == "UP")
+        check(db.getString("database") == "UP")
+        check(ready.encode() == db.encode())
+    }
+
+    @Test
+    fun metricsEndpointTracksRequestsAndErrors() {
+        val before = metricsSnapshot()
+
+        healthHttp.request("GET", "/health/live")
+        val afterLive = metricsSnapshot()
+        check(afterLive.longValue("requestCount") == before.longValue("requestCount") + 2L) {
+            "Expected requestCount to increase by 2 after /health/live and /metrics"
+        }
+        check(afterLive.longValue("errorCount") == before.longValue("errorCount")) {
+            "Expected errorCount to remain unchanged after /health/live"
+        }
+        check(afterLive.longValue("databaseFailureCount") == before.longValue("databaseFailureCount")) {
+            "Expected databaseFailureCount to remain unchanged after /health/live"
+        }
+
+        val missingId = UUID.randomUUID().toString()
+        val errorResponse = healthHttp.request("GET", "/api/v1/uom/$missingId")
+        check(errorResponse.status == 404) { "Unexpected status for GET /api/v1/uom/$missingId with body ${errorResponse.rawBody}" }
+        val afterError = metricsSnapshot()
+        check(afterError.longValue("requestCount") == afterLive.longValue("requestCount") + 2L) {
+            "Expected requestCount to increase by 2 after 404 request and /metrics"
+        }
+        check(afterError.longValue("errorCount") == afterLive.longValue("errorCount") + 1L) {
+            "Expected errorCount to increase by 1 after 404 request"
+        }
+        check(afterError.longValue("databaseFailureCount") == afterLive.longValue("databaseFailureCount")) {
+            "Expected databaseFailureCount to remain unchanged after 404 request"
+        }
+    }
+
+    @Test
     fun masterDataEndpointsCoverErrorsAndListValidation() {
         val suffix = suffix()
         val missingId = UUID.randomUUID().toString()
@@ -234,6 +291,15 @@ class MasterDataHttpIntegrationTest {
         expect("DELETE", "/uom/${createdUom.getString("uomId")}", 204)
     }
 
+    private fun metricsSnapshot(): JsonObject {
+        val response = healthHttp.request("GET", "/metrics")
+        check(response.status == 200) { "Unexpected status for GET /metrics with body ${response.rawBody}" }
+        return requireNotNull(response.json)
+    }
+
+    private fun JsonObject.longValue(name: String): Long =
+        requireNotNull(getNumber(name)) { "Expected $name" }.toLong()
+
     private fun createRouter(): Router {
         val uomRepository = UnitOfMeasureRepository(pool)
         val productRepository = ProductRepository(pool)
@@ -274,6 +340,18 @@ class MasterDataHttpIntegrationTest {
         locationRouterBuilder.getRoute("deleteLocation").addHandler(locationHandler::deleteLocation)
 
         return Router.router(rxVertx).apply {
+            val metrics = HttpMetrics()
+
+            route().handler { context ->
+                val startedAt = System.nanoTime()
+                context.response().endHandler {
+                    try {
+                        metrics.recordRequest(context.response().statusCode, System.nanoTime() - startedAt)
+                    } catch (_: Throwable) {
+                    }
+                }
+                context.next()
+            }
             route().failureHandler { context ->
                 val failure = context.failure()
                 val statusCode = when {
@@ -291,6 +369,92 @@ class MasterDataHttpIntegrationTest {
                             .put("status", statusCode)
                             .put("errorId", UUID.randomUUID().toString())
                             .encode()
+                    )
+            }
+            get("/metrics").handler { context ->
+                context.response()
+                    .setStatusCode(200)
+                    .putHeader("Content-Type", "application/json")
+                    .end(metrics.snapshot().encode())
+            }
+            get("/health/live").handler { context ->
+                context.response()
+                    .setStatusCode(200)
+                    .putHeader("Content-Type", "application/json")
+                    .end(JsonObject().put("status", "UP").encode())
+            }
+            get("/health/ready").handler { context ->
+                pool.preparedQuery("SELECT 1")
+                    .rxExecute()
+                    .timeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .subscribe(
+                        {
+                            context.response()
+                                .setStatusCode(200)
+                                .putHeader("Content-Type", "application/json")
+                                .end(
+                                    JsonObject()
+                                        .put("status", "UP")
+                                        .put("database", "UP")
+                                        .encode()
+                                )
+                        },
+                        { error ->
+                            metrics.recordDatabaseFailure()
+                            val errorCode = if (error is java.util.concurrent.TimeoutException) {
+                                ErrorCodes.DB_TIMEOUT
+                            } else {
+                                ErrorCodes.INTERNAL_ERROR
+                            }
+                            context.response()
+                                .setStatusCode(503)
+                                .putHeader("Content-Type", "application/json")
+                                .end(
+                                    JsonObject()
+                                        .put("status", "DOWN")
+                                        .put("database", "DOWN")
+                                        .put("errorCode", errorCode)
+                                        .put("error", error.message ?: "Database unavailable")
+                                        .encode()
+                                )
+                        }
+                    )
+            }
+            get("/health/db").handler { context ->
+                pool.preparedQuery("SELECT 1")
+                    .rxExecute()
+                    .timeout(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .subscribe(
+                        {
+                            context.response()
+                                .setStatusCode(200)
+                                .putHeader("Content-Type", "application/json")
+                                .end(
+                                    JsonObject()
+                                        .put("status", "UP")
+                                        .put("database", "UP")
+                                        .encode()
+                                )
+                        },
+                        { error ->
+                            metrics.recordDatabaseFailure()
+                            val errorCode = if (error is java.util.concurrent.TimeoutException) {
+                                ErrorCodes.DB_TIMEOUT
+                            } else {
+                                ErrorCodes.INTERNAL_ERROR
+                            }
+                            context.response()
+                                .setStatusCode(503)
+                                .putHeader("Content-Type", "application/json")
+                                .end(
+                                    JsonObject()
+                                        .put("status", "DOWN")
+                                        .put("database", "DOWN")
+                                        .put("errorCode", errorCode)
+                                        .put("error", error.message ?: "Database unavailable")
+                                        .encode()
+                                )
+                        }
                     )
             }
             route("/api/v1/*").subRouter(productRouterBuilder.createRouter())

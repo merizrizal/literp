@@ -1,7 +1,8 @@
 # CI Verification
 
 The foundation gate requires the `Foundation Verification` workflow to pass
-before merging implementation work.
+before merging implementation work. The gate currently covers build, test
+baseline, OpenAPI verification, and migration verification.
 
 ## Required Checks
 
@@ -40,7 +41,7 @@ cd ..
 
 For CI parity, the test baseline job uses the PostgreSQL service on port `5432` and sets the `LITERP_TEST_PG_*` environment variables before running `./gradlew test`.
 
-OpenAPI contracts treat `api_collections/open_api_spec/*.yaml` as the source of truth. Keep the matching JSON files in sync, then run the verifier:
+OpenAPI contracts treat `api_collections/open_api_spec/*.yaml` as the source of truth. The matching JSON files are tracked for drift detection, and `build.gradle.kts` is the version source. Keep those files in sync, then run the verifier:
 
 ```bash
 python3 -m pip install -r python/requirements.txt
