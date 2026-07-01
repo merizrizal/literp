@@ -18,7 +18,10 @@ BASE_URL=http://localhost:8010/api/v1
 
 ```bash
 curl http://localhost:8010 | jq
+curl http://localhost:8010/health/live | jq
+curl http://localhost:8010/health/ready | jq
 curl http://localhost:8010/health/db | jq
+curl http://localhost:8010/metrics | jq
 ```
 
 If you need fresh local data:
@@ -43,6 +46,15 @@ Master-data list endpoints return:
 
 Master-data create/get/update endpoints return the resource under `data`.
 Order-process commands usually return a single `data` envelope.
+
+## Request Tracing
+
+The server echoes `X-Request-ID` on responses. If you omit it, the server
+generates one.
+
+```bash
+curl -i -H "X-Request-ID: demo-123" http://localhost:8010/health/live
+```
 
 ## Automated Verification
 
@@ -94,10 +106,28 @@ curl "$BASE_URL/products?activeOnly=maybe" | jq
 curl http://localhost:8010 | jq
 ```
 
+### Liveness
+
+```bash
+curl http://localhost:8010/health/live | jq
+```
+
+### Readiness
+
+```bash
+curl http://localhost:8010/health/ready | jq
+```
+
 ### Database health
 
 ```bash
 curl http://localhost:8010/health/db | jq
+```
+
+### Metrics
+
+```bash
+curl http://localhost:8010/metrics | jq
 ```
 
 ## Unit of Measure

@@ -25,8 +25,8 @@ script:post-response {
     const body = res.getBody();
     const salesOrderId = body.data.salesOrderId;
     console.log(`Sales Order ID = ${salesOrderId}`);
-    bru.setEnvVar('salesOrderId', salesOrderId);
-    console.log(`Env var salesOrderId = ${bru.getEnvVar('salesOrderId')}`);
+    bru.setVar('salesOrderId', salesOrderId);
+    console.log(`Env var salesOrderId = ${bru.getVar('salesOrderId')}`);
   }
 }
 
