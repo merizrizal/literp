@@ -71,15 +71,19 @@ class MasterDataHttpIntegrationTest {
     fun masterDataEndpointsCoverHappyPaths() {
         val suffix = suffix()
 
-        val uom = expect(
+        val requestId = "REQ-$suffix"
+        val uomResponse = expect(
             "POST",
             "/uom",
             201,
             JsonObject()
                 .put("code", "H$suffix")
                 .put("name", "HTTP UOM $suffix")
-                .put("baseUnit", "unit")
-        ).json!!.getJsonObject("data")
+                .put("baseUnit", "unit"),
+            headers = mapOf("X-Request-ID" to requestId)
+        )
+        check(uomResponse.header("X-Request-ID") == requestId)
+        val uom = uomResponse.json!!.getJsonObject("data")
         val uomId = uom.getString("uomId")
         expect("GET", "/uom?page=0&size=10&sort=code,asc", 200)
         expect("GET", "/uom/$uomId", 200)
@@ -169,7 +173,9 @@ class MasterDataHttpIntegrationTest {
         val suffix = suffix()
         val missingId = UUID.randomUUID().toString()
 
-        expect("GET", "/uom/$missingId", 404)
+        val notFoundResponse = expect("GET", "/uom/$missingId", 404)
+        requireNotNull(notFoundResponse.header("X-Request-ID"))
+        UUID.fromString(notFoundResponse.header("X-Request-ID"))
         expect("PUT", "/uom/$missingId", 404, JsonObject().put("name", "Missing UOM"))
         expect("DELETE", "/uom/$missingId", 404)
 
@@ -292,8 +298,14 @@ class MasterDataHttpIntegrationTest {
         }
     }
 
-    private fun expect(method: String, path: String, status: Int, body: JsonObject? = null): HttpResult =
-        http.expect(method, path, status, body)
+    private fun expect(
+        method: String,
+        path: String,
+        status: Int,
+        body: JsonObject? = null,
+        headers: Map<String, String> = emptyMap()
+    ): HttpResult =
+        http.expect(method, path, status, body, headers)
 
     private fun suffix(): String = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
 }

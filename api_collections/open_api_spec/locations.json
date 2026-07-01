@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Literp Inventory Location API",
-    "description": "Inventory Location CRUD API for managing warehouses, stores, and production facilities.\n\nThis API provides endpoints to manage:\n- **Locations**: Physical warehouses, retail stores, or production facilities\n- **Location Types**: WAREHOUSE, STORE, or PRODUCTION\n- **Address Information**: Flexible address storage via JSONB\n- **Location Status**: Active/inactive management\n\nLocations are fundamental to the multi-location inventory system in Literp.",
-    "version": "1.0.0",
+    "description": "Inventory Location CRUD API for managing warehouses, stores, and production facilities.\n\nThis API provides endpoints to manage:\n- **Locations**: Physical warehouses, retail stores, or production facilities\n- **Location Types**: WAREHOUSE, STORE, or PRODUCTION\n- **Address Information**: Flexible address storage via JSONB\n- **Location Status**: Active/inactive management\n\nLocations are fundamental to the multi-location inventory system in Literp.\n",
+    "version": "0.0.1",
     "contact": {
       "name": "Literp Development",
       "url": "https://github.com/merizrizal"

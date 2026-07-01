@@ -4,7 +4,7 @@ info:
   description: |
     Order lifecycle API for POS channel process:
     draft -> line entry -> confirm -> payment capture -> fulfillment / cancellation.
-  version: 1.0.0
+  version: 0.0.1
 
 servers:
   - url: http://localhost:8010/api/v1

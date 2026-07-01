@@ -4,18 +4,38 @@ import com.literp.common.ErrorCodes
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.ext.web.RoutingContext
-import java.util.*
+import java.util.UUID
 
 open class BaseHandler(clazz: Class<*>) {
 
     protected val logger = LoggerFactory.getLogger(clazz)
 
+    private companion object {
+        const val REQUEST_ID_HEADER = "X-Request-ID"
+        const val REQUEST_ID_CONTEXT_KEY = "requestId"
+    }
+
     protected data class ListQueryParams(val page: Int, val size: Int, val sort: String)
 
     protected fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {
+        val requestId = resolveRequestId(context)
         context.response().statusCode = statusCode
         context.response().putHeader("Content-Type", "application/json")
+        context.response().putHeader(REQUEST_ID_HEADER, requestId)
         context.response().end(response.encode())
+    }
+
+    private fun resolveRequestId(context: RoutingContext): String {
+        val existingRequestId = context.get<String>(REQUEST_ID_CONTEXT_KEY)
+        if (!existingRequestId.isNullOrBlank()) {
+            return existingRequestId
+        }
+
+        val requestId = context.request()?.getHeader(REQUEST_ID_HEADER)?.trim().orEmpty().ifBlank {
+            UUID.randomUUID().toString()
+        }
+        context.put(REQUEST_ID_CONTEXT_KEY, requestId)
+        return requestId
     }
 
     protected fun putSuccessResponse(context: RoutingContext, statusCode: Int, data: JsonObject) {
@@ -32,7 +52,7 @@ open class BaseHandler(clazz: Class<*>) {
         val id = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
-        val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
+        val requestId = resolveRequestId(context)
         logger.info("Handling id=$id status=$statusCode method=$method path=$path requestId=$requestId")
     }
 
@@ -45,7 +65,7 @@ open class BaseHandler(clazz: Class<*>) {
         val errorId = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
-        val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
+        val requestId = resolveRequestId(context)
         logger.warn("Handling errorId=$errorId errorCode=$errorCode status=$statusCode method=$method path=$path requestId=$requestId message=${message ?: "-"}")
 
         val errorResponse = JsonObject()
@@ -67,7 +87,7 @@ open class BaseHandler(clazz: Class<*>) {
         val errorId = UUID.randomUUID().toString()
         val method = context.request()?.method()?.name() ?: "-"
         val path = context.request()?.path() ?: "-"
-        val requestId = context.request()?.getHeader("X-Request-ID") ?: "-"
+        val requestId = resolveRequestId(context)
         logger.error("Unhandled exception errorId=$errorId errorCode=$errorCode status=$statusCode method=$method path=$path requestId=$requestId message=${message ?: "-"}", throwable)
 
         val resolvedMessage = message ?: throwable.message ?: "Internal server error"

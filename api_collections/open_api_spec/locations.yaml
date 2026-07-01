@@ -11,7 +11,7 @@ info:
     - **Location Status**: Active/inactive management
 
     Locations are fundamental to the multi-location inventory system in Literp.
-  version: 1.0.0
+  version: 0.0.1
   contact:
     name: Literp Development
     url: https://github.com/merizrizal

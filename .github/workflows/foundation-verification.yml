@@ -33,6 +33,89 @@ jobs:
       - name: Build
         run: ./gradlew build
 
+  test-baseline:
+    name: Test Baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:18-trixie
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: pgdevpassword
+          POSTGRES_DB: literp_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d literp_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: python/requirements.txt
+
+      - name: Install migration dependencies
+        run: python -m pip install -r python/requirements.txt
+
+      - name: Run DB migration
+        run: alembic -c python/database/migration/alembic.ini upgrade head
+        env:
+          ROOT_DIR: ${{ github.workspace }}
+          DB_URL: postgresql://root:pgdevpassword@127.0.0.1:5432/literp_test
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Show Gradle and Java versions
+        run: ./gradlew --version
+
+      - name: Run test baseline
+        run: ./gradlew test
+        env:
+          LITERP_TEST_PG_HOST: 127.0.0.1
+          LITERP_TEST_PG_PORT: "5432"
+          LITERP_TEST_PG_USER: root
+          LITERP_TEST_PG_PASSWORD: pgdevpassword
+          LITERP_TEST_PG_DATABASE: literp_test
+
+  openapi-verification:
+    name: OpenAPI Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: python/requirements.txt
+
+      - name: Install OpenAPI verification dependencies
+        run: python -m pip install -r python/requirements.txt
+
+      - name: Run OpenAPI verification
+        run: python scripts/verify_openapi_assets.py
+        env:
+          ROOT_DIR: ${{ github.workspace }}
+
   migration-verification:
     name: Migration Verification
     runs-on: ubuntu-latest
