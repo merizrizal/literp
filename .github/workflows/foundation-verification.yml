@@ -57,6 +57,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: python/requirements.txt
+
+      - name: Install migration dependencies
+        run: python -m pip install -r python/requirements.txt
+
+      - name: Run DB migration
+        run: alembic -c python/database/migration/alembic.ini upgrade head
+        env:
+          ROOT_DIR: ${{ github.workspace }}
+          DB_URL: postgresql://root:pgdevpassword@127.0.0.1:5432/literp_test
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
