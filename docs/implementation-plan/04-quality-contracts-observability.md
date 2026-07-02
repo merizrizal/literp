@@ -75,17 +75,17 @@ Estimate: 1.5-2.5 engineer-days
 
 Tasks:
 
-- [ ] Add CI workflow for build and tests
-- [ ] Add OpenAPI validation to CI
+- [x] Add CI workflow for build and tests
+- [x] Add OpenAPI validation to CI
 - [ ] Add Bruno or collection linting if practical
-- [ ] Document and enforce a single source of truth for generated OpenAPI JSON
-- [ ] Keep version references synchronized with `build.gradle.kts`
+- [x] Document and enforce a single source of truth for generated OpenAPI JSON
+- [x] Keep version references synchronized with `build.gradle.kts`
 
 Done when:
 
-- [ ] CI blocks broken build, tests, and OpenAPI contracts
-- [ ] OpenAPI YAML and JSON drift is detected or prevented
-- [ ] Version references do not drift silently from the build file
+- [x] CI blocks broken build, tests, and OpenAPI contracts
+- [x] OpenAPI YAML and JSON drift is detected or prevented
+- [x] Version references do not drift silently from the build file
 
 ### 04.4 Logging, Health, And Metrics
 
@@ -93,16 +93,16 @@ Estimate: 2-3 engineer-days
 
 Tasks:
 
-- [ ] Add structured logs or a clear log format for production use
-- [ ] Propagate incoming `X-Request-ID` into all logs and responses
-- [ ] Add readiness and liveness semantics beyond database health if needed
-- [ ] Add metrics for request count, latency, error count, and database failures
+- [x] Add structured logs or a clear log format for production use
+- [x] Propagate incoming `X-Request-ID` into all logs and responses
+- [x] Add readiness and liveness semantics beyond database health if needed
+- [x] Add metrics for request count, latency, error count, and database failures
 
 Done when:
 
-- [ ] A single request can be traced through logs
-- [ ] Health endpoints clearly separate process, router, and database readiness where needed
-- [ ] Basic runtime metrics are available for operators
+- [x] A single request can be traced through logs
+- [x] Health endpoints clearly separate process, router, and database readiness where needed
+- [x] Basic runtime metrics are available for operators
 
 ### 04.5 Security Planning Gate
 

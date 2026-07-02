@@ -2,6 +2,7 @@ package com.literp.verticle
 
 import com.literp.config.Config
 import com.literp.common.ErrorCodes
+import com.literp.observability.HttpMetrics
 import com.literp.db.DatabaseConnection
 import com.literp.repository.LocationRepository
 import com.literp.repository.OrderProcessRepository
@@ -63,6 +64,11 @@ class HttpServerVerticle(
     private lateinit var locationHandler: LocationHandler
     private lateinit var uomHandler: UnitOfMeasureHandler
     private lateinit var orderProcessHandler: OrderProcessHandler
+    private val metrics = HttpMetrics()
+
+    private companion object {
+        const val METRICS_START_NANOS_KEY = "metricsStartNanos"
+    }
 
     override fun start(startFuture: Promise<Void>?) {
         val coreVertx = vertx.delegate
@@ -129,9 +135,13 @@ class HttpServerVerticle(
 
                     val router = Router.router(vertx).apply {
                         route().handler(HSTSHandler.create())
+                        route().handler(this@HttpServerVerticle::captureRequestMetrics)
                         route().failureHandler(this@HttpServerVerticle::handleFailure)
 
                         get("/").handler(this@HttpServerVerticle::getIndex)
+                        get("/metrics").handler(this@HttpServerVerticle::getMetrics)
+                        get("/health/live").handler(this@HttpServerVerticle::getLiveness)
+                        get("/health/ready").handler(this@HttpServerVerticle::getReadiness)
                         get("/health/db").handler(this@HttpServerVerticle::getDatabaseHealth)
 
                         route("/api/v1/*").subRouter(productRouter)
@@ -217,10 +227,47 @@ class HttpServerVerticle(
         val response = JsonObject().apply {
             put("success", true)
             put("message", "Literp API Server")
-            put("version", "1.0.0")
+            put("version", "0.0.1")
         }
 
         putResponse(context, 200, response)
+    }
+
+    private fun captureRequestMetrics(context: RoutingContext) {
+        val startedAt = System.nanoTime()
+        try {
+            context.put(METRICS_START_NANOS_KEY, startedAt)
+            context.response().endHandler {
+                val resolvedStartedAt = context.get<Long>(METRICS_START_NANOS_KEY) ?: startedAt
+                try {
+                    metrics.recordRequest(context.response().statusCode, System.nanoTime() - resolvedStartedAt)
+                } catch (error: Throwable) {
+                    logger.warn("Failed to record request metrics: ${error.message}", error)
+                }
+            }
+        } catch (error: Throwable) {
+            logger.warn("Failed to install request metrics handler: ${error.message}", error)
+        } finally {
+            context.next()
+        }
+    }
+
+    private fun getMetrics(context: RoutingContext) {
+        putResponse(context, 200, metrics.snapshot())
+    }
+
+    private fun getLiveness(context: RoutingContext) {
+        logger.info("Calling getLiveness")
+
+        putResponse(
+            context,
+            200,
+            JsonObject().put("status", "UP")
+        )
+    }
+
+    private fun getReadiness(context: RoutingContext) {
+        getDatabaseHealth(context)
     }
 
     private fun getDatabaseHealth(context: RoutingContext) {
@@ -239,6 +286,7 @@ class HttpServerVerticle(
                 },
                 { error ->
                     logger.warn("Database health check failed: ${error.message}", error)
+                    metrics.recordDatabaseFailure()
                     val errorCode = if (error is java.util.concurrent.TimeoutException) {
                         ErrorCodes.DB_TIMEOUT
                     } else {

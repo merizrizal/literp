@@ -1,14 +1,16 @@
 # CI Verification
 
 The foundation gate requires the `Foundation Verification` workflow to pass
-before merging implementation work.
+before merging implementation work. The gate currently covers build, test
+baseline, OpenAPI verification, and migration verification.
 
 ## Required Checks
 
 | Check | Runtime | Command |
 |---|---|---|
 | Build | Java 25, Gradle wrapper 9.6.0 | `./gradlew build` |
-| Test Baseline | Java 25, Gradle wrapper 9.6.0 | `./gradlew test` |
+| Test Baseline | Java 25, Gradle wrapper 9.6.0, isolated PostgreSQL test DB | `./gradlew test` |
+| OpenAPI Verification | Python 3.13 | `python scripts/verify_openapi_assets.py` |
 | Migration Verification | Python 3.13, PostgreSQL 18 | `python scripts/verify_migrations.py` |
 
 The migration check runs Alembic to `head`, verifies the database revision
@@ -36,6 +38,17 @@ cd ..
   --tests com.literp.contract.OpenApiOperationIdRegistrationTest
 ./gradlew test
 ```
+
+For CI parity, the test baseline job uses the PostgreSQL service on port `5432` and sets the `LITERP_TEST_PG_*` environment variables before running `./gradlew test`.
+
+OpenAPI contracts treat `api_collections/open_api_spec/*.yaml` as the source of truth. The matching JSON files are tracked for drift detection, and `build.gradle.kts` is the version source. Keep those files in sync, then run the verifier:
+
+```bash
+python3 -m pip install -r python/requirements.txt
+python scripts/verify_openapi_assets.py
+```
+
+If you edit an OpenAPI YAML file, update the matching JSON file in the same change so CI stays green.
 
 If `literp_test` is unavailable on `127.0.0.1:55432`, the DB-backed tests are skipped by `TestDatabase.assumeAvailable(...)` and should be rerun after the isolated test database is started.
 

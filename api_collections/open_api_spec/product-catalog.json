@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Literp Product Catalog API",
-    "description": "Product Catalog CRUD API for managing products, variants, and units of measure.\n\nThis API provides endpoints to manage:\n- **Products**: Core product entities with SKU, pricing, and type (STOCK/SERVICE)\n- **Product Variants**: Size, color, or other variant combinations of products\n- **Units of Measure**: Standard unit codes (EA, KG, LTR, etc.)\n\nThe product catalog is the foundation of the Literp lightweight ERP system.",
-    "version": "1.0.0",
+    "description": "Product Catalog CRUD API for managing products, variants, and units of measure.\n\nThis API provides endpoints to manage:\n- **Products**: Core product entities with SKU, pricing, and type (STOCK/SERVICE)\n- **Product Variants**: Size, color, or other variant combinations of products\n- **Units of Measure**: Standard unit codes (EA, KG, LTR, etc.)\n\nThe product catalog is the foundation of the Literp lightweight ERP system.\n",
+    "version": "0.0.1",
     "contact": {
       "name": "Literp Development",
       "url": "https://github.com/merizrizal"

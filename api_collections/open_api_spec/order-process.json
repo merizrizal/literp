@@ -3,7 +3,7 @@
   "info": {
     "title": "Literp Order Process API",
     "description": "Order lifecycle API for POS channel process:\ndraft -> line entry -> confirm -> payment capture -> fulfillment / cancellation.\n",
-    "version": "1.0.0"
+    "version": "0.0.1"
   },
   "servers": [
     {
