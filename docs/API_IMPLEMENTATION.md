@@ -61,8 +61,11 @@ The HTTP server loads 3 OpenAPI contracts:
 - `api_collections/open_api_spec/locations.yaml`
 - `api_collections/open_api_spec/order-process.yaml`
 
-It also exposes two utility routes outside `/api/v1`:
+It also exposes five utility routes outside `/api/v1`:
 - `GET /`
+- `GET /metrics`
+- `GET /health/live`
+- `GET /health/ready`
 - `GET /health/db`
 
 ## Implemented API Surface
@@ -105,13 +108,15 @@ It also exposes two utility routes outside `/api/v1`:
 - `GET /orders`
 - `POST /orders`
 - `GET /orders/{salesOrderId}`
+- `GET /stock/current`
+- `GET /stock/available`
 - `POST /orders/{salesOrderId}/lines`
 - `POST /orders/{salesOrderId}/confirm`
 - `POST /orders/{salesOrderId}/payments`
 - `POST /orders/{salesOrderId}/fulfill`
 - `POST /orders/{salesOrderId}/cancel`
 
-Total API endpoints: `29`
+Total API endpoints: `31`
 
 ## Database and Seed Data
 
@@ -364,7 +369,7 @@ and order-process response shapes are still documented separately below.
 
 ### Utility endpoints
 
-`GET /` and `GET /health/db` return plain JSON objects without the handler envelope.
+`GET /`, `GET /metrics`, `GET /health/live`, `GET /health/ready`, and `GET /health/db` return plain JSON objects without the handler envelope.
 
 ### List endpoints
 

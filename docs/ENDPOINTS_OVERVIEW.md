@@ -4,6 +4,9 @@
 
 Utility endpoints:
 - `GET /`
+- `GET /metrics`
+- `GET /health/live`
+- `GET /health/ready`
 - `GET /health/db`
 
 API base:
@@ -52,6 +55,8 @@ API base:
 - `GET /orders`
 - `POST /orders`
 - `GET /orders/{salesOrderId}`
+- `GET /stock/current`
+- `GET /stock/available`
 - `POST /orders/{salesOrderId}/lines`
 - `POST /orders/{salesOrderId}/confirm`
 - `POST /orders/{salesOrderId}/payments`
@@ -62,8 +67,8 @@ API base:
 
 | Area | Count |
 |---|---:|
-| Utility endpoints | 2 |
-| API endpoints | 29 |
+| Utility endpoints | 5 |
+| API endpoints | 31 |
 | API domains | 5 |
 
 ## Architecture Path

@@ -86,7 +86,8 @@ Build in this order:
 2. Master-data API parity
 3. Order and inventory flow hardening
 4. Quality, contracts, and observability
-5. POS and manufacturing expansion
+5. Authentication and authorization baseline
+6. POS and manufacturing expansion
 
 Phase discipline:
 
@@ -96,20 +97,18 @@ Phase discipline:
 - [x] Unblock Phase 02 after Phase 01 completion
 - [x] Complete Phase 02 before starting Phase 03 implementation
 - [ ] Complete the Phase 04 project structure gate before starting Phase 05 implementation
+- [ ] Complete the Phase 05.0 authentication and authorization baseline before Phase 05 expansion implementation
 
-Later phase files may be used for planning and context, but implementation work
-should now continue with Phase 02 before jumping to Phase 03 or later.
+The [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) is accepted and 04.6 is complete. The formal Phase 04 entry-gate checkbox remains pending the remaining Phase 04 evidence review; Phase 05 expansion is also blocked by the pending 05.0 authentication and authorization baseline.
 
-Do not build IAM first.
-
-The platform should first prove and protect this path:
+Later phase files may be used for planning and context. Do not build IAM before
+the platform proves its order-to-inventory workflow:
 
 ```text
 Add product -> Create sales order -> Confirm and reserve -> Capture payment -> Fulfill -> Write inventory movement
 ```
 
-Authentication and authorization should be added after the backend workflows are
-stable enough to protect.
+That workflow is the baseline for the accepted [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md). The proposed 05.0 authentication and authorization baseline must be designed and implemented before Phase 05 POS and manufacturing expansion starts. It protects the current business API surface; it is not broad IAM work.
 
 ## 00.6 Cross-Phase Principles
 
@@ -122,7 +121,7 @@ stable enough to protect.
 - [ ] Normalize response envelopes before broad client adoption
 - [ ] Add automated tests before expanding API surface materially
 - [ ] Keep OpenAPI, Bruno, docs, and handlers synchronized with each change
-- [ ] Resolve project structure before POS and manufacturing expand the codebase materially
+- [x] Resolve the project structure decision before POS and manufacturing expand the codebase materially; retain the current layout through Phase 05
 
 ## 00.7 Recommended MVP Slice
 

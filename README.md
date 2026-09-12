@@ -3,7 +3,7 @@
 Lightweight ERP core built with Vert.x, Kotlin, and PostgreSQL.
 
 The current branch implements a POS-first sales and inventory backend with:
-- 29 REST API endpoints across 5 domains
+- 31 REST API endpoints across 5 domains
 - movement-based inventory and reservation-backed order fulfillment
 - deterministic Alembic seed data for local testing
 - OpenAPI contracts and a synchronized Bruno collection
@@ -15,10 +15,13 @@ Implemented API domains:
 - Product: 5 endpoints
 - Product Variant: 5 endpoints
 - Location: 6 endpoints
-- Order Process: 8 endpoints
+- Order Process: 10 endpoints
 
 Utility endpoints:
 - `GET /`
+- `GET /metrics`
+- `GET /health/live`
+- `GET /health/ready`
 - `GET /health/db`
 
 The order process API supports:
@@ -28,6 +31,7 @@ The order process API supports:
 - payment capture
 - fulfillment with inventory movement writes
 - cancellation with payment guardrails
+- current and available stock queries
 
 ## Stack
 
@@ -134,6 +138,10 @@ literp/
     ├── service/
     └── verticle/
 ```
+
+The accepted [project structure decision](docs/knowledge/PROJECT_STRUCTURE_DECISION.md) retains this layer-based layout and the current API asset roots through Phase 05. Catalog, location, and order continue in their current layers; inventory remains with order-process behavior. When implemented, POS and manufacturing follow the same handler/repository/service layers, with their proposed Java proxy service groups created only for concrete services.
+
+The accepted [security sequencing decision](docs/knowledge/SECURITY_SEQUENCING.md) requires the proposed 05.0 authentication and authorization baseline before POS or manufacturing expansion. Until that baseline is implemented, do not expose the unauthenticated business API to an internet-facing or otherwise untrusted network.
 
 ## Implementation Notes
 

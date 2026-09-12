@@ -57,7 +57,7 @@ Estimate: 2-4 engineer-days
 
 Tasks:
 
-- [x] Add HTTP tests for all 29 implemented endpoints
+- [x] Add HTTP tests for all 31 implemented endpoints
 - [x] Add end-to-end order lifecycle tests
 - [x] Add contract tests that verify OpenAPI operation IDs are registered by handlers
 - [x] Add response snapshot or schema tests for normalized response envelopes
@@ -83,7 +83,7 @@ Tasks:
 
 Done when:
 
-- [x] CI blocks broken build, tests, and OpenAPI contracts
+- [ ] CI blocks broken build, tests, and OpenAPI contracts
 - [x] OpenAPI YAML and JSON drift is detected or prevented
 - [x] Version references do not drift silently from the build file
 
@@ -100,7 +100,7 @@ Tasks:
 
 Done when:
 
-- [x] A single request can be traced through logs
+- [ ] A single request can be traced through logs
 - [x] Health endpoints clearly separate process, router, and database readiness where needed
 - [x] Basic runtime metrics are available for operators
 
@@ -110,16 +110,16 @@ Estimate: 0.5-1 engineer-day
 
 Tasks:
 
-- [ ] Decide when authentication and authorization enter the plan
-- [ ] Define the minimum protected endpoints for the first auth slice
-- [ ] Decide whether auth belongs before or after Phase 05 expansion
-- [ ] Document the security sequencing decision
+- [x] Decide when authentication and authorization enter the plan
+- [x] Define the minimum protected endpoints for the first auth slice
+- [x] Decide whether auth belongs before or after Phase 05 expansion
+- [x] Document the [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md)
 
 Done when:
 
-- [ ] Security scope has an owner phase
-- [ ] The plan states which endpoints must be protected first
-- [ ] Later implementation work is not blocked by an undefined auth strategy
+- [x] Security scope has the proposed 05.0 owner phase
+- [x] The accepted decision states all 31 current business operations and utility-route policy for the first protected surface
+- [x] Later expansion work is not blocked by an undefined auth strategy; implementation remains a pending 05.0 prerequisite
 
 ### 04.6 Project Structure Gate
 
@@ -127,18 +127,18 @@ Estimate: 1-2 engineer-days
 
 Tasks:
 
-- [ ] Decide whether to keep the current layer-based backend packages through Phase 05 or move toward domain-based packages first
-- [ ] If restructuring, define the target package layout for catalog, location, order, inventory, POS, and manufacturing code
-- [ ] Decide whether API assets stay under `api_collections` or move to a clearer `api/openapi` and `api/bruno` layout
-- [ ] Move files only after Phase 02 and Phase 03 behavior is covered well enough by automated tests
-- [ ] Update imports, service proxy references, OpenAPI paths, Bruno paths, docs, and CI references if files move
-- [ ] Document the final structure decision in the README and implementation plan
+- [x] Decide to retain the current layer-based backend packages through Phase 05
+- [x] Not applicable: no restructuring is approved; the accepted decision defines current and proposed placement for catalog, location, order, inventory, POS, and manufacturing code
+- [x] Decide to retain API assets under `api_collections`
+- [x] Not applicable: no files move under the retained-layout decision
+- [x] Not applicable: no move requires import, proxy, asset-path, documentation, or CI-reference updates
+- [x] Document the final [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) in the README and implementation plan
 
 Done when:
 
-- [ ] Phase 05 has a clear package and asset layout before POS and manufacturing code expands
-- [ ] Any structure changes are mechanical and verified by build, tests, OpenAPI validation, and Bruno path checks
-- [ ] Existing feature work is not mixed with structural file moves
+- [x] Phase 05 has a clear package and asset layout before POS and manufacturing code expands
+- [x] Not applicable: no structure changes are approved; any future mechanical move requires the specified build, test, OpenAPI, Bruno-path, and startup validation
+- [x] Existing feature work is not mixed with structural file moves
 
 ## Assumptions
 
@@ -152,8 +152,18 @@ Done when:
 ## Definition of Done
 
 - [ ] CI blocks broken build, broken tests, and invalid OpenAPI contracts
-- [ ] Public API behavior is covered by HTTP integration tests
-- [ ] Error responses are stable and documented
+- [x] Public API behavior is covered by HTTP integration tests
+- [x] Error responses are stable and documented
 - [ ] Logs are useful for tracing a single request through handler and repository work
-- [ ] Documentation updates are part of each API behavior change
-- [ ] Project structure is either confirmed as sufficient for Phase 05 or refactored before Phase 05 starts
+- [x] Documentation updates are part of each API behavior change
+- [x] Project structure is confirmed sufficient for Phase 05 by the accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md)
+
+## Gate Closure Evidence
+
+- The project maintainer accepted the security sequencing and structure decisions on 2026-09-12. The decisions assign authentication and authorization to proposed task 05.0 before Phase 05 expansion and retain the current backend/API asset layout through Phase 05.
+- Current validation: `JAVA_TOOL_OPTIONS='-Djdk.lang.Process.launchMechanism=FORK' rtk ./gradlew --no-daemon test --rerun-tasks` passed with 36 tests, 0 skipped, 0 failures, and 0 errors; the corresponding `rtk ./gradlew --no-daemon build` passed.
+- The `Foundation Verification` workflow declares build, test-baseline, OpenAPI-verification, and migration-verification jobs. The fresh `source ~/Documents/PyEnv/myEnv/bin/activate && rtk python scripts/verify_openapi_assets.py` run passed for all three YAML/JSON pairs at version `0.0.1`.
+- The production-router smoke test verifies utility routes, unmatched-route `404`, normalized global failure responses, and `X-Request-ID` propagation.
+- Bruno collection paths and the three added utility request assets are structurally verified. Bruno linting remains an explicitly deferred optional task until a stable command is selected.
+
+The two planning gates are complete. Do not mark all of Phase 04 complete: CI required-check enforcement and request-correlated repository logging remain open.
