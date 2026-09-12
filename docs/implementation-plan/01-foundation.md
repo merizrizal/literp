@@ -32,8 +32,8 @@ Vert.x service proxy classes are generated build artifacts.
 
 - [x] Kotlin and Java Gradle project exists
 - [x] Runtime targets Java `25`
-- [x] Current build file uses Kotlin `2.4.0`
-- [x] Current build file uses Vert.x `5.1.3`
+- [x] Current build file uses Kotlin `2.4.20`
+- [x] Current build file uses Vert.x `5.1.8`
 - [x] Application entry point deploys `MainVerticle`
 - [x] `MainVerticle` deploys `HttpServerVerticle`
 - [x] HTTP server reads `cfg.properties`

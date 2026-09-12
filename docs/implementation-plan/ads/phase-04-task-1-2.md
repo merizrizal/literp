@@ -118,7 +118,7 @@ Assumptions to confirm during Chunk 0:
 
 Existing dependencies and integration points:
 
-- Kotlin `2.4.0`, Java `25`, Gradle wrapper, JUnit Jupiter, Vert.x `5.1.3`, RxJava3, PostgreSQL client.
+- Kotlin `2.4.20`, Java `25`, Gradle wrapper, JUnit Jupiter, Vert.x `5.1.8`, RxJava3, PostgreSQL client.
 - OpenAPI router support through `io.vertx.rxjava3.openapi.contract.OpenAPIContract` and `io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder`.
 - HTTP test client pattern using `java.net.http.HttpClient`, `HttpRequest`, and `HttpResponse`.
 - PostgreSQL test pool through `src/test/kotlin/com/literp/test/TestDatabase.kt`.

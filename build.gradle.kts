@@ -1,8 +1,8 @@
 import org.gradle.jvm.tasks.Jar
 
 buildscript {
-    System.setProperty("kotlinVersion", "2.4.0")
-    System.setProperty("vertxVersion", "5.1.3")
+    System.setProperty("kotlinVersion", "2.4.20")
+    System.setProperty("vertxVersion", "5.1.8")
 }
 
 group = "com.literp"

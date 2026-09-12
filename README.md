@@ -31,8 +31,8 @@ The order process API supports:
 
 ## Stack
 
-- Kotlin `2.4.0`
-- Vert.x `5.1.3`
+- Kotlin `2.4.20`
+- Vert.x `5.1.8`
 - Java `25`
 - RxJava3
 - PostgreSQL
