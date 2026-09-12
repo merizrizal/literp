@@ -10,6 +10,9 @@ Use this checklist to validate the current implementation, docs, and testing ass
 - [ ] `./gradlew build` completes
 - [ ] `./gradlew run` starts the server on the configured port
 - [ ] `GET /` returns a JSON response
+- [ ] `GET /metrics` returns a JSON response
+- [ ] `GET /health/live` returns `UP`
+- [ ] `GET /health/ready` returns readiness status
 - [ ] `GET /health/db` returns database `UP`
 
 ## CI Verification
@@ -59,13 +62,15 @@ Use this checklist to validate the current implementation, docs, and testing ass
 - [ ] `GET /api/v1/orders`
 - [ ] `POST /api/v1/orders`
 - [ ] `GET /api/v1/orders/{salesOrderId}`
+- [ ] `GET /api/v1/stock/current`
+- [ ] `GET /api/v1/stock/available`
 - [ ] `POST /api/v1/orders/{salesOrderId}/lines`
 - [ ] `POST /api/v1/orders/{salesOrderId}/confirm`
 - [ ] `POST /api/v1/orders/{salesOrderId}/payments`
 - [ ] `POST /api/v1/orders/{salesOrderId}/fulfill`
 - [ ] `POST /api/v1/orders/{salesOrderId}/cancel`
 
-Total API endpoints to verify: `29`
+Total API endpoints to verify: `31`
 
 ## Data and Lifecycle Rules
 
@@ -131,7 +136,7 @@ Total API endpoints to verify: `29`
 - [ ] OpenAPI specs exist under `api_collections/open_api_spec`
 - [ ] Bruno collection exists under `api_collections/Literp`
 - [ ] Bruno collection includes utility endpoints
-- [ ] Bruno collection includes all 29 API endpoints
+- [ ] Bruno collection includes all 31 API endpoints
 - [ ] Bruno collection variables are defined in `collection.bru`
 
 ## Documentation Verification
@@ -140,7 +145,7 @@ Total API endpoints to verify: `29`
 - [ ] `docs/QUICK_START.md` matches current startup flow
 - [ ] `docs/API_IMPLEMENTATION.md` reflects actual handler behavior
 - [ ] `docs/API_TESTING_GUIDE.md` includes order-process testing
-- [ ] `docs/ENDPOINTS_OVERVIEW.md` lists 29 endpoints
+- [ ] `docs/ENDPOINTS_OVERVIEW.md` lists 31 endpoints
 - [ ] `docs/CI_VERIFICATION.md` documents required CI checks
 - [ ] `docs/LOCAL_RESET.md` separates non-destructive and destructive reset paths
 - [ ] `docs/IMPLEMENTATION_SUMMARY.md` reflects seed data and Bruno assets

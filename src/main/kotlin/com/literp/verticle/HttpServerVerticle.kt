@@ -68,6 +68,8 @@ class HttpServerVerticle(
 
     private companion object {
         const val METRICS_START_NANOS_KEY = "metricsStartNanos"
+        const val REQUEST_ID_HEADER = "X-Request-ID"
+        const val REQUEST_ID_CONTEXT_KEY = "requestId"
     }
 
     override fun start(startFuture: Promise<Void>?) {
@@ -147,6 +149,7 @@ class HttpServerVerticle(
                         route("/api/v1/*").subRouter(productRouter)
                         route("/api/v1/*").subRouter(locationRouter)
                         route("/api/v1/*").subRouter(orderProcessRouter)
+                        route().handler { context -> context.fail(404) }
                     }
 
                     val config = Config()
@@ -326,9 +329,24 @@ class HttpServerVerticle(
     }
 
     private fun putResponse(context: RoutingContext, statusCode: Int, response: JsonObject) {
+        val requestId = resolveRequestId(context)
         context.response().statusCode = statusCode
         context.response().putHeader("Content-Type", "application/json")
+        context.response().putHeader(REQUEST_ID_HEADER, requestId)
         context.response().end(response.encode())
+    }
+
+    private fun resolveRequestId(context: RoutingContext): String {
+        val existingRequestId = context.get<String>(REQUEST_ID_CONTEXT_KEY)
+        if (!existingRequestId.isNullOrBlank()) {
+            return existingRequestId
+        }
+
+        val requestId = context.request()?.getHeader(REQUEST_ID_HEADER)?.trim().orEmpty().ifBlank {
+            UUID.randomUUID().toString()
+        }
+        context.put(REQUEST_ID_CONTEXT_KEY, requestId)
+        return requestId
     }
 
     private fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String) {

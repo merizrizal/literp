@@ -13,9 +13,16 @@ movements created by manufacturing operations.
 
 ## Entry Gate
 
-- [ ] Phase 04 project structure gate is complete
-- [ ] Backend package layout is confirmed before POS and manufacturing handlers, services, and repositories are added
-- [ ] API asset layout is confirmed before new POS and manufacturing OpenAPI and Bruno files are added
+- [ ] The accepted [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md) is implemented through 05.0 before POS and manufacturing expansion begins
+- [ ] Phase 04 project structure gate is recorded complete after final Phase 04 evidence review
+- [x] Backend package layout is confirmed by the accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) before POS and manufacturing handlers, services, and repositories are added
+- [x] API asset layout is confirmed by the accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) before new POS and manufacturing OpenAPI and Bruno files are added
+
+### Accepted Layout Guidance
+
+The accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) retains the current layer-based backend layout and `api_collections` asset roots through Phase 05. Catalog, location, and order remain in their existing layers; inventory remains with order-process behavior.
+
+When concrete POS or manufacturing behavior is added, it follows the existing Kotlin handler/repository/service layers. Proposed `service/pos` and `service/manufacturing` Java proxy groups are created only when concrete proxy services require confirmed codegen contracts. New OpenAPI YAML/JSON pairs and Bruno requests remain in their current roots and update their loader, verifier, test, documentation, and CI consumers in the same feature slice.
 
 ## Current Completed Work
 
@@ -43,6 +50,23 @@ movements created by manufacturing operations.
 - [x] simulated seed data includes 14 days of production and sales activity
 
 ## Ordered Tasks
+
+### 05.0 Authentication And Authorization Baseline
+
+Estimate: Defined by the approved authentication implementation ADS
+
+Tasks:
+
+- [ ] Create and approve the authentication implementation ADS from the [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md)
+- [ ] Implement the approved authentication and deny-by-default authorization baseline for the current protected surface
+- [ ] Validate credential rejection, authorized access, denied capability/resource scope, operational-route restriction, and public probe behavior
+- [ ] Preserve existing lifecycle, idempotency, response, and request-ID contracts under authorization
+
+Done when:
+
+- [ ] The accepted security decision is implemented and validated by the approved authentication ADS
+- [ ] Current business operations cannot be reached without authorized credentials and scope
+- [ ] POS and manufacturing expansion can build on the authenticated baseline without widening access implicitly
 
 ### 05.1 POS Operations Contract
 

@@ -12,8 +12,8 @@ Literp is currently a Kotlin and Vert.x backend that implements a lightweight ER
 
 ### What is implemented
 
-- utility endpoints for index and database health
-- 29 API endpoints across:
+- utility endpoints for index, metrics, liveness, readiness, and database health
+- 31 API endpoints across:
   - Unit of Measure
   - Product
   - Product Variant

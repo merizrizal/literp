@@ -195,6 +195,71 @@ class MasterDataHttpIntegrationTest {
     }
 
     @Test
+    fun productionRouterExposesUtilityAndFailureContracts() {
+        val deploymentId = coreVertx.deployVerticle(HttpServerVerticle(rxVertx))
+            .toCompletionStage()
+            .toCompletableFuture()
+            .get()
+
+        try {
+            val productionHttp = HttpTestSupport("http://127.0.0.1:8010")
+            val requestId = "production-router-request"
+
+            val indexResponse = productionHttp.request(
+                "GET",
+                "/",
+                headers = mapOf("X-Request-ID" to requestId)
+            )
+            check(indexResponse.status == 200) {
+                "Unexpected status for production GET / with body ${indexResponse.rawBody}"
+            }
+            check(indexResponse.header("X-Request-ID") == requestId)
+            check(requireNotNull(indexResponse.json).getBoolean("success"))
+
+            val metricsResponse = productionHttp.request("GET", "/metrics")
+            check(metricsResponse.status == 200) {
+                "Unexpected status for production GET /metrics with body ${metricsResponse.rawBody}"
+            }
+            check(requireNotNull(metricsResponse.json).containsKey("requestCount"))
+
+            val liveResponse = productionHttp.request("GET", "/health/live")
+            check(liveResponse.status == 200) {
+                "Unexpected status for production GET /health/live with body ${liveResponse.rawBody}"
+            }
+            check(requireNotNull(liveResponse.json).getString("status") == "UP")
+
+            val readyResponse = productionHttp.request("GET", "/health/ready")
+            check(readyResponse.status == 200) {
+                "Unexpected status for production GET /health/ready with body ${readyResponse.rawBody}"
+            }
+            check(requireNotNull(readyResponse.json).getString("database") == "UP")
+
+            val databaseResponse = productionHttp.request("GET", "/health/db")
+            check(databaseResponse.status == 200) {
+                "Unexpected status for production GET /health/db with body ${databaseResponse.rawBody}"
+            }
+            check(requireNotNull(databaseResponse.json).getString("database") == "UP")
+
+            val failureResponse = productionHttp.request(
+                "GET",
+                "/api/v1/does-not-exist",
+                headers = mapOf("X-Request-ID" to requestId)
+            )
+            check(failureResponse.status == 404) {
+                "Unexpected status for production unmatched route with body ${failureResponse.rawBody}"
+            }
+            val failureJson = requireNotNull(failureResponse.json)
+            HttpTestSupport.assertErrorEnvelope(failureJson, 404)
+            check(failureResponse.header("X-Request-ID") == requestId)
+        } finally {
+            coreVertx.undeploy(deploymentId)
+                .toCompletionStage()
+                .toCompletableFuture()
+                .get()
+        }
+    }
+
+    @Test
     fun metricsEndpointTracksRequestsAndErrors() {
         val before = metricsSnapshot()
 
