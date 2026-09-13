@@ -241,14 +241,10 @@ All error responses follow a consistent format:
 
 ```json
 {
-  "code": "ERROR_CODE",
-  "message": "Human-readable error message",
-  "details": {
-    "field": "fieldName",
-    "value": "problematicValue"
-  },
-  "timestamp": "2026-02-17T10:30:00Z",
-  "path": "/api/v1/products/invalid-id"
+  "error": "Resource not found",
+  "errorCode": "RESOURCE_NOT_FOUND",
+  "status": 404,
+  "errorId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -259,6 +255,8 @@ All error responses follow a consistent format:
 | 201 | Created | Resource created successfully |
 | 204 | No Content | Resource deleted successfully |
 | 400 | Bad Request | Validation failed, invalid input |
+| 401 | Unauthenticated | Missing or invalid bearer credential |
+| 403 | Forbidden | Missing capability or organization authorization |
 | 404 | Not Found | Resource doesn't exist |
 | 409 | Conflict | SKU already exists, or deletion conflicts |
 | 500 | Server Error | Unexpected error on server |
@@ -337,9 +335,15 @@ All entity fields, types, enums, and constraints in this spec match the database
 | Product | `product` | Soft-delete via active flag |
 | Product Variant | `product_variant` | Soft-delete via active flag |
 
+## Security
+
+Every operation in this specification requires the `bearerAuth` OAuth 2.0
+access-token requirement. The runtime verifies the token and applies explicit
+capability authorization. Provider and deployment acceptance remains pending;
+see [AUTHENTICATION_BASELINE.md](../../docs/knowledge/AUTHENTICATION_BASELINE.md).
+
 ## Future Enhancements
 
-- **Authentication**: Bearer token JWT support (placeholder in spec)
 - **Bulk Operations**: Batch create/update for products and variants
 - **Search**: Full-text search on product names and metadata
 - **Caching Headers**: ETag and Last-Modified support

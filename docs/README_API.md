@@ -69,7 +69,8 @@ This directory documents the current implementation on this branch.
 - Kotlin `2.4.20`
 - Vert.x `5.1.8`
 - Java `25`
-- 29 implemented API endpoints
-- 2 utility endpoints
+- 31 implemented API endpoints
+- 5 utility endpoints (two public probes and three restricted operational routes)
 - deterministic seed data through Alembic
-- synchronized Bruno collection
+- synchronized authenticated Bruno collection and OpenAPI contracts
+- application-side authentication baseline with provider/deployment acceptance pending

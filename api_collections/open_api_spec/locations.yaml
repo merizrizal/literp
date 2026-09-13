@@ -22,6 +22,9 @@ servers:
   - url: https://api.literp.example.com/api/v1
     description: Production server
 
+security:
+  - bearerAuth: []
+
 paths:
   /locations:
     get:
@@ -78,6 +81,10 @@ paths:
             type: boolean
             default: true
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: List of locations retrieved successfully
           content:
@@ -109,6 +116,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateLocationRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Location created successfully
           content:
@@ -145,6 +156,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Location retrieved successfully
           content:
@@ -180,6 +195,10 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateLocationRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Location updated successfully
           content:
@@ -211,6 +230,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '204':
           description: Location deleted successfully
         '404':
@@ -239,6 +262,10 @@ paths:
           schema:
             type: string
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Location retrieved successfully
           content:
@@ -484,12 +511,42 @@ components:
             status: 500
             errorId: "550e8400-e29b-41d4-a716-446655440000"
 
+    Unauthenticated:
+      description: Authentication is required or the bearer credential is invalid.
+      headers:
+        WWW-Authenticate:
+          description: Bearer authentication challenge.
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Authentication required"
+            errorCode: "UNAUTHENTICATED"
+            status: 401
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
+
+    Forbidden:
+      description: The authenticated principal lacks the required organization, capability, or resource scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Forbidden"
+            errorCode: "FORBIDDEN"
+            status: 403
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Bearer token for authentication (future implementation)
+      description: OAuth 2.0 access token. The runtime accepts only RS256 bearer access tokens whose signature is verified against the deployment's locally provisioned public JWKS, with exact issuer, audience, expiry, and organization/capability/scope validation.
 
 tags:
   - name: Location

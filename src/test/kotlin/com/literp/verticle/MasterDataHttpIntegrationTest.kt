@@ -13,7 +13,9 @@ import com.literp.observability.HttpMetrics
 import com.literp.test.HttpResult
 import com.literp.test.HttpTestSupport
 import com.literp.test.TestDatabase
+import com.literp.test.SecurityTestFixture
 import com.literp.verticle.handler.LocationHandler
+import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
 import com.literp.verticle.handler.ProductHandler
 import com.literp.verticle.handler.UnitOfMeasureHandler
 import io.vertx.core.Vertx
@@ -40,6 +42,7 @@ class MasterDataHttpIntegrationTest {
     private lateinit var baseUrl: String
     private lateinit var http: HttpTestSupport
     private lateinit var healthHttp: HttpTestSupport
+    private lateinit var securityFixture: SecurityTestFixture
 
     @BeforeAll
     fun setUp() {
@@ -47,6 +50,7 @@ class MasterDataHttpIntegrationTest {
         rxVertx = RxVertx.newInstance(coreVertx)
         pool = TestDatabase.createPool(rxVertx)
         TestDatabase.assumeAvailable(pool)
+        securityFixture = SecurityTestFixture(coreVertx)
 
         server = rxVertx.createHttpServer()
             .requestHandler(createRouter())
@@ -65,6 +69,9 @@ class MasterDataHttpIntegrationTest {
         }
         if (::pool.isInitialized) {
             pool.rxClose().blockingAwait()
+        }
+        if (::securityFixture.isInitialized) {
+            securityFixture.close()
         }
         if (::coreVertx.isInitialized) {
             coreVertx.close().toCompletionStage().toCompletableFuture().get()
@@ -196,7 +203,7 @@ class MasterDataHttpIntegrationTest {
 
     @Test
     fun productionRouterExposesUtilityAndFailureContracts() {
-        val deploymentId = coreVertx.deployVerticle(HttpServerVerticle(rxVertx))
+        val deploymentId = coreVertx.deployVerticle(HttpServerVerticle(rxVertx, securityFixture.securityHandler))
             .toCompletionStage()
             .toCompletableFuture()
             .get()
@@ -216,9 +223,24 @@ class MasterDataHttpIntegrationTest {
             check(indexResponse.header("X-Request-ID") == requestId)
             check(requireNotNull(indexResponse.json).getBoolean("success"))
 
-            val metricsResponse = productionHttp.request("GET", "/metrics")
+            val unauthenticatedMetrics = productionHttp.request("GET", "/metrics")
+            check(unauthenticatedMetrics.status == 401) {
+                "Unexpected status for unauthenticated production GET /metrics with body ${unauthenticatedMetrics.rawBody}"
+            }
+            HttpTestSupport.assertErrorEnvelope(
+                requireNotNull(unauthenticatedMetrics.json),
+                401,
+                ErrorCodes.UNAUTHENTICATED
+            )
+            check(unauthenticatedMetrics.header("WWW-Authenticate") == "Bearer")
+
+            val metricsResponse = productionHttp.request(
+                "GET",
+                "/metrics",
+                headers = securityFixture.authorization()
+            )
             check(metricsResponse.status == 200) {
-                "Unexpected status for production GET /metrics with body ${metricsResponse.rawBody}"
+                "Unexpected status for authenticated production GET /metrics with body ${metricsResponse.rawBody}"
             }
             check(requireNotNull(metricsResponse.json).containsKey("requestCount"))
 
@@ -228,25 +250,67 @@ class MasterDataHttpIntegrationTest {
             }
             check(requireNotNull(liveResponse.json).getString("status") == "UP")
 
-            val readyResponse = productionHttp.request("GET", "/health/ready")
+            val readyResponse = productionHttp.request(
+                "GET",
+                "/health/ready",
+                headers = securityFixture.authorization()
+            )
             check(readyResponse.status == 200) {
-                "Unexpected status for production GET /health/ready with body ${readyResponse.rawBody}"
+                "Unexpected status for authenticated production GET /health/ready with body ${readyResponse.rawBody}"
             }
             check(requireNotNull(readyResponse.json).getString("database") == "UP")
 
-            val databaseResponse = productionHttp.request("GET", "/health/db")
+            val databaseResponse = productionHttp.request(
+                "GET",
+                "/health/db",
+                headers = securityFixture.authorization()
+            )
             check(databaseResponse.status == 200) {
-                "Unexpected status for production GET /health/db with body ${databaseResponse.rawBody}"
+                "Unexpected status for authenticated production GET /health/db with body ${databaseResponse.rawBody}"
             }
             check(requireNotNull(databaseResponse.json).getString("database") == "UP")
+
+            val protectedResponse = productionHttp.request(
+                "GET",
+                "/api/v1/uom?size=1",
+                headers = securityFixture.authorization()
+            )
+            check(protectedResponse.status == 200) {
+                "Unexpected status for authenticated production GET /api/v1/uom with body ${protectedResponse.rawBody}"
+            }
+            HttpTestSupport.assertListEnvelope(requireNotNull(protectedResponse.json))
+
+            val insufficientCapability = productionHttp.request(
+                "GET",
+                "/api/v1/uom/${UUID.randomUUID()}",
+                headers = securityFixture.authorization(capabilities = setOf("master-data.write"))
+            )
+            check(insufficientCapability.status == 403) {
+                "Unexpected status for unauthorized production operation with body ${insufficientCapability.rawBody}"
+            }
+            HttpTestSupport.assertErrorEnvelope(
+                requireNotNull(insufficientCapability.json),
+                403,
+                ErrorCodes.FORBIDDEN
+            )
+
+            val unauthenticatedFailure = productionHttp.request("GET", "/api/v1/does-not-exist")
+            check(unauthenticatedFailure.status == 401) {
+                "Unexpected status for unauthenticated production unmatched route with body ${unauthenticatedFailure.rawBody}"
+            }
+            HttpTestSupport.assertErrorEnvelope(
+                requireNotNull(unauthenticatedFailure.json),
+                401,
+                ErrorCodes.UNAUTHENTICATED
+            )
 
             val failureResponse = productionHttp.request(
                 "GET",
                 "/api/v1/does-not-exist",
-                headers = mapOf("X-Request-ID" to requestId)
+                headers = securityFixture.authorization() + ("X-Request-ID" to requestId)
             )
             check(failureResponse.status == 404) {
-                "Unexpected status for production unmatched route with body ${failureResponse.rawBody}"
+                "Unexpected status for authenticated production unmatched route with body ${failureResponse.rawBody}"
             }
             val failureJson = requireNotNull(failureResponse.json)
             HttpTestSupport.assertErrorEnvelope(failureJson, 404)
@@ -276,7 +340,11 @@ class MasterDataHttpIntegrationTest {
         }
 
         val missingId = UUID.randomUUID().toString()
-        val errorResponse = healthHttp.request("GET", "/api/v1/uom/$missingId")
+        val errorResponse = healthHttp.request(
+            "GET",
+            "/api/v1/uom/$missingId",
+            headers = securityFixture.authorization()
+        )
         check(errorResponse.status == 404) { "Unexpected status for GET /api/v1/uom/$missingId with body ${errorResponse.rawBody}" }
         val afterError = metricsSnapshot()
         check(afterError.longValue("requestCount") == afterLive.longValue("requestCount") + 2L) {
@@ -379,6 +447,9 @@ class MasterDataHttpIntegrationTest {
         val locationContract = OpenAPIContract.rxFrom(rxVertx, "api_collections/open_api_spec/locations.yaml").blockingGet()
         val productRouterBuilder = RouterBuilder.create(rxVertx, productContract)
         val locationRouterBuilder = RouterBuilder.create(rxVertx, locationContract)
+        val apiAuthenticationHandler = OpenApiBearerAuthenticationHandler(securityFixture.securityHandler).asRxHandler()
+        productRouterBuilder.security("bearerAuth").httpHandler(apiAuthenticationHandler)
+        locationRouterBuilder.security("bearerAuth").httpHandler(apiAuthenticationHandler)
 
         productRouterBuilder.getRoute("listUnitOfMeasures").addHandler(uomHandler::listUnitOfMeasures)
         productRouterBuilder.getRoute("createUnitOfMeasure").addHandler(uomHandler::createUnitOfMeasure)
@@ -533,8 +604,14 @@ class MasterDataHttpIntegrationTest {
         status: Int,
         body: JsonObject? = null,
         headers: Map<String, String> = emptyMap()
-    ): HttpResult =
-        http.expect(method, path, status, body, headers)
+    ): HttpResult {
+        val effectiveHeaders = if ("Authorization" !in headers) {
+            headers + securityFixture.authorization()
+        } else {
+            headers
+        }
+        return http.expect(method, path, status, body, effectiveHeaders)
+    }
 
     private fun suffix(): String = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
 }

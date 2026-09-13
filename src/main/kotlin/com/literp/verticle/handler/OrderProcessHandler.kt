@@ -6,7 +6,8 @@ import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 
 class OrderProcessHandler(
-    private val orderService: OrderProcessService
+    private val orderService: OrderProcessService,
+    private val actorAdapter: AuthenticatedActorAdapter? = null
 ) : BaseHandler(OrderProcessHandler::class.java) {
 
     fun listSalesOrders(context: RoutingContext) {
@@ -187,7 +188,7 @@ class OrderProcessHandler(
     fun fulfillSalesOrder(context: RoutingContext) {
         val orderId = context.pathParam("salesOrderId")
         val body = context.body().asJsonObject() ?: io.vertx.core.json.JsonObject()
-        val createdBy = body.getString("createdBy")
+        val createdBy = actorAdapter?.fulfillmentActor(context) ?: body.getString("createdBy")
         val notes = body.getString("notes")
         val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
 

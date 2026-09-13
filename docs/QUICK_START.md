@@ -1,9 +1,10 @@
 # Quick Start
 
 This guide matches the current branch state:
-- 29 implemented API endpoints
+- 31 authenticated business API endpoints
+- 5 utility endpoints: two public probes and three restricted operational routes
 - schema + seed data via Alembic
-- Bruno collection in `api_collections/Literp`
+- Bruno collection in `api_collections/Literp` with bearer inheritance
 
 ## Prerequisites
 
@@ -79,18 +80,24 @@ Because runtime config supports `DB_*` overrides, values from
 ```
 
 Server URLs:
-- root: `http://localhost:8010`
-- health: `http://localhost:8010/health/db`
-- API base: `http://localhost:8010/api/v1`
+- root: `http://localhost:8010` (public)
+- liveness: `http://localhost:8010/health/live` (public)
+- operational health: `http://localhost:8010/health/db` (requires an authorized operator/service token)
+- API base: `http://localhost:8010/api/v1` (requires an authorized bearer token)
 
 ## First Checks
 
 ```bash
+# Public probes
 curl http://localhost:8010 | jq
-curl http://localhost:8010/health/db | jq
-curl "http://localhost:8010/api/v1/uom?page=0&size=20&sort=code,asc" | jq
-curl "http://localhost:8010/api/v1/locations?page=0&size=20&sort=code,asc&activeOnly=true" | jq
-curl "http://localhost:8010/api/v1/orders?page=0&size=20&sort=orderDate,desc" | jq
+curl http://localhost:8010/health/live | jq
+
+# Protected routes require an approved non-production access token.
+: "${LITERP_ACCESS_TOKEN:?Set LITERP_ACCESS_TOKEN before calling protected routes}"
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" http://localhost:8010/health/db | jq
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" "http://localhost:8010/api/v1/uom?page=0&size=20&sort=code,asc" | jq
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" "http://localhost:8010/api/v1/locations?page=0&size=20&sort=code,asc&activeOnly=true" | jq
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" "http://localhost:8010/api/v1/orders?page=0&size=20&sort=orderDate,desc" | jq
 ```
 
 ## Use the Bruno Collection
@@ -109,11 +116,16 @@ Useful collection variables are already defined in [`collection.bru`](../api_col
 - `variantId`
 - `locationId`
 - `salesOrderId`
+- `accessToken` (empty by default; provide an approved token locally)
 
 The collection includes:
-- utility endpoints (`/`, `/health/db`)
-- all 29 implemented API endpoints
+- public probes (`/`, `/health/live`) with `auth: none`
+- restricted operational endpoints (`/metrics`, `/health/ready`, `/health/db`)
+- all 31 authenticated business API endpoints
 - request bodies aligned to the actual handlers
+
+Protected requests inherit the bearer token configured at collection level.
+Never commit a real token or provider credential.
 
 ## Manual Alembic Alternative
 

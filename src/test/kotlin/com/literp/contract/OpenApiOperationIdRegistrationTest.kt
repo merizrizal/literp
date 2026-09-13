@@ -1,5 +1,6 @@
 package com.literp.contract
 
+import com.literp.security.ExplicitSecurityPolicy
 import kotlin.io.path.readLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,6 +28,16 @@ class OpenApiOperationIdRegistrationTest {
                 "openApiCount=${openApiSet.size}, registeredCount=${registeredSet.size}, " +
                 "missingRegistrations=${missingRegistrations.sorted()}, " +
                 "registrationsWithoutContract=${registrationsWithoutContract.sorted()}"
+        )
+        assertEquals(
+            openApiSet,
+            ExplicitSecurityPolicy.businessOperationIds,
+            "OpenAPI operationIds must match explicit security policy operationIds"
+        )
+        assertEquals(
+            setOf("/", "/health/live", "/metrics", "/health/ready", "/health/db"),
+            ExplicitSecurityPolicy.utilityOperationIds,
+            "Utility route policy must cover exactly the five registered utility paths"
         )
     }
 

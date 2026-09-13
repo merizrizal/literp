@@ -21,6 +21,9 @@ servers:
   - url: https://api.literp.example.com/api/v1
     description: Production server
 
+security:
+  - bearerAuth: []
+
 paths:
   # ==================== UNIT OF MEASURE ENDPOINTS ====================
   /uom:
@@ -53,6 +56,10 @@ paths:
             type: string
             default: code,asc
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: List of units of measure retrieved successfully
           content:
@@ -84,6 +91,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateUnitOfMeasureRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Unit of measure created successfully
           content:
@@ -120,6 +131,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Unit of measure retrieved successfully
           content:
@@ -155,6 +170,10 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateUnitOfMeasureRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Unit of measure updated successfully
           content:
@@ -186,6 +205,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '204':
           description: Unit of measure deleted successfully
         '404':
@@ -249,6 +272,10 @@ paths:
             type: boolean
             default: true
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: List of products retrieved successfully
           content:
@@ -280,6 +307,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateProductRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Product created successfully
           content:
@@ -322,6 +353,10 @@ paths:
             type: boolean
             default: false
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Product retrieved successfully
           content:
@@ -357,6 +392,10 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateProductRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Product updated successfully
           content:
@@ -388,6 +427,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '204':
           description: Product deleted successfully
         '404':
@@ -439,6 +482,10 @@ paths:
             type: boolean
             default: true
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: List of product variants retrieved successfully
           content:
@@ -480,6 +527,10 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateProductVariantRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '201':
           description: Product variant created successfully
           content:
@@ -529,6 +580,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Product variant retrieved successfully
           content:
@@ -571,6 +626,10 @@ paths:
             schema:
               $ref: '#/components/schemas/UpdateProductVariantRequest'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '200':
           description: Product variant updated successfully
           content:
@@ -609,6 +668,10 @@ paths:
             type: string
             format: uuid
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '204':
           description: Product variant deleted successfully
         '404':
@@ -1044,12 +1107,42 @@ components:
             status: 500
             errorId: "550e8400-e29b-41d4-a716-446655440000"
 
+    Unauthenticated:
+      description: Authentication is required or the bearer credential is invalid.
+      headers:
+        WWW-Authenticate:
+          description: Bearer authentication challenge.
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Authentication required"
+            errorCode: "UNAUTHENTICATED"
+            status: 401
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
+
+    Forbidden:
+      description: The authenticated principal lacks the required organization, capability, or resource scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Forbidden"
+            errorCode: "FORBIDDEN"
+            status: 403
+            errorId: "550e8400-e29b-41d4-a716-446655440000"
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Bearer token for authentication (future implementation)
+      description: OAuth 2.0 access token. The runtime accepts only RS256 bearer access tokens whose signature is verified against the deployment's locally provisioned public JWKS, with exact issuer, audience, expiry, and organization/capability/scope validation.
 
 tags:
   - name: Unit of Measure

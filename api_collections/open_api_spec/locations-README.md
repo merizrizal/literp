@@ -336,20 +336,24 @@ GET /api/v1/locations?code=NYC&locationType=STORE
 GET /api/v1/locations?activeOnly=false
 ```
 
+## Security
+
+Every operation in this specification requires the `bearerAuth` OAuth 2.0
+access-token requirement. Location administration is organization-wide; a
+location grant does not replace the required master-data capability. Provider
+and deployment acceptance remains pending; see
+[AUTHENTICATION_BASELINE.md](../../docs/knowledge/AUTHENTICATION_BASELINE.md).
+
 ## Error Handling
 
 All error responses follow a consistent format:
 
 ```json
 {
-  "code": "ERROR_CODE",
-  "message": "Human-readable error message",
-  "details": {
-    "field": "fieldName",
-    "value": "problematicValue"
-  },
-  "timestamp": "2026-02-17T10:30:00Z",
-  "path": "/api/v1/locations/invalid-id"
+  "error": "Resource not found",
+  "errorCode": "RESOURCE_NOT_FOUND",
+  "status": 404,
+  "errorId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -361,6 +365,8 @@ All error responses follow a consistent format:
 | 201 | Created | Location created successfully |
 | 204 | No Content | Location deleted successfully |
 | 400 | Bad Request | Validation failed, invalid input |
+| 401 | Unauthenticated | Missing or invalid bearer credential |
+| 403 | Forbidden | Missing capability or organization authorization |
 | 404 | Not Found | Location doesn't exist |
 | 409 | Conflict | Code already exists, or deletion conflicts |
 | 500 | Server Error | Unexpected error on server |

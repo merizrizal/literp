@@ -15,4 +15,10 @@ vars:pre-request {
   paymentIdempotencyKey: payment-manual-001
   fulfillIdempotencyKey: fulfill-manual-001
   cancelIdempotencyKey: cancel-manual-001
+  accessToken: ""
+}
+
+auth {
+  mode: bearer
+  token: {{accessToken}}
 }

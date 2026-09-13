@@ -7,7 +7,9 @@ import com.literp.repository.ProductRepository
 import com.literp.service.order.impl.OrderProcessServiceImpl
 import com.literp.test.HttpResult
 import com.literp.test.HttpTestSupport
+import com.literp.test.SecurityTestFixture
 import com.literp.test.TestDatabase
+import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
 import com.literp.verticle.handler.OrderProcessHandler
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -41,6 +43,7 @@ class OrderProcessHttpIntegrationTest {
     private lateinit var orderRepository: OrderProcessRepository
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
+    private lateinit var securityFixture: SecurityTestFixture
 
     @BeforeAll
     fun setUp() {
@@ -48,6 +51,7 @@ class OrderProcessHttpIntegrationTest {
         rxVertx = RxVertx.newInstance(coreVertx)
         pool = TestDatabase.createPool(rxVertx)
         TestDatabase.assumeAvailable(pool)
+        securityFixture = SecurityTestFixture(coreVertx)
 
         orderRepository = OrderProcessRepository(pool)
         productRepository = ProductRepository(pool)
@@ -68,6 +72,9 @@ class OrderProcessHttpIntegrationTest {
         }
         if (::pool.isInitialized) {
             pool.rxClose().blockingAwait()
+        }
+        if (::securityFixture.isInitialized) {
+            securityFixture.close()
         }
         if (::coreVertx.isInitialized) {
             coreVertx.close().toCompletionStage().toCompletableFuture().get()
@@ -314,6 +321,9 @@ class OrderProcessHttpIntegrationTest {
         val orderHandler = OrderProcessHandler(OrderProcessServiceImpl(orderRepository))
         val orderContract = OpenAPIContract.rxFrom(rxVertx, "api_collections/open_api_spec/order-process.yaml").blockingGet()
         val orderRouterBuilder = RouterBuilder.create(rxVertx, orderContract)
+        orderRouterBuilder
+            .security("bearerAuth")
+            .httpHandler(OpenApiBearerAuthenticationHandler(securityFixture.securityHandler).asRxHandler())
 
         orderRouterBuilder.getRoute("listSalesOrders").addHandler(orderHandler::listSalesOrders)
         orderRouterBuilder.getRoute("createSalesOrderDraft").addHandler(orderHandler::createSalesOrderDraft)
@@ -469,7 +479,14 @@ class OrderProcessHttpIntegrationTest {
         status: Int,
         body: JsonObject? = null,
         headers: Map<String, String> = emptyMap()
-    ): HttpResult = http.expect(method, path, status, body, headers)
+    ): HttpResult {
+        val effectiveHeaders = if ("Authorization" !in headers) {
+            headers + securityFixture.authorization()
+        } else {
+            headers
+        }
+        return http.expect(method, path, status, body, effectiveHeaders)
+    }
 
     private fun assertStock(stock: JsonObject, productId: String, locationId: String, quantityType: String, expectedQuantity: String) {
         assertEquals(productId, stock.getString("productId"))

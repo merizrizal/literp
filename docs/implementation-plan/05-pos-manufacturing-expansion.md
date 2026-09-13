@@ -58,9 +58,9 @@ Estimate: Defined by the approved authentication implementation ADS
 Tasks:
 
 - [ ] Create and approve the authentication implementation ADS from the [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md)
-- [ ] Implement the approved authentication and deny-by-default authorization baseline for the current protected surface
-- [ ] Validate credential rejection, authorized access, denied capability/resource scope, operational-route restriction, and public probe behavior
-- [ ] Preserve existing lifecycle, idempotency, response, and request-ID contracts under authorization
+- [x] Implement the approved authentication and deny-by-default authorization baseline for the current protected surface
+- [x] Validate credential rejection, authorized access, denied capability/resource scope, operational-route restriction, and public probe behavior
+- [x] Preserve existing lifecycle, idempotency, response, and request-ID contracts under authorization
 
 Done when:
 
