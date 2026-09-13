@@ -1,3 +1,11 @@
+auth {
+  mode: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
 vars:pre-request {
   host: localhost
   port: 8010
@@ -15,10 +23,5 @@ vars:pre-request {
   paymentIdempotencyKey: payment-manual-001
   fulfillIdempotencyKey: fulfill-manual-001
   cancelIdempotencyKey: cancel-manual-001
-  accessToken: ""
-}
-
-auth {
-  mode: bearer
-  token: {{accessToken}}
+  accessToken: eyJhbGciOiJSUzI1NiIsImtpZCI6ImxpdGVycC1rZXktMjAyNi0wMSIsInR5cCI6IkJlYXJlciJ9.eyJpc3MiOiJodHRwczovL2F1dGgubGl0ZXJwLm1lcml6cml6YWwuY29tIiwiYXVkIjoibGl0ZXJwLWFwaSIsInN1YiI6InVzZXItMTIzIiwibGl0ZXJwX29yZyI6IjU1MGU4NDAwLWUyOWItNDFkNC1hNzE2LTQ0NjY1NTQ0MDAwMCIsImxpdGVycF9wZXJtaXNzaW9ucyI6WyJwcm9kdWN0LnJlYWQiLCJvcmRlci5jcmVhdGUiLCJtYXN0ZXItZGF0YS5yZWFkIiwib3BlcmF0aW9ucy5yZWFkIl0sImxpdGVycF9sb2NhdGlvbnMiOlsiODhjOTMzM2UtM2ZhOC00NmNiLWExOTYtYjIwODQ3MDEzMDEwIl0sImxpdGVycF9raW5kIjoiaHVtYW4iLCJsaXRlcnBfb3BlcmF0b3IiOnRydWUsImlhdCI6MTc4OTMwNzc0MiwibmJmIjoxNzg5MzA3NzQyLCJleHAiOjE3ODkzMDc5ODJ9.r2XAnhJ_ej5ZreBYyRhOmj-g6sU8oIUkl0kk-vRxE0ScpeWa5EiIUrp52lRNhxR7fjMwf5TORoxwWCcd0pckgCM2C7d6oYHgmmVx_duWI4_hVCwC8WV0-k_A3eJreAKgLJcYF5tk9wJE0RgercShRCveU-7T7zKEkjOasvVSP-9KCntfDS12FW-c_OQ6tWPRWSgjsv4hdSJc9f1b4xeIACaACm0_Pcz4U4SpzLes0dKhAt9j9FWhDPguihbpPtmm12irPLLxN2-5UjdzqCR_F_-Ju0vOo93Wvrc7nI7JYb3f7YPRYbjOhwFR2Yu2I_C5w0oLXn7AqktQhA2Iaw4Vn87OzaIJlxFGN2ra1gSZGJxKfaYLWcyKXVUnD7yN7nHpYiWLI5xCvfcGSQoaVRk2H4GW4wwsu02Dqa7nkbnzCO6dwtHSM8fLMZfW5jBZHc-g1rf3iveI-fe7VDB78oHHGwhNucMo4gvWssnh9CvRv3uqia54sftqV2ajhvy2Ooll
 }
