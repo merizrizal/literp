@@ -6,6 +6,7 @@ import com.literp.observability.HttpMetrics
 import com.literp.db.DatabaseConnection
 import com.literp.repository.LocationRepository
 import com.literp.repository.OrderProcessRepository
+import com.literp.repository.OrderScopeRepository
 import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
 import com.literp.repository.UnitOfMeasureRepository
@@ -19,20 +20,29 @@ import com.literp.service.master.impl.ProductVariantServiceImpl
 import com.literp.service.master.impl.UnitOfMeasureServiceImpl
 import com.literp.service.order.OrderProcessService
 import com.literp.service.order.impl.OrderProcessServiceImpl
+import com.literp.security.ExplicitSecurityPolicy
+import com.literp.security.JwtCredentialVerifier
+import com.literp.security.SecurityConfig
+import com.literp.verticle.handler.AuthenticatedActorAdapter
 import com.literp.verticle.handler.LocationHandler
 import com.literp.verticle.handler.OrderProcessHandler
+import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
+import com.literp.verticle.handler.OrderScopeHandler
+import com.literp.verticle.handler.SecurityHandler
+import com.literp.security.UtilityOperationIds
 import com.literp.verticle.handler.ProductHandler
 import com.literp.verticle.handler.UnitOfMeasureHandler
 import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.observers.DisposableSingleObserver
 import io.vertx.core.Promise
+import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.rxjava3.core.Vertx
-import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.ext.web.Router
+import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.ext.web.handler.HttpException
 import io.vertx.rxjava3.ext.web.handler.HSTSHandler
@@ -45,6 +55,12 @@ class HttpServerVerticle(
     private val vertx: Vertx
 ) : CoroutineVerticle() {
 
+    private var injectedSecurityHandler: SecurityHandler? = null
+
+    internal constructor(vertx: Vertx, securityHandler: SecurityHandler) : this(vertx) {
+        injectedSecurityHandler = securityHandler
+    }
+
     private val logger = LoggerFactory.getLogger(this@HttpServerVerticle.javaClass)
     private lateinit var dbPool: Pool
 
@@ -53,6 +69,10 @@ class HttpServerVerticle(
     private lateinit var variantRepository: ProductVariantRepository
     private lateinit var locationRepository: LocationRepository
     private lateinit var orderProcessRepository: OrderProcessRepository
+
+    private lateinit var securityHandler: SecurityHandler
+    private lateinit var orderScopeHandler: OrderScopeHandler
+    private lateinit var actorAdapter: AuthenticatedActorAdapter
 
     private lateinit var uomService: UnitOfMeasureService
     private lateinit var productService: ProductService
@@ -74,6 +94,14 @@ class HttpServerVerticle(
 
     override fun start(startFuture: Promise<Void>?) {
         val coreVertx = vertx.delegate
+        try {
+            securityHandler = injectedSecurityHandler ?: createProductionSecurityHandler(coreVertx)
+        } catch (failure: Throwable) {
+            logger.error("Fail to initialize HTTP security: ${failure.message}", failure)
+            startFuture?.fail(failure)
+            return
+        }
+
         val pool = DatabaseConnection.createPool(vertx)
         dbPool = pool
         uomRepository = UnitOfMeasureRepository(pool)
@@ -97,10 +125,25 @@ class HttpServerVerticle(
         productHandler = ProductHandler(productService, variantService)
         locationHandler = LocationHandler(locationService)
         uomHandler = UnitOfMeasureHandler(uomService)
-        orderProcessHandler = OrderProcessHandler(orderProcessService)
+        actorAdapter = AuthenticatedActorAdapter()
+        orderScopeHandler = OrderScopeHandler(OrderScopeRepository(pool), actorAdapter)
+        orderProcessHandler = OrderProcessHandler(orderProcessService, actorAdapter)
 
         loadApiContracts(startFuture)
     }
+
+    private fun createProductionSecurityHandler(coreVertx: io.vertx.core.Vertx): SecurityHandler {
+        val config = SecurityConfig.fromEnvironment()
+        return SecurityHandler(
+            JwtCredentialVerifier(coreVertx, config),
+            ExplicitSecurityPolicy(config.organizationId)
+        )
+    }
+
+    private fun configureOpenApiSecurity(routerBuilder: RouterBuilder): RouterBuilder =
+        routerBuilder
+            .security("bearerAuth")
+            .httpHandler(OpenApiBearerAuthenticationHandler(securityHandler).asRxHandler())
 
     private fun loadApiContracts(startFuture: Promise<Void>?) {
         OpenAPIContract
@@ -116,9 +159,9 @@ class HttpServerVerticle(
             }
             .flatMap { (productContract, locationContract, orderProcessContract) ->
                 Single.just(Triple(
-                    RouterBuilder.create(vertx, productContract),
-                    RouterBuilder.create(vertx, locationContract),
-                    RouterBuilder.create(vertx, orderProcessContract)
+                    configureOpenApiSecurity(RouterBuilder.create(vertx, productContract)),
+                    configureOpenApiSecurity(RouterBuilder.create(vertx, locationContract)),
+                    configureOpenApiSecurity(RouterBuilder.create(vertx, orderProcessContract))
                 ))
             }
             .subscribeWith(object : DisposableSingleObserver<Triple<RouterBuilder, RouterBuilder, RouterBuilder>>() {
@@ -137,14 +180,22 @@ class HttpServerVerticle(
 
                     val router = Router.router(vertx).apply {
                         route().handler(HSTSHandler.create())
+                        route().handler(this@HttpServerVerticle::captureRequestId)
                         route().handler(this@HttpServerVerticle::captureRequestMetrics)
+                        route().handler(this@HttpServerVerticle::authenticateOrAllowPublic)
                         route().failureHandler(this@HttpServerVerticle::handleFailure)
 
                         get("/").handler(this@HttpServerVerticle::getIndex)
-                        get("/metrics").handler(this@HttpServerVerticle::getMetrics)
+                        get("/metrics")
+                            .handler(securityHandler.authorizeOperation(UtilityOperationIds.METRICS))
+                            .handler(this@HttpServerVerticle::getMetrics)
                         get("/health/live").handler(this@HttpServerVerticle::getLiveness)
-                        get("/health/ready").handler(this@HttpServerVerticle::getReadiness)
-                        get("/health/db").handler(this@HttpServerVerticle::getDatabaseHealth)
+                        get("/health/ready")
+                            .handler(securityHandler.authorizeOperation(UtilityOperationIds.HEALTH_READY))
+                            .handler(this@HttpServerVerticle::getReadiness)
+                        get("/health/db")
+                            .handler(securityHandler.authorizeOperation(UtilityOperationIds.HEALTH_DB))
+                            .handler(this@HttpServerVerticle::getDatabaseHealth)
 
                         route("/api/v1/*").subRouter(productRouter)
                         route("/api/v1/*").subRouter(locationRouter)
@@ -181,47 +232,118 @@ class HttpServerVerticle(
 
     private fun registerProductCatalogHandlers(routerBuilder: RouterBuilder) {
         // Unit of Measure handlers (delegated)
-        routerBuilder.getRoute("listUnitOfMeasures").addHandler(uomHandler::listUnitOfMeasures)
-        routerBuilder.getRoute("createUnitOfMeasure").addHandler(uomHandler::createUnitOfMeasure)
-        routerBuilder.getRoute("getUnitOfMeasure").addHandler(uomHandler::getUnitOfMeasure)
-        routerBuilder.getRoute("updateUnitOfMeasure").addHandler(uomHandler::updateUnitOfMeasure)
-        routerBuilder.getRoute("deleteUnitOfMeasure").addHandler(uomHandler::deleteUnitOfMeasure)
+        routerBuilder.getRoute("listUnitOfMeasures")
+            .addHandler(securityHandler.authorizeOperation("listUnitOfMeasures"))
+            .addHandler(uomHandler::listUnitOfMeasures)
+        routerBuilder.getRoute("createUnitOfMeasure")
+            .addHandler(securityHandler.authorizeOperation("createUnitOfMeasure"))
+            .addHandler(uomHandler::createUnitOfMeasure)
+        routerBuilder.getRoute("getUnitOfMeasure")
+            .addHandler(securityHandler.authorizeOperation("getUnitOfMeasure"))
+            .addHandler(uomHandler::getUnitOfMeasure)
+        routerBuilder.getRoute("updateUnitOfMeasure")
+            .addHandler(securityHandler.authorizeOperation("updateUnitOfMeasure"))
+            .addHandler(uomHandler::updateUnitOfMeasure)
+        routerBuilder.getRoute("deleteUnitOfMeasure")
+            .addHandler(securityHandler.authorizeOperation("deleteUnitOfMeasure"))
+            .addHandler(uomHandler::deleteUnitOfMeasure)
 
         // Product handlers (delegated)
-        routerBuilder.getRoute("listProducts").addHandler(productHandler::listProducts)
-        routerBuilder.getRoute("createProduct").addHandler(productHandler::createProduct)
-        routerBuilder.getRoute("getProduct").addHandler(productHandler::getProduct)
-        routerBuilder.getRoute("updateProduct").addHandler(productHandler::updateProduct)
-        routerBuilder.getRoute("deleteProduct").addHandler(productHandler::deleteProduct)
+        routerBuilder.getRoute("listProducts")
+            .addHandler(securityHandler.authorizeOperation("listProducts"))
+            .addHandler(productHandler::listProducts)
+        routerBuilder.getRoute("createProduct")
+            .addHandler(securityHandler.authorizeOperation("createProduct"))
+            .addHandler(productHandler::createProduct)
+        routerBuilder.getRoute("getProduct")
+            .addHandler(securityHandler.authorizeOperation("getProduct"))
+            .addHandler(productHandler::getProduct)
+        routerBuilder.getRoute("updateProduct")
+            .addHandler(securityHandler.authorizeOperation("updateProduct"))
+            .addHandler(productHandler::updateProduct)
+        routerBuilder.getRoute("deleteProduct")
+            .addHandler(securityHandler.authorizeOperation("deleteProduct"))
+            .addHandler(productHandler::deleteProduct)
 
         // Product Variant handlers (delegated)
-        routerBuilder.getRoute("listProductVariants").addHandler(productHandler::listProductVariants)
-        routerBuilder.getRoute("createProductVariant").addHandler(productHandler::createProductVariant)
-        routerBuilder.getRoute("getProductVariant").addHandler(productHandler::getProductVariant)
-        routerBuilder.getRoute("updateProductVariant").addHandler(productHandler::updateProductVariant)
-        routerBuilder.getRoute("deleteProductVariant").addHandler(productHandler::deleteProductVariant)
+        routerBuilder.getRoute("listProductVariants")
+            .addHandler(securityHandler.authorizeOperation("listProductVariants"))
+            .addHandler(productHandler::listProductVariants)
+        routerBuilder.getRoute("createProductVariant")
+            .addHandler(securityHandler.authorizeOperation("createProductVariant"))
+            .addHandler(productHandler::createProductVariant)
+        routerBuilder.getRoute("getProductVariant")
+            .addHandler(securityHandler.authorizeOperation("getProductVariant"))
+            .addHandler(productHandler::getProductVariant)
+        routerBuilder.getRoute("updateProductVariant")
+            .addHandler(securityHandler.authorizeOperation("updateProductVariant"))
+            .addHandler(productHandler::updateProductVariant)
+        routerBuilder.getRoute("deleteProductVariant")
+            .addHandler(securityHandler.authorizeOperation("deleteProductVariant"))
+            .addHandler(productHandler::deleteProductVariant)
     }
 
     private fun registerLocationHandlers(routerBuilder: RouterBuilder) {
-        routerBuilder.getRoute("listLocations").addHandler(locationHandler::listLocations)
-        routerBuilder.getRoute("createLocation").addHandler(locationHandler::createLocation)
-        routerBuilder.getRoute("getLocation").addHandler(locationHandler::getLocation)
-        routerBuilder.getRoute("getLocationByCode").addHandler(locationHandler::getLocationByCode)
-        routerBuilder.getRoute("updateLocation").addHandler(locationHandler::updateLocation)
-        routerBuilder.getRoute("deleteLocation").addHandler(locationHandler::deleteLocation)
+        routerBuilder.getRoute("listLocations")
+            .addHandler(securityHandler.authorizeOperation("listLocations"))
+            .addHandler(locationHandler::listLocations)
+        routerBuilder.getRoute("createLocation")
+            .addHandler(securityHandler.authorizeOperation("createLocation"))
+            .addHandler(locationHandler::createLocation)
+        routerBuilder.getRoute("getLocation")
+            .addHandler(securityHandler.authorizeOperation("getLocation"))
+            .addHandler(locationHandler::getLocation)
+        routerBuilder.getRoute("getLocationByCode")
+            .addHandler(securityHandler.authorizeOperation("getLocationByCode"))
+            .addHandler(locationHandler::getLocationByCode)
+        routerBuilder.getRoute("updateLocation")
+            .addHandler(securityHandler.authorizeOperation("updateLocation"))
+            .addHandler(locationHandler::updateLocation)
+        routerBuilder.getRoute("deleteLocation")
+            .addHandler(securityHandler.authorizeOperation("deleteLocation"))
+            .addHandler(locationHandler::deleteLocation)
     }
 
     private fun registerOrderProcessHandlers(routerBuilder: RouterBuilder) {
-        routerBuilder.getRoute("listSalesOrders").addHandler(orderProcessHandler::listSalesOrders)
-        routerBuilder.getRoute("createSalesOrderDraft").addHandler(orderProcessHandler::createSalesOrderDraft)
-        routerBuilder.getRoute("getSalesOrder").addHandler(orderProcessHandler::getSalesOrder)
-        routerBuilder.getRoute("getCurrentStock").addHandler(orderProcessHandler::getCurrentStock)
-        routerBuilder.getRoute("getAvailableStock").addHandler(orderProcessHandler::getAvailableStock)
-        routerBuilder.getRoute("addSalesOrderLine").addHandler(orderProcessHandler::addSalesOrderLine)
-        routerBuilder.getRoute("confirmSalesOrder").addHandler(orderProcessHandler::confirmSalesOrder)
-        routerBuilder.getRoute("capturePayment").addHandler(orderProcessHandler::capturePayment)
-        routerBuilder.getRoute("fulfillSalesOrder").addHandler(orderProcessHandler::fulfillSalesOrder)
-        routerBuilder.getRoute("cancelSalesOrder").addHandler(orderProcessHandler::cancelSalesOrder)
+        routerBuilder.getRoute("listSalesOrders")
+            .addHandler(securityHandler.authorizeOperation("listSalesOrders"))
+            .addHandler(orderScopeHandler::authorize)
+        routerBuilder.getRoute("createSalesOrderDraft")
+            .addHandler(securityHandler.authorizeOperation("createSalesOrderDraft"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::createSalesOrderDraft)
+        routerBuilder.getRoute("getSalesOrder")
+            .addHandler(securityHandler.authorizeOperation("getSalesOrder"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::getSalesOrder)
+        routerBuilder.getRoute("getCurrentStock")
+            .addHandler(securityHandler.authorizeOperation("getCurrentStock"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::getCurrentStock)
+        routerBuilder.getRoute("getAvailableStock")
+            .addHandler(securityHandler.authorizeOperation("getAvailableStock"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::getAvailableStock)
+        routerBuilder.getRoute("addSalesOrderLine")
+            .addHandler(securityHandler.authorizeOperation("addSalesOrderLine"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::addSalesOrderLine)
+        routerBuilder.getRoute("confirmSalesOrder")
+            .addHandler(securityHandler.authorizeOperation("confirmSalesOrder"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::confirmSalesOrder)
+        routerBuilder.getRoute("capturePayment")
+            .addHandler(securityHandler.authorizeOperation("capturePayment"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::capturePayment)
+        routerBuilder.getRoute("fulfillSalesOrder")
+            .addHandler(securityHandler.authorizeOperation("fulfillSalesOrder"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::fulfillSalesOrder)
+        routerBuilder.getRoute("cancelSalesOrder")
+            .addHandler(securityHandler.authorizeOperation("cancelSalesOrder"))
+            .addHandler(orderScopeHandler::authorize)
+            .addHandler(orderProcessHandler::cancelSalesOrder)
     }
 
     private fun getIndex(context: RoutingContext) {
@@ -235,6 +357,22 @@ class HttpServerVerticle(
 
         putResponse(context, 200, response)
     }
+
+    private fun captureRequestId(context: RoutingContext) {
+        resolveRequestId(context)
+        context.next()
+    }
+
+    private fun authenticateOrAllowPublic(context: RoutingContext) {
+        val request = context.request()
+        if (request != null && request.method() == HttpMethod.GET && isPublicPath(request.path())) {
+            context.next()
+        } else {
+            securityHandler.authenticate(context)
+        }
+    }
+
+    private fun isPublicPath(path: String?): Boolean = path == "/" || path == "/health/live"
 
     private fun captureRequestMetrics(context: RoutingContext) {
         val startedAt = System.nanoTime()
@@ -315,7 +453,14 @@ class HttpServerVerticle(
             context.statusCode() > 0 -> context.statusCode()
             else -> 500
         }
-        val message = failure?.message ?: if (statusCode == 400) "Bad request" else "Internal server error"
+        val message = when (statusCode) {
+            401 -> "Authentication required"
+            403 -> "Forbidden"
+            else -> failure?.message ?: if (statusCode == 400) "Bad request" else "Internal server error"
+        }
+        if (statusCode == 401) {
+            context.response().putHeader("WWW-Authenticate", "Bearer")
+        }
 
         putResponse(
             context,

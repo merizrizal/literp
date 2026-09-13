@@ -137,10 +137,12 @@ Content-Type: application/json
 Idempotency-Key: fulfill-<unique-client-key>
 
 {
-  "createdBy": "cashier-001",
   "notes": "Customer picked up at counter"
 }
 ```
+
+`createdBy` is deprecated and ignored when supplied. The API derives the
+inventory movement actor from the verified bearer-token subject.
 
 ### Cancel Order
 
@@ -190,6 +192,15 @@ GET /api/v1/stock/available?productId={productId}&locationId={locationId}
 }
 ```
 
+## Security
+
+All order and stock operations require the `bearerAuth` OAuth 2.0 access-token
+requirement. Order reads and commands are additionally limited to the order's
+persisted location scope; nonexistent and out-of-scope orders use the same
+404 response. Stock queries require a granted location. Provider and
+deployment acceptance remains pending; see
+[AUTHENTICATION_BASELINE.md](../../docs/knowledge/AUTHENTICATION_BASELINE.md).
+
 ## Status Codes
 
 | Status | Meaning |
@@ -197,12 +208,14 @@ GET /api/v1/stock/available?productId={productId}&locationId={locationId}
 | 200 | Success command/read |
 | 201 | Created resource/payment |
 | 400 | Validation error |
-| 404 | Resource not found |
+| 401 | Missing or invalid bearer credential |
+| 403 | Organization, capability, or resource-scope denial |
+| 404 | Resource not found; out-of-scope orders are indistinguishable |
 | 409 | State conflict |
 | 500 | Internal server error |
 
 ## Notes
 
-- This API writes movement rows during fulfillment (`movement_type = OUT`) with `from_location_id` set to the source location and `to_location_id` left null.
+- This API writes movement rows during fulfillment (`movement_type = OUT`) with `from_location_id` set to the source location and `to_location_id` set to the same location because the schema requires a non-null destination.
 - Receipt persistence and refund lifecycle endpoints are not included in this spec yet.
 - For deeper technical behavior, refer to `docs/API_IMPLEMENTATION.md`.

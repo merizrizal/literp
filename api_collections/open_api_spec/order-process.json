@@ -11,6 +11,11 @@
       "description": "Local development server"
     }
   ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
   "paths": {
     "/orders": {
       "get": {
@@ -82,6 +87,12 @@
           }
         ],
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Sales orders retrieved",
             "content": {
@@ -125,6 +136,12 @@
           }
         },
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "201": {
             "description": "Draft order created",
             "content": {
@@ -167,6 +184,12 @@
           }
         ],
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Sales order detail",
             "content": {
@@ -183,7 +206,7 @@
             }
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/ScopedNotFound"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -219,6 +242,12 @@
           }
         },
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "201": {
             "description": "Order line created",
             "content": {
@@ -238,7 +267,7 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/ScopedNotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -276,6 +305,12 @@
           }
         ],
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Sales order confirmed",
             "content": {
@@ -292,7 +327,7 @@
             }
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/ScopedNotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -340,6 +375,12 @@
           }
         },
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "201": {
             "description": "Payment captured",
             "content": {
@@ -359,7 +400,7 @@
             "$ref": "#/components/responses/BadRequest"
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/ScopedNotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -407,6 +448,12 @@
           }
         },
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Sales order fulfilled",
             "content": {
@@ -423,7 +470,7 @@
             }
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/ScopedNotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -471,6 +518,12 @@
           }
         },
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Sales order cancelled",
             "content": {
@@ -487,7 +540,7 @@
             }
           },
           "404": {
-            "$ref": "#/components/responses/NotFound"
+            "$ref": "#/components/responses/ScopedNotFound"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -524,6 +577,12 @@
           }
         ],
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Current stock retrieved",
             "content": {
@@ -574,6 +633,12 @@
           }
         ],
         "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
           "200": {
             "description": "Available stock retrieved",
             "content": {
@@ -804,7 +869,9 @@
         "properties": {
           "createdBy": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "deprecated": true,
+            "description": "Ignored by the API. The inventory movement actor is always derived from the verified bearer-token subject."
           },
           "notes": {
             "type": "string",
@@ -861,15 +928,31 @@
       },
       "ErrorResponse": {
         "type": "object",
+        "description": "Standard handler error response.",
+        "required": [
+          "error",
+          "errorCode",
+          "status",
+          "errorId"
+        ],
         "properties": {
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "Human-readable error message"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "Error code identifier",
+            "example": "RESOURCE_NOT_FOUND"
           },
           "status": {
-            "type": "integer"
+            "type": "integer",
+            "description": "HTTP status code"
           },
           "errorId": {
-            "type": "string"
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique error identifier for log correlation"
           }
         }
       }
@@ -914,6 +997,71 @@
             }
           }
         }
+      },
+      "Unauthenticated": {
+        "description": "Authentication is required or the bearer credential is invalid.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Bearer authentication challenge.",
+            "schema": {
+              "type": "string",
+              "example": "Bearer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Authentication required",
+              "errorCode": "UNAUTHENTICATED",
+              "status": 401,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The authenticated principal lacks the required organization, capability, or resource scope.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Forbidden",
+              "errorCode": "FORBIDDEN",
+              "status": 403,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "ScopedNotFound": {
+        "description": "The order does not exist or is outside the caller's authorized location scope.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Resource not found",
+              "errorCode": "RESOURCE_NOT_FOUND",
+              "status": 404,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "OAuth 2.0 access token. The runtime accepts only RS256 bearer access tokens whose signature is verified against the deployment's locally provisioned public JWKS, with exact issuer, audience, expiry, and organization/capability/scope validation."
       }
     }
   }

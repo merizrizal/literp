@@ -18,6 +18,7 @@ plugins {
     kotlin("jvm").version(kotlinVersion)
     id("java")
     id("org.graalvm.buildtools.native").version("0.11.3")
+    kotlin("kapt") version "2.4.20"
 }
 
 repositories {
@@ -30,14 +31,15 @@ dependencies {
 
     // Vertx Core
     implementation("io.vertx:vertx-core:$vertxVersion")
+    implementation("io.vertx:vertx-auth-jwt:$vertxVersion")
     implementation("io.vertx:vertx-lang-kotlin:$vertxVersion")
     implementation("io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion")
 
     // Vertx Codegen and Proxy
     implementation("io.vertx:vertx-service-proxy:$vertxVersion")
     compileOnly("io.vertx:vertx-codegen:$vertxVersion")
-    annotationProcessor("io.vertx:vertx-codegen:$vertxVersion:processor")
-    annotationProcessor("io.vertx:vertx-service-proxy:$vertxVersion")
+    kapt("io.vertx:vertx-codegen:$vertxVersion:processor")
+    kapt("io.vertx:vertx-service-proxy:$vertxVersion")
 
     // Vertx Web
     implementation("io.vertx:vertx-web:$vertxVersion")
@@ -87,7 +89,8 @@ tasks.register<Jar>("kotlinJar") {
     }
 
     val sourcesMain = sourceSets.main.get()
-    val contents = configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) } + sourcesMain.output
+    val contents =
+        configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) } + sourcesMain.output
     from(contents)
 
     dependsOn(tasks.classes)

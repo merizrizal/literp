@@ -84,10 +84,15 @@ http://localhost:8010/api/v1
 ### 3. Verify the service
 
 ```bash
+# Public probes
 curl http://localhost:8010 | jq
-curl http://localhost:8010/health/db | jq
-curl "http://localhost:8010/api/v1/uom?page=0&size=20&sort=code,asc" | jq
-curl "http://localhost:8010/api/v1/orders?page=0&size=20&sort=orderDate,desc" | jq
+curl http://localhost:8010/health/live | jq
+
+# Protected routes require an approved non-production access token.
+: "${LITERP_ACCESS_TOKEN:?Set LITERP_ACCESS_TOKEN before calling protected routes}"
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" http://localhost:8010/health/db | jq
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" "http://localhost:8010/api/v1/uom?page=0&size=20&sort=code,asc" | jq
+curl -H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}" "http://localhost:8010/api/v1/orders?page=0&size=20&sort=orderDate,desc" | jq
 ```
 
 ## API Assets
@@ -95,7 +100,7 @@ curl "http://localhost:8010/api/v1/orders?page=0&size=20&sort=orderDate,desc" | 
 - Bruno collection: [`api_collections/Literp`](api_collections/Literp)
 - OpenAPI specs: [`api_collections/open_api_spec`](api_collections/open_api_spec)
 
-The Bruno collection is aligned to the implemented handlers and uses collection variables for common IDs and codes.
+The Bruno collection is aligned to the implemented handlers and uses collection variables for common IDs and codes. Protected requests inherit a bearer token from the empty `accessToken` variable; the root and liveness probes explicitly use no authentication. Never save real tokens in the repository.
 
 ## Documentation
 
@@ -106,6 +111,7 @@ The Bruno collection is aligned to the implemented handlers and uses collection 
 - [docs/CI_VERIFICATION.md](docs/CI_VERIFICATION.md): required CI checks and local reproduction
 - [docs/LOCAL_RESET.md](docs/LOCAL_RESET.md): non-destructive and destructive local database reset paths
 - [docs/README_API.md](docs/README_API.md): documentation index
+- [docs/knowledge/AUTHENTICATION_BASELINE.md](docs/knowledge/AUTHENTICATION_BASELINE.md): authentication runtime contract, operations runbook, and acceptance ledger
 - [docs/IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md): branch-level implementation summary
 - [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md): validation checklist
 - [docs/implementation-plan/00-implementation-overview.md](docs/implementation-plan/00-implementation-overview.md): phased implementation plan
@@ -141,7 +147,7 @@ literp/
 
 The accepted [project structure decision](docs/knowledge/PROJECT_STRUCTURE_DECISION.md) retains this layer-based layout and the current API asset roots through Phase 05. Catalog, location, and order continue in their current layers; inventory remains with order-process behavior. When implemented, POS and manufacturing follow the same handler/repository/service layers, with their proposed Java proxy service groups created only for concrete services.
 
-The accepted [security sequencing decision](docs/knowledge/SECURITY_SEQUENCING.md) requires the proposed 05.0 authentication and authorization baseline before POS or manufacturing expansion. Until that baseline is implemented, do not expose the unauthenticated business API to an internet-facing or otherwise untrusted network.
+The application-side 05.0 authentication and authorization baseline is implemented and locally regression-tested. Provider-token, key-rotation, deployment/network, and maintainer acceptance evidence remains pending; keep the service isolated from untrusted networks until those gates are complete. See [AUTHENTICATION_BASELINE.md](docs/knowledge/AUTHENTICATION_BASELINE.md) for the runtime contract and acceptance ledger.
 
 ## Implementation Notes
 

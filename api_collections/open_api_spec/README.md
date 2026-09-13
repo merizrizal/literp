@@ -167,7 +167,9 @@ The current handlers return error responses in this shape:
 - **201** - Created (POST successful)
 - **204** - No Content (DELETE successful)
 - **400** - Bad Request (validation error)
-- **404** - Not Found (resource doesn't exist)
+- **401** - Unauthenticated (missing or invalid bearer credential)
+- **403** - Forbidden (organization, capability, or resource-scope denial)
+- **404** - Not Found (resource doesn't exist; scoped order denials are indistinguishable)
 - **409** - Conflict (duplicate, referential conflict)
 - **500** - Server Error (unexpected error)
 
@@ -221,11 +223,19 @@ The following APIs are planned for future implementation:
 
 ## Security
 
-All APIs support:
-- Bearer token JWT authentication (currently optional)
-- Future: OAuth 2.0, API key authentication
-- CORS support for web clients
-- Input validation and sanitization
+All 31 business operations require an OAuth 2.0 bearer access token. The
+runtime verifies RS256 signatures against a locally provisioned public JWKS and
+checks the exact issuer, audience, token lifetime, organization, capability,
+and applicable location/resource scope. The OpenAPI bundles declare this with
+the `bearerAuth` security requirement and document the shared 401/403 error
+responses.
+
+`GET /` and `GET /health/live` are explicit public probes outside these API
+bundles. Metrics and readiness/database-health routes require an authorized
+operator or service principal. Provider and deployment acceptance remains
+pending; see [AUTHENTICATION_BASELINE.md](../../docs/knowledge/AUTHENTICATION_BASELINE.md).
+
+CORS support and input validation remain application concerns.
 
 ## Contributing
 
