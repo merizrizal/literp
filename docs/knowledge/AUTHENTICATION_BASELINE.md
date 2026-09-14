@@ -11,6 +11,11 @@ The selected provider product in the design is Keycloak. The actual realm,
 issuer URL, audience registration, claim mappers, provider operator, TLS
 termination, and audit-log owner must be confirmed for each deployment.
 
+A disposable real-Keycloak environment for local integration checks is provided
+in [`../../docker/keycloak`](../../docker/keycloak/README.md). It uses the same
+resource-server boundary and claim names, but local provider smoke does not
+close the genuine non-production provider or deployment acceptance items below.
+
 ## Runtime configuration
 
 The server fails before HTTP listen when any required setting is missing or
@@ -31,11 +36,16 @@ values before starting every instance.
 ## Access-token contract
 
 Clients send exactly one `Authorization: Bearer <access-token>` header. The
-runtime accepts RS256 access tokens with a known `kid`, JOSE `typ=Bearer`, exact
-issuer and audience, required `iat`/`exp`, optional `nbf`, bounded lifetime,
-and valid claim types. ID tokens, malformed or oversized tokens, unknown keys,
-algorithm changes, embedded key material, and invalid time claims are rejected
-with `401 UNAUTHENTICATED` and `WWW-Authenticate: Bearer`.
+runtime accepts RS256 access tokens with a known `kid`, exact issuer and
+audience, required `iat`/`exp`, optional `nbf`, bounded lifetime, and valid
+claim types. `typ=Bearer` remains supported for the deterministic development
+fixture; standard Keycloak access tokens use `typ=JWT` and must carry a
+nonblank `scope`, while RFC 9068 access tokens may use `typ=at+jwt`. ID tokens,
+malformed or oversized tokens, unknown keys, algorithm changes, embedded key
+material, and invalid time claims are rejected with `401 UNAUTHENTICATED` and
+`WWW-Authenticate: Bearer`. Provider mappers must keep the Literp claims and
+API audience on access tokens only so ID tokens cannot be used as API
+credentials.
 
 Provider-administered claims are:
 

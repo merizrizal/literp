@@ -84,7 +84,22 @@ class JwtCredentialVerifierTest {
     }
 
     @Test
-    fun rejectsNonBearerAndNonRs256Profiles() {
+    fun acceptsKeycloakAccessTokenHeaderTypes() {
+        val keycloakClaims = validClaims().put("scope", "openid profile")
+
+        assertEquals(
+            "subject-1",
+            verify(verifier, signedToken(headerType = "JWT", claims = keycloakClaims)).subject
+        )
+        assertEquals(
+            "subject-1",
+            verify(verifier, signedToken(headerType = "at+jwt", claims = keycloakClaims)).subject
+        )
+    }
+
+    @Test
+    fun rejectsUnsupportedTokenTypesAndAlgorithms() {
+        assertRejected(verifier, signedToken(headerType = "JWS"))
         assertRejected(verifier, signedToken(headerType = "JWT"))
         assertRejected(
             verifier,
