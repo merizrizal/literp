@@ -22,6 +22,7 @@ private const val MAX_JWKS_BYTES = 1024 * 1024
 private const val MAX_CLAIM_STRING_LENGTH = 255
 private const val MAX_ISSUER_LENGTH = 2_048
 private const val MAX_LOCATION_GRANTS = 256
+private val ACCEPTED_JOSE_TYPES = setOf("Bearer", "JWT", "at+jwt")
 private const val CLOCK_SKEW_SECONDS = 30L
 private const val MAX_TOKEN_LIFETIME_SECONDS = 5 * 60L
 private val BASE64_URL_SEGMENT = Regex("[A-Za-z0-9_-]+")
@@ -131,7 +132,11 @@ class JwtCredentialVerifier(
         val header = decodeJsonObject(segments[0])
         decodeJsonObject(segments[1])
 
-        if (header.getValue("alg") != "RS256" || header.getValue("typ") != "Bearer") {
+        val joseType = header.getValue("typ")
+        if (header.getValue("alg") != "RS256" ||
+            joseType !is String ||
+            joseType !in ACCEPTED_JOSE_TYPES
+        ) {
             throw InvalidCredential()
         }
 
@@ -148,6 +153,9 @@ class JwtCredentialVerifier(
 
     private fun normalizeVerifiedClaims(rawClaims: Any?, header: JsonObject): AuthenticatedPrincipal {
         val claims = rawClaims as? JsonObject ?: throw InvalidCredential()
+        if (header.getValue("typ") == "JWT" && (claims.getValue("scope") as? String).isNullOrBlank()) {
+            throw InvalidCredential()
+        }
 
         val issuer = stringClaim(claims, "iss", MAX_ISSUER_LENGTH)
         if (issuer != config.issuer) {

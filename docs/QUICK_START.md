@@ -85,6 +85,14 @@ Server URLs:
 - operational health: `http://localhost:8010/health/db` (requires an authorized operator/service token)
 - API base: `http://localhost:8010/api/v1` (requires an authorized bearer token)
 
+## Local Keycloak provider integration
+
+For a disposable real Keycloak environment with the exact local issuer,
+capabilities, seeded location IDs, service-client smoke, JWKS provisioning, and
+PKCE boundary guidance, see [docker/keycloak/README.md](../docker/keycloak/README.md).
+This local provider proves integration behavior only and does not replace
+non-production provider or deployment acceptance.
+
 ## First Checks
 
 ```bash

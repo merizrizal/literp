@@ -4,12 +4,20 @@
 
 The application-side authentication and authorization baseline is implemented
 and covered by deterministic local tests. Provider and deployment acceptance is
-still pending; this document does not authorize an untrusted deployment or mark
-05.0 accepted.
+still pending. Under a maintainer-approved sequencing exception, 05.0 is
+accepted only as the security baseline for Phase 05 development. This exception
+permits 05.1 work while the external acceptance items below remain pending; it
+does not authorize an untrusted deployment, production release, or internet
+exposure.
 
 The selected provider product in the design is Keycloak. The actual realm,
 issuer URL, audience registration, claim mappers, provider operator, TLS
 termination, and audit-log owner must be confirmed for each deployment.
+
+A disposable real-Keycloak environment for local integration checks is provided
+in [`../../docker/keycloak`](../../docker/keycloak/README.md). It uses the same
+resource-server boundary and claim names, but local provider smoke does not
+close the genuine non-production provider or deployment acceptance items below.
 
 ## Runtime configuration
 
@@ -31,11 +39,16 @@ values before starting every instance.
 ## Access-token contract
 
 Clients send exactly one `Authorization: Bearer <access-token>` header. The
-runtime accepts RS256 access tokens with a known `kid`, JOSE `typ=Bearer`, exact
-issuer and audience, required `iat`/`exp`, optional `nbf`, bounded lifetime,
-and valid claim types. ID tokens, malformed or oversized tokens, unknown keys,
-algorithm changes, embedded key material, and invalid time claims are rejected
-with `401 UNAUTHENTICATED` and `WWW-Authenticate: Bearer`.
+runtime accepts RS256 access tokens with a known `kid`, exact issuer and
+audience, required `iat`/`exp`, optional `nbf`, bounded lifetime, and valid
+claim types. `typ=Bearer` remains supported for the deterministic development
+fixture; standard Keycloak access tokens use `typ=JWT` and must carry a
+nonblank `scope`, while RFC 9068 access tokens may use `typ=at+jwt`. ID tokens,
+malformed or oversized tokens, unknown keys, algorithm changes, embedded key
+material, and invalid time claims are rejected with `401 UNAUTHENTICATED` and
+`WWW-Authenticate: Bearer`. Provider mappers must keep the Literp claims and
+API audience on access tokens only so ID tokens cannot be used as API
+credentials.
 
 Provider-administered claims are:
 
@@ -81,6 +94,29 @@ bearer configuration.
 
 The OpenAPI bundles under `../../api_collections/open_api_spec/` are the
 published contract and keep YAML/JSON pairs synchronized.
+
+## Local Keycloak integration evidence
+
+The disposable Keycloak 26.7.3 environment was exercised locally with the
+migrated PostgreSQL database and the configured Literp resource-server
+settings. This evidence closes local provider integration only; it does not
+replace genuine non-production provider, deployment, or maintainer acceptance.
+
+Sanitized observed outcomes:
+
+| Check | Result |
+|---|---|
+| OIDC discovery and realm endpoints | Matched the configured local realm |
+| JWKS provisioning | Helper emitted only public RS256 signing keys; encryption keys were excluded |
+| Keycloak service access token to `/api/v1/uom` | `200` with PostgreSQL available |
+| Anonymous `/api/v1/uom` | `401 UNAUTHENTICATED` |
+| Authenticated `/health/db` and `/metrics` | `200` |
+| Signing-key overlap | Old and new access tokens both returned `200` after the two-key JWKS rollout |
+| Removed-key rejection | Old token returned `401`; new token returned `200` after forced local retirement |
+
+The local retirement check removed the old key before the normal token lifetime
+plus clock-skew period. Production-like rotation must still follow the timing,
+rollout, restart, and operator-record requirements below.
 
 ## Non-production provider acceptance
 
@@ -230,9 +266,9 @@ details.
 |---|---|---|
 | Production-router authentication and authorization tests | Complete locally | Deterministic generated-key fixture; 31 anonymous rejections and authorized/denied scope cases are covered |
 | Full Gradle regression/build | Complete locally | Chunk 7 recorded 65 tests, zero skips/failures/errors |
-| OpenAPI YAML/JSON synchronization | Required for this publication | Run `rtk python scripts/verify_openapi_assets.py` in the approved Python environment |
+| OpenAPI YAML/JSON synchronization | Complete locally | `rtk python scripts/verify_openapi_assets.py` passed in the approved Python environment |
 | Bruno authenticated smoke | Pending | Requires an approved non-production access token supplied outside repository artifacts |
-| Genuine provider token smoke | Pending | Confirm human/service flows, audience, claim mappers, ID-token rejection, expiry, and logout behavior with the actual provider |
-| Key rollover smoke | Pending | Exercise active/old key overlap and removed-key rejection in the deployment |
+| Genuine provider token smoke | Pending | Local service-token smoke is recorded above; confirm human/service flows, audience, claim mappers, ID-token rejection, expiry, and logout behavior with the actual provider |
+| Key rollover smoke | Pending | Local overlap/retirement simulation is recorded above; repeat active/old key overlap and removed-key rejection in the deployment |
 | Deployment/network acceptance | Pending | Confirm HTTPS/private proxy topology, environment ownership, JWKS provisioning, and audit sink/retention owner |
-| Maintainer acceptance of 05.0 | Pending | Do not check the ADS approval, Done-when, or Phase entry-gate boxes until the pending evidence exists |
+| Maintainer acceptance of 05.0 | Accepted with deferred deployment acceptance | Maintainer approved advancement to 05.1; Bruno, provider, rotation, and deployment/network evidence remain required before untrusted deployment |

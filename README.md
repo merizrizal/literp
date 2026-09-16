@@ -112,6 +112,7 @@ The Bruno collection is aligned to the implemented handlers and uses collection 
 - [docs/LOCAL_RESET.md](docs/LOCAL_RESET.md): non-destructive and destructive local database reset paths
 - [docs/README_API.md](docs/README_API.md): documentation index
 - [docs/knowledge/AUTHENTICATION_BASELINE.md](docs/knowledge/AUTHENTICATION_BASELINE.md): authentication runtime contract, operations runbook, and acceptance ledger
+- [docker/keycloak/README.md](docker/keycloak/README.md): disposable real-Keycloak integration setup for local provider smoke
 - [docs/IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md): branch-level implementation summary
 - [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md): validation checklist
 - [docs/implementation-plan/00-implementation-overview.md](docs/implementation-plan/00-implementation-overview.md): phased implementation plan
@@ -132,6 +133,7 @@ literp/
 │   ├── Makefile
 │   ├── envrc
 │   ├── jvm/
+│   ├── keycloak/
 │   └── pgsql/
 ├── docs/
 ├── python/database/migration/  # Alembic schema + seed data

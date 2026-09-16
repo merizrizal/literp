@@ -13,8 +13,8 @@ movements created by manufacturing operations.
 
 ## Entry Gate
 
-- [ ] The accepted [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md) is implemented through 05.0 before POS and manufacturing expansion begins
-- [ ] Phase 04 project structure gate is recorded complete after final Phase 04 evidence review
+- [x] The accepted [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md) is implemented through 05.0 before POS and manufacturing expansion begins, under the maintainer-approved deferred-deployment exception in [`AUTHENTICATION_BASELINE.md`](../knowledge/AUTHENTICATION_BASELINE.md)
+- [x] Phase 04 project structure gate is recorded complete; 04.6 is accepted and complete, while unrelated Phase 04 closure criteria remain separately tracked
 - [x] Backend package layout is confirmed by the accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) before POS and manufacturing handlers, services, and repositories are added
 - [x] API asset layout is confirmed by the accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) before new POS and manufacturing OpenAPI and Bruno files are added
 
@@ -57,16 +57,20 @@ Estimate: Defined by the approved authentication implementation ADS
 
 Tasks:
 
-- [ ] Create and approve the authentication implementation ADS from the [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md)
+- [x] Create and approve the authentication implementation ADS from the [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md)
 - [x] Implement the approved authentication and deny-by-default authorization baseline for the current protected surface
 - [x] Validate credential rejection, authorized access, denied capability/resource scope, operational-route restriction, and public probe behavior
 - [x] Preserve existing lifecycle, idempotency, response, and request-ID contracts under authorization
 
 Done when:
 
-- [ ] The accepted security decision is implemented and validated by the approved authentication ADS
-- [ ] Current business operations cannot be reached without authorized credentials and scope
-- [ ] POS and manufacturing expansion can build on the authenticated baseline without widening access implicitly
+- [x] The accepted security decision is implemented and validated by the approved authentication ADS
+- [x] Current business operations cannot be reached without authorized credentials and scope
+- [x] POS and manufacturing expansion can build on the authenticated baseline without widening access implicitly
+
+**Deferred deployment acceptance:** The maintainer-approved exception permits
+05.1 development while Bruno, genuine-provider, deployment, and timed JWKS
+rotation evidence remain pending. It does not authorize untrusted deployment.
 
 ### 05.1 POS Operations Contract
 
