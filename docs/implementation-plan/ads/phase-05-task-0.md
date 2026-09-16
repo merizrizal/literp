@@ -2,11 +2,11 @@
 
 **Source:** [Phase 05, task 05.0](../05-pos-manufacturing-expansion.md#050-authentication-and-authorization-baseline), governed by [Security Sequencing Decision](../../knowledge/SECURITY_SEQUENCING.md).
 
-**Status:** Draft for maintainer approval. No authentication implementation or deployment approval is implied.
+**Status:** Maintainer-approved for Phase 05 development under the deferred-deployment exception recorded in `AUTHENTICATION_BASELINE.md`. This does not approve untrusted deployment, production release, or internet exposure.
 
 **Evidence revision:** `6acd45b`; inspected during ADS preparation. Reconfirm at Chunk 0.
 
-**Goal:** Protect all 31 current business operations with authenticated identity, explicit capabilities, and resource scope; restrict three operational routes while preserving two public exceptions and existing business contracts. Complete and validate 05.0 before 05.1 or manufacturing expansion.
+**Goal:** Protect all 31 current business operations with authenticated identity, explicit capabilities, and resource scope; restrict three operational routes while preserving two public exceptions and existing business contracts. The maintainer-approved deferred-deployment exception permits 05.1 development before genuine provider and deployment acceptance, but does not authorize untrusted deployment.
 
 ---
 
@@ -267,11 +267,11 @@ All new names/paths below are proposed. Paths prefixed `main/` mean `src/main/ko
 
 #### Chunk 8: Published Contracts and Deployment Acceptance
 - **Goal:** Publish only the runtime-proven security contract and verify real-provider/deployment readiness.
-- **Files to change:** Existing three OpenAPI YAML/JSON pairs and supporting READMEs under `api_collections/open_api_spec/`; `api_collections/Literp/collection.bru` and affected request auth settings; `README.md`; proposed `docs/knowledge/AUTHENTICATION_BASELINE.md`; source plan checkboxes only after acceptance. Asset-count exception is required for synchronized contract copies, not permission to make one large patch: use paired-bundle substeps and review each diff.
+- **Files to change:** Existing three OpenAPI YAML/JSON pairs and supporting READMEs under `api_collections/open_api_spec/`; `api_collections/Literp/collection.bru` and affected request auth settings; `README.md`; proposed `docs/knowledge/AUTHENTICATION_BASELINE.md`; source plan checkboxes only after maintainer acceptance, including any documented exception. Asset-count exception is required for synchronized contract copies, not permission to make one large patch: use paired-bundle substeps and review each diff.
 - **Symbols to add/change:** Bearer security requirements, 401/403/scoped-404 responses, deprecated ignored `createdBy` description, Bruno secret variables/auth inheritance, operator/public probe examples, provider/rotation/revocation runbook and acceptance evidence.
-- **Implementation shape:** Describe implemented behavior, not future bearer placeholders; no saved credentials. Retain approved asset locations, schemas and response contracts. Run a genuine provider token/rotation smoke and record non-secret results and maintainer approval. Missing provider/deployment access leaves this chunk blocked, not assumed complete.
+- **Implementation shape:** Describe implemented behavior, not future bearer placeholders; no saved credentials. Retain approved asset locations, schemas and response contracts. Run a genuine provider token/rotation smoke and record non-secret results and maintainer approval. If provider/deployment access is unavailable, keep those evidence items explicitly pending; do not represent local evidence as deployment acceptance.
 - **Validation:** Approved-venv `rtk python scripts/verify_openapi_assets.py`; compile and full Gradle regression after contract changes; authenticated Bruno smoke; provider smoke from VII; `rtk git diff --check` and final per-file diff review.
-- **Stop condition:** Runtime, assets, CI, provider and deployment evidence agree; maintainer accepts 05.0. Only then consider 05.1, subject to the separate Phase 04 entry gate.
+- **Stop condition:** Normal completion requires runtime, assets, CI, provider, and deployment evidence to agree. The documented maintainer-approved deferred-deployment exception permits 05.1 development before that normal completion; it does not authorize untrusted deployment and does not satisfy the separate Phase 04 entry gate.
 
 ### IX. Handoff to `chunked-implementation`
 
@@ -306,6 +306,6 @@ For every later chunk, reconfirm the preceding chunk's report and blockers. Do n
 
 ### X. Conclusion and Next Steps
 
-This is a proposed implementation design, not an implemented authentication baseline. It selects Keycloak-based bearer verification, explicit capabilities, a single-organization deployment boundary, location-scoped order/stock access, authenticated fulfillment attribution and identity-restricted operational endpoints without broad IAM or tenancy redesign.
+This is an implemented local authentication and authorization baseline. It uses Keycloak-based bearer verification, explicit capabilities, a single-organization deployment boundary, location-scoped order/stock access, authenticated fulfillment attribution, and identity-restricted operational endpoints without broad IAM or tenancy redesign.
 
-**Next step:** Review and approve the decisions/blockers in I–II, then execute Chunk 0 only. Keep source-plan completion boxes unchanged until implementation and acceptance evidence exist. Do not begin POS/manufacturing expansion or expose the current unauthenticated API to untrusted networks.
+**Next step:** The maintainer-approved deferred-deployment exception permits 05.1 development. Complete the pending Bruno, genuine-provider, timed-rotation, deployment/network, and audit-ownership acceptance before untrusted deployment. The separate Phase 04 entry gate remains required.

@@ -96,10 +96,10 @@ Phase discipline:
 - [x] Re-check this overview and mark Phase 01 as complete
 - [x] Unblock Phase 02 after Phase 01 completion
 - [x] Complete Phase 02 before starting Phase 03 implementation
-- [ ] Complete the Phase 04 project structure gate before starting Phase 05 implementation
-- [ ] Complete the Phase 05.0 authentication and authorization baseline before Phase 05 expansion implementation
+- [x] Complete the Phase 04 project structure gate before starting Phase 05 implementation
+- [x] Complete the Phase 05.0 authentication and authorization baseline before Phase 05 expansion implementation, under the maintainer-approved deferred-deployment exception
 
-The [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) is accepted and 04.6 is complete. The formal Phase 04 entry-gate checkbox remains pending the remaining Phase 04 evidence review; Phase 05 expansion is also blocked by the pending 05.0 authentication and authorization baseline.
+The [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) is accepted and 04.6 is complete. The remaining Phase 04 Definition-of-Done criteria for request-correlated repository logging and external CI required-check enforcement remain separately tracked; they do not reopen the project-structure gate. Phase 05 development remains subject to the 05.0 deferred-deployment restrictions.
 
 Later phase files may be used for planning and context. Do not build IAM before
 the platform proves its order-to-inventory workflow:
