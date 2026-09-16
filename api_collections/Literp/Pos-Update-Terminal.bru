@@ -1,0 +1,29 @@
+meta {
+  name: Pos-Update-Terminal
+  type: http
+  seq: 40
+}
+
+patch {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals/{{terminalId}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "terminalCode": "{{updatedTerminalCode}}",
+    "deviceName": "{{updatedDeviceName}}"
+  }
+}
+
+docs {
+  operationId: updatePosTerminal
+  request: PATCH /api/v1/pos/terminals/{terminalId}
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); terminal behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

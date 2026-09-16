@@ -2,9 +2,11 @@
 
 **Source:** [Phase 05, task 05.1](../05-pos-manufacturing-expansion.md#051-pos-operations-contract).
 
-**Status:** Proposed; requires contract approval. Design only, not implementation evidence.
+**Status:** Locally accepted and implemented as authenticated `501 NOT_IMPLEMENTED` placeholders. Task 05.2/05.3 behavior and external acceptance remain pending.
 
 **Evidence revision:** `e0b7fc5`, branch `phase-05-task-0`; working tree clean and aligned with the locally recorded upstream before drafting. Remote freshness was not checked by fetching.
+
+**Completion evidence:** The POS OpenAPI YAML/JSON pair, authenticated runtime registration, ten inherited-auth Bruno placeholders, publication documentation, and contract coverage were completed. The OpenAPI asset verifier, operation-registration test, security/authentication regression tests, and POS contract test passed in recorded acceptance validation. Native Bruno import/smoke validation remains unavailable because the installed desktop application cannot start its Linux sandbox helper. Genuine-provider, deployment, timed-JWKS, audit-ownership, and external authenticated acceptance remain deferred.
 
 **Goal:** Publish a bounded POS terminal, shift, and receipt-lookup contract with Bruno placeholders, without duplicating core order behavior.
 
@@ -187,6 +189,6 @@ Do not continue to Chunk 2. Run targeted validation and show git diff.
 Report risks and skipped checks. Ask before writing a handoff or continuing.
 ```
 
-### X. Conclusion and Next Steps
+### X. Completion and Next Steps
 
-Approve the matrix and 05.2 cross-contract decisions, then execute Chunk 0. This ADS does not complete 05.1, authorize 05.2 implementation, or close deferred deployment acceptance. The next behavior design is [POS Terminal And Shift API](phase-05-task-2.md).
+Task 05.1 is complete for local contract publication: all ten POS operations are registered as authenticated `501 NOT_IMPLEMENTED` placeholders, with synchronized OpenAPI assets, Bruno requests, documentation, and recorded acceptance validation. This completion does not authorize 05.2/05.3 behavior implementation or close deferred deployment acceptance. Before starting 05.2, approve its terminal/shift persistence, attribution, reconciliation, and resource-scoping decisions. The next behavior design is [POS Terminal And Shift API](phase-05-task-2.md).

@@ -1,0 +1,32 @@
+meta {
+  name: Pos-Close-Shift
+  type: http
+  seq: 44
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/shifts/{{shiftId}}/close
+  body: json
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{posCloseShiftIdempotencyKey}}
+}
+
+body:json {
+  {
+    "closingBalance": 312.50
+  }
+}
+
+docs {
+  operationId: closePosShift
+  request: POST /api/v1/pos/shifts/{shiftId}/close
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); shift behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -61,7 +61,8 @@ class OpenApiOperationIdRegistrationTest {
         val OPEN_API_FILES = listOf(
             Path.of("api_collections/open_api_spec/product-catalog.yaml"),
             Path.of("api_collections/open_api_spec/locations.yaml"),
-            Path.of("api_collections/open_api_spec/order-process.yaml")
+            Path.of("api_collections/open_api_spec/order-process.yaml"),
+            Path.of("api_collections/open_api_spec/pos-operations.yaml")
         )
         val HTTP_SERVER_VERTICLE = Path.of("src/main/kotlin/com/literp/verticle/HttpServerVerticle.kt")
         val OPERATION_ID_REGEX = Regex("""^\s*operationId:\s*([A-Za-z0-9_]+)\s*$""")

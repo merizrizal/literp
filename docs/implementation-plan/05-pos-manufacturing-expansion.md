@@ -78,17 +78,26 @@ Estimate: 2-3 engineer-days
 
 Tasks:
 
-- [ ] Create POS Operations OpenAPI spec
-- [ ] Define terminal operations
-- [ ] Define shift operations
-- [ ] Define receipt lookup operations
-- [ ] Add Bruno request skeletons for POS operations
+- [x] Create POS Operations OpenAPI spec
+- [x] Define terminal operations
+- [x] Define shift operations
+- [x] Define receipt lookup operations
+- [x] Add Bruno request skeletons for POS operations
 
 Done when:
 
-- [ ] POS Operations API has an agreed OpenAPI contract
-- [ ] Bruno has placeholder requests for every planned POS endpoint
-- [ ] POS scope is clearly separated from core sales order behavior
+- [x] POS Operations API has an agreed OpenAPI contract
+- [x] Bruno has placeholder requests for every planned POS endpoint
+- [x] POS scope is clearly separated from core sales order behavior
+
+**Acceptance note:** Task 05.1 is locally accepted as an authenticated
+`501 NOT_IMPLEMENTED` contract-publication slice. The OpenAPI pair verifier,
+registration and POS contract tests, and filesystem-backed Bruno parity checks
+provide local evidence. Native Bruno import/smoke validation remains unavailable
+because the installed desktop application cannot start its Linux sandbox helper.
+Genuine-provider, deployment, timed-JWKS, audit-ownership, and external
+authenticated acceptance remain deferred under the authentication baseline.
+This acceptance does not start or authorize 05.2/05.3 behavior implementation.
 
 ### 05.2 POS Terminal And Shift API
 

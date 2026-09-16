@@ -60,11 +60,22 @@ class SecurityPolicyTest {
             "fulfillSalesOrder" to ("order.fulfill" to ResourceScopeRequirement.SALES_ORDER_LOCATION),
             "cancelSalesOrder" to ("order.cancel" to ResourceScopeRequirement.SALES_ORDER_LOCATION),
             "getCurrentStock" to ("inventory.read" to ResourceScopeRequirement.AUTHORIZED_LOCATION),
-            "getAvailableStock" to ("inventory.read" to ResourceScopeRequirement.AUTHORIZED_LOCATION)
+            "getAvailableStock" to ("inventory.read" to ResourceScopeRequirement.AUTHORIZED_LOCATION),
+            "listPosTerminals" to ("pos.terminal.read" to ResourceScopeRequirement.POS_AUTHORIZED_LOCATION_SET),
+            "createPosTerminal" to ("pos.terminal.write" to ResourceScopeRequirement.POS_AUTHORIZED_LOCATION),
+            "getPosTerminal" to ("pos.terminal.read" to ResourceScopeRequirement.POS_TERMINAL_LOCATION),
+            "updatePosTerminal" to ("pos.terminal.write" to ResourceScopeRequirement.POS_TERMINAL_LOCATION),
+            "deactivatePosTerminal" to ("pos.terminal.write" to ResourceScopeRequirement.POS_TERMINAL_LOCATION),
+            "openPosShift" to ("pos.shift.open" to ResourceScopeRequirement.POS_TERMINAL_LOCATION),
+            "getCurrentPosShift" to ("pos.shift.read" to ResourceScopeRequirement.POS_TERMINAL_LOCATION),
+            "closePosShift" to ("pos.shift.close" to ResourceScopeRequirement.POS_SHIFT_TERMINAL_LOCATION),
+            "getPosReceiptByNumber" to ("pos.receipt.read" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION),
+            "listPosReceiptsBySalesOrder" to ("pos.receipt.read" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION)
         )
 
-        assertEquals(31, expected.size)
+        assertEquals(41, expected.size)
         assertEquals(expected.keys, ExplicitSecurityPolicy.businessOperationIds)
+        val humanOnlyOperations = setOf("openPosShift", "closePosShift")
 
         expected.forEach { (operationId, expectedRule) ->
             val decision = ExplicitSecurityPolicy("organization-1").require(
@@ -79,9 +90,33 @@ class SecurityPolicyTest {
                 val required = assertRequiresResourceScope(decision, operationId)
                 assertEquals(expectedRule.first, required.capability)
                 assertEquals(expectedRule.second, required.resourceScope)
-                assertEquals(PrincipalEligibility.AUTHENTICATED, required.principalEligibility)
+                assertEquals(
+                    if (operationId in humanOnlyOperations) PrincipalEligibility.HUMAN else PrincipalEligibility.AUTHENTICATED,
+                    required.principalEligibility
+                )
             }
         }
+    }
+
+    @Test
+    fun humanOnlyPosOperationsRejectServicePrincipals() {
+        val policy = ExplicitSecurityPolicy("organization-1")
+        val servicePrincipal = principal.copy(
+            capabilities = setOf("pos.shift.open", "pos.shift.close"),
+            principalKind = PrincipalKind.SERVICE,
+            operator = false
+        )
+
+        assertDenied(
+            policy.require(servicePrincipal, "openPosShift"),
+            "openPosShift",
+            AuthorizationDenyReason.PRINCIPAL_NOT_ELIGIBLE
+        )
+        assertDenied(
+            policy.require(servicePrincipal, "closePosShift"),
+            "closePosShift",
+            AuthorizationDenyReason.PRINCIPAL_NOT_ELIGIBLE
+        )
     }
 
     @Test

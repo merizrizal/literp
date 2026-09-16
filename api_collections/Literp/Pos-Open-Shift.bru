@@ -1,0 +1,33 @@
+meta {
+  name: Pos-Open-Shift
+  type: http
+  seq: 42
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals/{{terminalId}}/shifts
+  body: json
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{posOpenShiftIdempotencyKey}}
+}
+
+body:json {
+  {
+    "openingBalance": 250.00,
+    "currency": "USD"
+  }
+}
+
+docs {
+  operationId: openPosShift
+  request: POST /api/v1/pos/terminals/{terminalId}/shifts
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); shift behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

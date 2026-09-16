@@ -1,0 +1,22 @@
+meta {
+  name: Pos-List-Terminals
+  type: http
+  seq: 37
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals?page=0&size=20&locationId={{locationId}}&isActive=true&sort=terminalCode,asc
+  body: none
+  auth: inherit
+}
+
+docs {
+  operationId: listPosTerminals
+  request: GET /api/v1/pos/terminals
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); terminal behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

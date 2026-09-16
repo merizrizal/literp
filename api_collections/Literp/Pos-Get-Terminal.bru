@@ -1,0 +1,22 @@
+meta {
+  name: Pos-Get-Terminal
+  type: http
+  seq: 39
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals/{{terminalId}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  operationId: getPosTerminal
+  request: GET /api/v1/pos/terminals/{terminalId}
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); terminal behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

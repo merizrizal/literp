@@ -1,0 +1,22 @@
+meta {
+  name: Pos-Deactivate-Terminal
+  type: http
+  seq: 41
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals/{{terminalId}}/deactivate
+  body: none
+  auth: inherit
+}
+
+docs {
+  operationId: deactivatePosTerminal
+  request: POST /api/v1/pos/terminals/{terminalId}/deactivate
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); terminal behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

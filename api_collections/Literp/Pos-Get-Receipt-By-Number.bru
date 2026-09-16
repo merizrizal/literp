@@ -1,0 +1,22 @@
+meta {
+  name: Pos-Get-Receipt-By-Number
+  type: http
+  seq: 45
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/pos/receipts/by-number/{{receiptNumber}}
+  body: none
+  auth: inherit
+}
+
+docs {
+  operationId: getPosReceiptByNumber
+  request: GET /api/v1/pos/receipts/by-number/{receiptNumber}
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); receipt lookup, generation, and refunds are not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

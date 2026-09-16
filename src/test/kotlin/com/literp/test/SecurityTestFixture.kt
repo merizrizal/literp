@@ -135,7 +135,13 @@ class SecurityTestFixture(
             "order.fulfill",
             "order.cancel",
             "inventory.read",
-            "operations.read"
+            "operations.read",
+            "pos.terminal.read",
+            "pos.terminal.write",
+            "pos.shift.open",
+            "pos.shift.read",
+            "pos.shift.close",
+            "pos.receipt.read"
         )
     }
 }

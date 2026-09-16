@@ -26,13 +26,13 @@ import com.literp.security.SecurityConfig
 import com.literp.verticle.handler.AuthenticatedActorAdapter
 import com.literp.verticle.handler.LocationHandler
 import com.literp.verticle.handler.OrderProcessHandler
+import com.literp.verticle.handler.PosOperationsHandler
 import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
 import com.literp.verticle.handler.OrderScopeHandler
 import com.literp.verticle.handler.SecurityHandler
 import com.literp.security.UtilityOperationIds
 import com.literp.verticle.handler.ProductHandler
 import com.literp.verticle.handler.UnitOfMeasureHandler
-import io.reactivex.rxjava3.core.Single
 import io.reactivex.rxjava3.observers.DisposableSingleObserver
 import io.vertx.core.Promise
 import io.vertx.core.http.HttpMethod
@@ -84,7 +84,15 @@ class HttpServerVerticle(
     private lateinit var locationHandler: LocationHandler
     private lateinit var uomHandler: UnitOfMeasureHandler
     private lateinit var orderProcessHandler: OrderProcessHandler
+    private lateinit var posOperationsHandler: PosOperationsHandler
     private val metrics = HttpMetrics()
+
+    private data class ApiRouterBuilders(
+        val product: RouterBuilder,
+        val location: RouterBuilder,
+        val orderProcess: RouterBuilder,
+        val pos: RouterBuilder
+    )
 
     private companion object {
         const val METRICS_START_NANOS_KEY = "metricsStartNanos"
@@ -128,6 +136,7 @@ class HttpServerVerticle(
         actorAdapter = AuthenticatedActorAdapter()
         orderScopeHandler = OrderScopeHandler(OrderScopeRepository(pool), actorAdapter)
         orderProcessHandler = OrderProcessHandler(orderProcessService, actorAdapter)
+        posOperationsHandler = PosOperationsHandler()
 
         loadApiContracts(startFuture)
     }
@@ -158,25 +167,32 @@ class HttpServerVerticle(
                     }
             }
             .flatMap { (productContract, locationContract, orderProcessContract) ->
-                Single.just(Triple(
-                    configureOpenApiSecurity(RouterBuilder.create(vertx, productContract)),
-                    configureOpenApiSecurity(RouterBuilder.create(vertx, locationContract)),
-                    configureOpenApiSecurity(RouterBuilder.create(vertx, orderProcessContract))
-                ))
+                OpenAPIContract
+                    .rxFrom(vertx, "api_collections/open_api_spec/pos-operations.yaml")
+                    .map { posContract ->
+                        ApiRouterBuilders(
+                            product = configureOpenApiSecurity(RouterBuilder.create(vertx, productContract)),
+                            location = configureOpenApiSecurity(RouterBuilder.create(vertx, locationContract)),
+                            orderProcess = configureOpenApiSecurity(RouterBuilder.create(vertx, orderProcessContract)),
+                            pos = configureOpenApiSecurity(RouterBuilder.create(vertx, posContract))
+                        )
+                    }
             }
-            .subscribeWith(object : DisposableSingleObserver<Triple<RouterBuilder, RouterBuilder, RouterBuilder>>() {
-                override fun onSuccess(routers: Triple<RouterBuilder, RouterBuilder, RouterBuilder>) {
+            .subscribeWith(object : DisposableSingleObserver<ApiRouterBuilders>() {
+                override fun onSuccess(routers: ApiRouterBuilders) {
                     logger.info("Deployed OpenAPI Contracts")
 
-                    val (productRouterBuilder, locationRouterBuilder, orderProcessRouterBuilder) = routers
+                    val (productRouterBuilder, locationRouterBuilder, orderProcessRouterBuilder, posRouterBuilder) = routers
 
                     registerProductCatalogHandlers(productRouterBuilder)
                     registerLocationHandlers(locationRouterBuilder)
                     registerOrderProcessHandlers(orderProcessRouterBuilder)
+                    registerPosOperationsHandlers(posRouterBuilder)
 
                     val productRouter = productRouterBuilder.createRouter()
                     val locationRouter = locationRouterBuilder.createRouter()
                     val orderProcessRouter = orderProcessRouterBuilder.createRouter()
+                    val posRouter = posRouterBuilder.createRouter()
 
                     val router = Router.router(vertx).apply {
                         route().handler(HSTSHandler.create())
@@ -200,6 +216,7 @@ class HttpServerVerticle(
                         route("/api/v1/*").subRouter(productRouter)
                         route("/api/v1/*").subRouter(locationRouter)
                         route("/api/v1/*").subRouter(orderProcessRouter)
+                        route("/api/v1/*").subRouter(posRouter)
                         route().handler { context -> context.fail(404) }
                     }
 
@@ -344,6 +361,39 @@ class HttpServerVerticle(
             .addHandler(securityHandler.authorizeOperation("cancelSalesOrder"))
             .addHandler(orderScopeHandler::authorize)
             .addHandler(orderProcessHandler::cancelSalesOrder)
+    }
+
+    private fun registerPosOperationsHandlers(routerBuilder: RouterBuilder) {
+        routerBuilder.getRoute("listPosTerminals")
+            .addHandler(securityHandler.authorizeOperation("listPosTerminals"))
+            .addHandler(posOperationsHandler::listPosTerminals)
+        routerBuilder.getRoute("createPosTerminal")
+            .addHandler(securityHandler.authorizeOperation("createPosTerminal"))
+            .addHandler(posOperationsHandler::createPosTerminal)
+        routerBuilder.getRoute("getPosTerminal")
+            .addHandler(securityHandler.authorizeOperation("getPosTerminal"))
+            .addHandler(posOperationsHandler::getPosTerminal)
+        routerBuilder.getRoute("updatePosTerminal")
+            .addHandler(securityHandler.authorizeOperation("updatePosTerminal"))
+            .addHandler(posOperationsHandler::updatePosTerminal)
+        routerBuilder.getRoute("deactivatePosTerminal")
+            .addHandler(securityHandler.authorizeOperation("deactivatePosTerminal"))
+            .addHandler(posOperationsHandler::deactivatePosTerminal)
+        routerBuilder.getRoute("openPosShift")
+            .addHandler(securityHandler.authorizeOperation("openPosShift"))
+            .addHandler(posOperationsHandler::openPosShift)
+        routerBuilder.getRoute("getCurrentPosShift")
+            .addHandler(securityHandler.authorizeOperation("getCurrentPosShift"))
+            .addHandler(posOperationsHandler::getCurrentPosShift)
+        routerBuilder.getRoute("closePosShift")
+            .addHandler(securityHandler.authorizeOperation("closePosShift"))
+            .addHandler(posOperationsHandler::closePosShift)
+        routerBuilder.getRoute("getPosReceiptByNumber")
+            .addHandler(securityHandler.authorizeOperation("getPosReceiptByNumber"))
+            .addHandler(posOperationsHandler::getPosReceiptByNumber)
+        routerBuilder.getRoute("listPosReceiptsBySalesOrder")
+            .addHandler(securityHandler.authorizeOperation("listPosReceiptsBySalesOrder"))
+            .addHandler(posOperationsHandler::listPosReceiptsBySalesOrder)
     }
 
     private fun getIndex(context: RoutingContext) {

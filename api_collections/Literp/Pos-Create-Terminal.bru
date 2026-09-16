@@ -1,0 +1,34 @@
+meta {
+  name: Pos-Create-Terminal
+  type: http
+  seq: 38
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals
+  body: json
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{posTerminalIdempotencyKey}}
+}
+
+body:json {
+  {
+    "locationId": "{{locationId}}",
+    "terminalCode": "{{terminalCode}}",
+    "deviceName": "{{deviceName}}"
+  }
+}
+
+docs {
+  operationId: createPosTerminal
+  request: POST /api/v1/pos/terminals
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); terminal behavior is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

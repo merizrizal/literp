@@ -1,0 +1,1246 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Literp POS Operations API",
+    "description": "POS terminal, shift, and receipt-lookup contract for location-scoped\npoint-of-sale operations. The authenticated handlers are registered as\nsafe placeholders and return 501 until terminal, shift, and receipt\nbehavior is implemented. Receipt generation and refunds remain future\navailability and are not exposed by this contract.\n",
+    "version": "0.0.1"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8010/api/v1",
+      "description": "Local development server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/pos/terminals": {
+      "get": {
+        "tags": [
+          "POS Terminals"
+        ],
+        "summary": "List POS terminals",
+        "description": "List terminals within the caller's authorized location set.",
+        "operationId": "listPosTerminals",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number starting from zero.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Number of terminals per page.",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "locationId",
+            "in": "query",
+            "description": "Optional authorized location filter.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "isActive",
+            "in": "query",
+            "description": "Optional terminal activity filter.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort field and direction. Supported fields are terminalCode and createdAt.",
+            "schema": {
+              "type": "string",
+              "default": "terminalCode,asc",
+              "pattern": "^(terminalCode|createdAt),(asc|desc)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "POS terminals retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosTerminalListResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "terminalId": "550e8400-e29b-41d4-a716-446655440000",
+                      "locationId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                      "terminalCode": "STORE-01",
+                      "deviceName": "Front counter",
+                      "isActive": true,
+                      "createdAt": "2026-09-12T08:00:00Z",
+                      "updatedAt": "2026-09-12T08:00:00Z"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 0,
+                    "size": 20,
+                    "totalElements": 1,
+                    "totalPages": 1
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "POS Terminals"
+        ],
+        "summary": "Create a POS terminal",
+        "description": "Create a terminal at a location granted to the caller.",
+        "operationId": "createPosTerminal",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePosTerminalRequest"
+              },
+              "example": {
+                "locationId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                "terminalCode": "STORE-01",
+                "deviceName": "Front counter"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "POS terminal created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosTerminalResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/terminals/{terminalId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TerminalId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "POS Terminals"
+        ],
+        "summary": "Get a POS terminal",
+        "description": "Retrieve a terminal within its persisted authorized location.",
+        "operationId": "getPosTerminal",
+        "responses": {
+          "200": {
+            "description": "POS terminal retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosTerminalResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "POS Terminals"
+        ],
+        "summary": "Update a POS terminal",
+        "description": "Update the terminal code and/or device name; location and server-owned fields are immutable.",
+        "operationId": "updatePosTerminal",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePosTerminalRequest"
+              },
+              "example": {
+                "deviceName": "Front counter tablet"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "POS terminal updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosTerminalResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/terminals/{terminalId}/deactivate": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TerminalId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "POS Terminals"
+        ],
+        "summary": "Deactivate a POS terminal",
+        "description": "Deactivate a terminal unless its lifecycle state has an open shift.",
+        "operationId": "deactivatePosTerminal",
+        "responses": {
+          "200": {
+            "description": "POS terminal deactivated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosTerminalResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/terminals/{terminalId}/shifts": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TerminalId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "POS Shifts"
+        ],
+        "summary": "Open a POS shift",
+        "description": "Open a shift for an active terminal. The authenticated human principal\nbecomes the shift owner; the server derives operator and reconciliation\nidentity and does not accept an actor override in the request body.\n",
+        "operationId": "openPosShift",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenPosShiftRequest"
+              },
+              "example": {
+                "openingBalance": 250.00,
+                "currency": "USD"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "POS shift opened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosShiftResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/terminals/{terminalId}/current-shift": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/TerminalId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "POS Shifts"
+        ],
+        "summary": "Get the current POS shift",
+        "description": "Retrieve the one open shift for a terminal in the caller's authorized location scope.",
+        "operationId": "getCurrentPosShift",
+        "responses": {
+          "200": {
+            "description": "Current POS shift retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosShiftResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/shifts/{shiftId}/close": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ShiftId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "POS Shifts"
+        ],
+        "summary": "Close a POS shift",
+        "description": "Close a shift owned by the authenticated human principal. Expected cash\nand variance are calculated and persisted by the server; the request\nsupplies only the counted closing balance.\n",
+        "operationId": "closePosShift",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClosePosShiftRequest"
+              },
+              "example": {
+                "closingBalance": 312.50
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "POS shift closed with a reconciliation snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosShiftResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/receipts/by-number/{receiptNumber}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ReceiptNumber"
+        }
+      ],
+      "get": {
+        "tags": [
+          "POS Receipts"
+        ],
+        "summary": "Get a POS receipt by number",
+        "description": "Retrieve a receipt by its bounded receipt number within the receipt's\norder location scope. Receipt lookup is a future-availability\nplaceholder; this contract does not generate receipts or expose refunds.\n",
+        "operationId": "getPosReceiptByNumber",
+        "responses": {
+          "200": {
+            "description": "POS receipt retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosReceiptResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/orders/{salesOrderId}/receipts": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/SalesOrderId"
+        }
+      ],
+      "get": {
+        "tags": [
+          "POS Receipts"
+        ],
+        "summary": "List POS receipts for a sales order",
+        "description": "List receipts scoped by the persisted sales-order location, ordered by\nreceipt date and then receipt ID. Receipt lookup is a future-availability\nplaceholder; this contract does not generate receipts or expose refunds.\n",
+        "operationId": "listPosReceiptsBySalesOrder",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number starting from zero.",
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "minimum": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Number of receipts per page.",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "POS receipts retrieved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosReceiptListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "TerminalId": {
+        "name": "terminalId",
+        "in": "path",
+        "required": true,
+        "description": "POS terminal identifier.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "ShiftId": {
+        "name": "shiftId",
+        "in": "path",
+        "required": true,
+        "description": "POS shift identifier.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "ReceiptNumber": {
+        "name": "receiptNumber",
+        "in": "path",
+        "required": true,
+        "description": "Receipt number after URL decoding; bounded for safe lookup.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        }
+      },
+      "SalesOrderId": {
+        "name": "salesOrderId",
+        "in": "path",
+        "required": true,
+        "description": "Sales order identifier associated with the receipts.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Bounded key used to safely retry terminal creation, shift opening, or shift closing.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "schemas": {
+      "PosTerminal": {
+        "type": "object",
+        "required": [
+          "terminalId",
+          "locationId",
+          "terminalCode",
+          "deviceName",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "terminalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique terminal identifier."
+          },
+          "locationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Persisted inventory location assigned to the terminal."
+          },
+          "terminalCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "Human-facing terminal code."
+          },
+          "deviceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Device or workstation name."
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the terminal can be used for new operations."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the terminal was created."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of the last terminal update."
+          }
+        }
+      },
+      "CreatePosTerminalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "locationId",
+          "terminalCode",
+          "deviceName"
+        ],
+        "properties": {
+          "locationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "terminalCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "deviceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      },
+      "UpdatePosTerminalRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "maxProperties": 2,
+        "properties": {
+          "terminalCode": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "deviceName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      },
+      "OpenPosShiftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "openingBalance",
+          "currency"
+        ],
+        "properties": {
+          "openingBalance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "description": "Nonnegative counted cash present when the shift opens."
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "description": "Three-letter uppercase currency used for the shift."
+          }
+        }
+      },
+      "ClosePosShiftRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "closingBalance"
+        ],
+        "properties": {
+          "closingBalance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "description": "Nonnegative counted cash present when the shift closes."
+          }
+        }
+      },
+      "PosShift": {
+        "type": "object",
+        "required": [
+          "shiftId",
+          "terminalId",
+          "operatorId",
+          "shiftDate",
+          "shiftNumber",
+          "openedAt",
+          "closedAt",
+          "openingBalance",
+          "closingBalance",
+          "status",
+          "createdAt",
+          "currency",
+          "expectedCash",
+          "cashVariance",
+          "closedBy"
+        ],
+        "properties": {
+          "shiftId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique POS shift identifier."
+          },
+          "terminalId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Terminal assigned to the shift."
+          },
+          "operatorId": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Verified authenticated subject that owns the shift."
+          },
+          "shiftDate": {
+            "type": "string",
+            "format": "date",
+            "description": "UTC business date used for shift numbering."
+          },
+          "shiftNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Monotonically allocated shift number for the terminal and UTC date."
+          },
+          "openedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC timestamp when the shift opened."
+          },
+          "closedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "UTC timestamp when the shift closed; null while open."
+          },
+          "openingBalance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "description": "Counted cash recorded when the shift opened."
+          },
+          "closingBalance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "nullable": true,
+            "description": "Counted cash recorded when the shift closed; null while open."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "CLOSED"
+            ],
+            "description": "Shift lifecycle state."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC timestamp when the shift record was created."
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "pattern": "^[A-Z]{3}$",
+            "nullable": true,
+            "description": "Shift currency; null for legacy shifts pending reconciliation remediation."
+          },
+          "expectedCash": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "nullable": true,
+            "description": "Server-calculated expected cash; null while open or for an unreconciled legacy shift."
+          },
+          "cashVariance": {
+            "type": "number",
+            "minimum": -999999999999.99,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "nullable": true,
+            "description": "Closing balance minus expected cash; null while open or for an unreconciled legacy shift."
+          },
+          "closedBy": {
+            "type": "string",
+            "maxLength": 255,
+            "nullable": true,
+            "description": "Verified authenticated subject that closed the shift; null while open."
+          }
+        }
+      },
+      "PosShiftResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PosShift"
+          }
+        }
+      },
+      "PosReceipt": {
+        "type": "object",
+        "required": [
+          "receiptId",
+          "salesOrderId",
+          "shiftId",
+          "receiptNumber",
+          "receiptDate",
+          "totalItems",
+          "subtotal",
+          "taxAmount",
+          "totalAmount",
+          "receiptData",
+          "createdAt"
+        ],
+        "properties": {
+          "receiptId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique receipt identifier."
+          },
+          "salesOrderId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Sales order represented by the receipt."
+          },
+          "shiftId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Shift associated with receipt creation when known; null for historical receipts without trusted shift attribution."
+          },
+          "receiptNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "description": "Unique human-facing receipt number."
+          },
+          "receiptDate": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp assigned to the receipt."
+          },
+          "totalItems": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Total number of items represented by the receipt."
+          },
+          "subtotal": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "taxAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "totalAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "receiptData": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true,
+            "description": "Potentially sensitive historical receipt copy; not public telemetry."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the receipt record was created."
+          }
+        }
+      },
+      "PosReceiptResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PosReceipt"
+          }
+        }
+      },
+      "PosReceiptListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PosReceipt"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "PosTerminalResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PosTerminal"
+          }
+        }
+      },
+      "PosTerminalListResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PosTerminal"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "PaginationInfo": {
+        "type": "object",
+        "required": [
+          "page",
+          "size",
+          "totalElements",
+          "totalPages"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "totalElements": {
+            "type": "integer"
+          },
+          "totalPages": {
+            "type": "integer"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "Standard handler error response.",
+        "required": [
+          "error",
+          "errorCode",
+          "status",
+          "errorId"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Human-readable error message."
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "Error code identifier."
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP status code."
+          },
+          "errorId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique error identifier for log correlation."
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Request validation failed.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Invalid terminal update",
+              "errorCode": "VALIDATION_ERROR",
+              "status": 400,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "Authentication is required or the bearer credential is invalid.",
+        "headers": {
+          "WWW-Authenticate": {
+            "description": "Bearer authentication challenge.",
+            "schema": {
+              "type": "string",
+              "example": "Bearer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Authentication required",
+              "errorCode": "UNAUTHENTICATED",
+              "status": 401,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The authenticated principal lacks the required organization, capability, or location scope.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Forbidden",
+              "errorCode": "FORBIDDEN",
+              "status": 403,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested POS resource does not exist or is outside the caller's authorized location scope.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "POS terminal not found",
+              "errorCode": "RESOURCE_NOT_FOUND",
+              "status": 404,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The requested POS operation conflicts with resource lifecycle, uniqueness, or idempotency state.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "POS terminal has an open shift",
+              "errorCode": "CONFLICT",
+              "status": 409,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "NotImplemented": {
+        "description": "The authenticated contract placeholder is not implemented yet.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "POS operation is not implemented",
+              "errorCode": "NOT_IMPLEMENTED",
+              "status": 501,
+              "errorId": "550e8400-e29b-41d4-a716-446655440000"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Internal server error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "OAuth 2.0 access token verified by the authenticated resource-server boundary."
+      }
+    }
+  }
+}

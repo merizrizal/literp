@@ -146,16 +146,140 @@ class AuthenticationHttpIntegrationTest {
             Request("POST", "/api/v1/orders/${UUID.randomUUID()}/confirm"),
             Request("POST", "/api/v1/orders/${UUID.randomUUID()}/payments"),
             Request("POST", "/api/v1/orders/${UUID.randomUUID()}/fulfill"),
-            Request("POST", "/api/v1/orders/${UUID.randomUUID()}/cancel")
+            Request("POST", "/api/v1/orders/${UUID.randomUUID()}/cancel"),
+            Request("GET", "/api/v1/pos/terminals"),
+            Request("POST", "/api/v1/pos/terminals"),
+            Request("GET", "/api/v1/pos/terminals/${UUID.randomUUID()}"),
+            Request("PATCH", "/api/v1/pos/terminals/${UUID.randomUUID()}"),
+            Request("POST", "/api/v1/pos/terminals/${UUID.randomUUID()}/deactivate"),
+            Request("POST", "/api/v1/pos/terminals/${UUID.randomUUID()}/shifts"),
+            Request("GET", "/api/v1/pos/terminals/${UUID.randomUUID()}/current-shift"),
+            Request("POST", "/api/v1/pos/shifts/${UUID.randomUUID()}/close"),
+            Request("GET", "/api/v1/pos/receipts/by-number/receipt-1"),
+            Request("GET", "/api/v1/pos/orders/${UUID.randomUUID()}/receipts")
         )
 
-        assertEquals(31, routeRequests.size)
+        assertEquals(41, routeRequests.size)
         routeRequests.forEach { request ->
             val response = http.request(request.method, request.path)
             assertEquals(401, response.status, "Expected anonymous ${request.method} ${request.path} to be rejected")
             HttpTestSupport.assertErrorEnvelope(requireNotNull(response.json), 401, ErrorCodes.UNAUTHENTICATED)
             assertEquals("Bearer", response.header("WWW-Authenticate"))
         }
+    }
+
+    @Test
+    fun authenticatedPosPlaceholdersEnforceCapabilitiesAndHumanEligibility() {
+        val terminalId = UUID.randomUUID().toString()
+        val shiftId = UUID.randomUUID().toString()
+        val salesOrderId = UUID.randomUUID().toString()
+        val requests = listOf(
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/terminals",
+                "pos.terminal.read"
+            ),
+            PosPlaceholderRequest(
+                "POST",
+                "/api/v1/pos/terminals",
+                "pos.terminal.write",
+                JsonObject()
+                    .put("locationId", securityFixture.locationId)
+                    .put("terminalCode", "TEST-01")
+                    .put("deviceName", "Front counter"),
+                mapOf("Idempotency-Key" to "pos-create-$terminalId")
+            ),
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/terminals/$terminalId",
+                "pos.terminal.read"
+            ),
+            PosPlaceholderRequest(
+                "PATCH",
+                "/api/v1/pos/terminals/$terminalId",
+                "pos.terminal.write",
+                JsonObject().put("deviceName", "Front counter tablet")
+            ),
+            PosPlaceholderRequest(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/deactivate",
+                "pos.terminal.write"
+            ),
+            PosPlaceholderRequest(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                "pos.shift.open",
+                JsonObject().put("openingBalance", BigDecimal("250.00")).put("currency", "USD"),
+                mapOf("Idempotency-Key" to "pos-open-$shiftId"),
+                principalKind = "human"
+            ),
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/terminals/$terminalId/current-shift",
+                "pos.shift.read"
+            ),
+            PosPlaceholderRequest(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                "pos.shift.close",
+                JsonObject().put("closingBalance", BigDecimal("275.00")),
+                mapOf("Idempotency-Key" to "pos-close-$shiftId"),
+                principalKind = "human"
+            ),
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/receipts/by-number/receipt-1",
+                "pos.receipt.read"
+            ),
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/orders/$salesOrderId/receipts",
+                "pos.receipt.read"
+            )
+        )
+
+        requests.forEachIndexed { index, request ->
+            val requestId = "pos-placeholder-$index"
+            val result = http.request(
+                request.method,
+                request.path,
+                request.body,
+                headers = securityFixture.authorization(
+                    capabilities = setOf(request.capability),
+                    operator = false,
+                    principalKind = request.principalKind
+                ) + request.headers + ("X-Request-ID" to requestId)
+            )
+
+            assertEquals(501, result.status, "Unexpected status for ${request.method} ${request.path}")
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(result.json), 501, "NOT_IMPLEMENTED")
+            assertEquals(requestId, result.header("X-Request-ID"))
+        }
+
+        val serviceOpen = http.request(
+            "POST",
+            "/api/v1/pos/terminals/$terminalId/shifts",
+            JsonObject().put("openingBalance", BigDecimal("250.00")).put("currency", "USD"),
+            securityFixture.authorization(
+                capabilities = setOf("pos.shift.open"),
+                operator = false,
+                principalKind = "service"
+            ) + ("Idempotency-Key" to "pos-service-open-$shiftId")
+        )
+        assertEquals(403, serviceOpen.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(serviceOpen.json), 403, ErrorCodes.FORBIDDEN)
+
+        val missingCapability = http.request(
+            "GET",
+            "/api/v1/pos/terminals",
+            headers = securityFixture.authorization(
+                capabilities = setOf("master-data.read"),
+                operator = false,
+                principalKind = "service"
+            )
+        )
+        assertEquals(403, missingCapability.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(missingCapability.json), 403, ErrorCodes.FORBIDDEN)
     }
 
     @Test
@@ -186,6 +310,15 @@ class AuthenticationHttpIntegrationTest {
     }
 
     private data class Request(val method: String, val path: String)
+
+    private data class PosPlaceholderRequest(
+        val method: String,
+        val path: String,
+        val capability: String,
+        val body: JsonObject? = null,
+        val headers: Map<String, String> = emptyMap(),
+        val principalKind: String = "service"
+    )
 
     @Test
     fun productionOrderScopesReauthorizeReplaysAndIgnoreSpoofedFulfillmentActors() {

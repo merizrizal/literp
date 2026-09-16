@@ -61,6 +61,23 @@ Manage POS order lifecycle from draft to confirmation, payment capture, fulfillm
 
 ---
 
+### 4. POS Operations API
+**Location:** `pos-operations.yaml` / `pos-operations.json`
+
+Publish the authenticated contract for POS terminals, shifts, and receipt
+lookup. All ten operations are currently safe placeholders that return
+`501 NOT_IMPLEMENTED` after the authentication and authorization boundary.
+
+**Documentation:** See [pos-operations-README.md](pos-operations-README.md) for contract and publication details.
+
+**Features:**
+- Location-scoped terminal and receipt contract
+- Human-principal eligibility for shift opening and closing
+- Bounded balances, currency, pagination, and idempotency inputs
+- Receipt generation and refunds intentionally not exposed
+
+---
+
 ## Quick Start
 
 ### View the Specs
@@ -71,11 +88,13 @@ Each API has both YAML and JSON versions for flexibility:
 cat product-catalog.yaml
 cat locations.yaml
 cat order-process.yaml
+cat pos-operations.yaml
 
 # JSON format (tool-compatible)
 cat product-catalog.json
 cat locations.json
 cat order-process.json
+cat pos-operations.json
 ```
 
 ### Using with Swagger UI
@@ -172,6 +191,7 @@ The current handlers return error responses in this shape:
 - **404** - Not Found (resource doesn't exist; scoped order denials are indistinguishable)
 - **409** - Conflict (duplicate, referential conflict)
 - **500** - Server Error (unexpected error)
+- **501** - Not Implemented (authenticated POS contract placeholder)
 
 ## Design Principles
 
@@ -216,14 +236,13 @@ location handlers.
 
 The following APIs are planned for future implementation:
 
-- **POS Operations API** - Manage terminals, shifts, and receipts
 - **Bill of Materials API** - Define product recipes
 - **Work Order API** - Manage manufacturing orders
 - **Production Run API** - Track production batches
 
 ## Security
 
-All 31 business operations require an OAuth 2.0 bearer access token. The
+All 41 business operations require an OAuth 2.0 bearer access token. The
 runtime verifies RS256 signatures against a locally provisioned public JWKS and
 checks the exact issuer, audience, token lifetime, organization, capability,
 and applicable location/resource scope. The OpenAPI bundles declare this with
