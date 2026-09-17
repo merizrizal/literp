@@ -2,8 +2,11 @@ package com.literp.contract
 
 import com.literp.test.HttpTestSupport
 import com.literp.test.HttpTestSupport.Companion.assertErrorEnvelope
+import com.literp.service.pos.PosOperationsService
 import com.literp.verticle.handler.PosOperationsHandler
+import io.vertx.core.Future
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonArray
 import io.vertx.rxjava3.core.http.HttpServer
 import io.vertx.rxjava3.ext.web.Router
 import org.junit.jupiter.api.AfterAll
@@ -29,7 +32,7 @@ class PosOperationsContractTest {
         coreVertx = Vertx.vertx()
         rxVertx = RxVertx.newInstance(coreVertx)
         server = rxVertx.createHttpServer()
-            .requestHandler(createRouter(PosOperationsHandler()))
+            .requestHandler(createRouter(PosOperationsHandler(placeholderReadService)))
             .rxListen(0, "127.0.0.1")
             .blockingGet()
         http = HttpTestSupport("http://127.0.0.1:${server.actualPort()}")
@@ -46,7 +49,7 @@ class PosOperationsContractTest {
     }
 
     @Test
-    fun everyPosPlaceholderReturnsNotImplementedWithoutSuccessData() {
+    fun remainingPosPlaceholdersReturnNotImplementedWithoutSuccessData() {
         placeholderRequests().forEach { request ->
             val requestId = "request-${request.operationId}"
             val result = http.request(
@@ -112,6 +115,22 @@ class PosOperationsContractTest {
         }
     }
 
+    private val placeholderReadService = object : PosOperationsService {
+        override fun listPosTerminals(
+            page: Int,
+            size: Int,
+            sort: String,
+            locationId: String?,
+            isActive: Boolean?,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal reads are not exercised by this placeholder test")
+
+        override fun getPosTerminal(
+            terminalId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal reads are not exercised by this placeholder test")
+    }
+
     private fun createRouter(handler: PosOperationsHandler): Router = Router.router(rxVertx).apply {
         get("/api/v1/pos/terminals").handler(handler::listPosTerminals)
         post("/api/v1/pos/terminals").handler(handler::createPosTerminal)
@@ -126,9 +145,7 @@ class PosOperationsContractTest {
     }
 
     private fun placeholderRequests(): List<PlaceholderRequest> = listOf(
-        PlaceholderRequest("listPosTerminals", "GET", "/api/v1/pos/terminals"),
         PlaceholderRequest("createPosTerminal", "POST", "/api/v1/pos/terminals"),
-        PlaceholderRequest("getPosTerminal", "GET", "/api/v1/pos/terminals/terminal-1"),
         PlaceholderRequest("updatePosTerminal", "PATCH", "/api/v1/pos/terminals/terminal-1"),
         PlaceholderRequest("deactivatePosTerminal", "POST", "/api/v1/pos/terminals/terminal-1/deactivate"),
         PlaceholderRequest("openPosShift", "POST", "/api/v1/pos/terminals/terminal-1/shifts"),

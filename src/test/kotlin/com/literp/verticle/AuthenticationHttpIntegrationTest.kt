@@ -169,16 +169,52 @@ class AuthenticationHttpIntegrationTest {
     }
 
     @Test
-    fun authenticatedPosPlaceholdersEnforceCapabilitiesAndHumanEligibility() {
+    fun authenticatedPosReadsEnforceScopesAndRemainingOperationsStayPlaceholders() {
         val terminalId = UUID.randomUUID().toString()
         val shiftId = UUID.randomUUID().toString()
         val salesOrderId = UUID.randomUUID().toString()
+        val grantedReadHeaders = securityFixture.authorization(
+            capabilities = setOf("pos.terminal.read"),
+            locationIds = setOf(securityFixture.locationId),
+            operator = false,
+            principalKind = "service"
+        )
+
+        val grantedList = http.request("GET", "/api/v1/pos/terminals", headers = grantedReadHeaders)
+        assertEquals(200, grantedList.status)
+        HttpTestSupport.assertListEnvelope(requireNotNull(grantedList.json))
+
+        val outsideLocation = UUID.randomUUID().toString()
+        val outOfScopeList = http.request(
+            "GET",
+            "/api/v1/pos/terminals?locationId=$outsideLocation",
+            headers = grantedReadHeaders
+        )
+        assertEquals(403, outOfScopeList.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(outOfScopeList.json), 403, ErrorCodes.FORBIDDEN)
+
+        val missingTerminal = http.request(
+            "GET",
+            "/api/v1/pos/terminals/$terminalId",
+            headers = grantedReadHeaders
+        )
+        assertEquals(404, missingTerminal.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(missingTerminal.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+        val emptyGrantList = http.request(
+            "GET",
+            "/api/v1/pos/terminals",
+            headers = securityFixture.authorization(
+                capabilities = setOf("pos.terminal.read"),
+                locationIds = emptySet(),
+                operator = false,
+                principalKind = "service"
+            )
+        )
+        assertEquals(403, emptyGrantList.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(emptyGrantList.json), 403, ErrorCodes.FORBIDDEN)
+
         val requests = listOf(
-            PosPlaceholderRequest(
-                "GET",
-                "/api/v1/pos/terminals",
-                "pos.terminal.read"
-            ),
             PosPlaceholderRequest(
                 "POST",
                 "/api/v1/pos/terminals",
@@ -188,11 +224,6 @@ class AuthenticationHttpIntegrationTest {
                     .put("terminalCode", "TEST-01")
                     .put("deviceName", "Front counter"),
                 mapOf("Idempotency-Key" to "pos-create-$terminalId")
-            ),
-            PosPlaceholderRequest(
-                "GET",
-                "/api/v1/pos/terminals/$terminalId",
-                "pos.terminal.read"
             ),
             PosPlaceholderRequest(
                 "PATCH",

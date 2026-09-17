@@ -7,6 +7,7 @@ import com.literp.db.DatabaseConnection
 import com.literp.repository.LocationRepository
 import com.literp.repository.OrderProcessRepository
 import com.literp.repository.OrderScopeRepository
+import com.literp.repository.PosOperationsRepository
 import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
 import com.literp.repository.UnitOfMeasureRepository
@@ -20,6 +21,8 @@ import com.literp.service.master.impl.ProductVariantServiceImpl
 import com.literp.service.master.impl.UnitOfMeasureServiceImpl
 import com.literp.service.order.OrderProcessService
 import com.literp.service.order.impl.OrderProcessServiceImpl
+import com.literp.service.pos.PosOperationsService
+import com.literp.service.pos.impl.PosOperationsServiceImpl
 import com.literp.security.ExplicitSecurityPolicy
 import com.literp.security.JwtCredentialVerifier
 import com.literp.security.SecurityConfig
@@ -27,6 +30,7 @@ import com.literp.verticle.handler.AuthenticatedActorAdapter
 import com.literp.verticle.handler.LocationHandler
 import com.literp.verticle.handler.OrderProcessHandler
 import com.literp.verticle.handler.PosOperationsHandler
+import com.literp.verticle.handler.PosScopeHandler
 import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
 import com.literp.verticle.handler.OrderScopeHandler
 import com.literp.verticle.handler.SecurityHandler
@@ -69,9 +73,11 @@ class HttpServerVerticle(
     private lateinit var variantRepository: ProductVariantRepository
     private lateinit var locationRepository: LocationRepository
     private lateinit var orderProcessRepository: OrderProcessRepository
+    private lateinit var posOperationsRepository: PosOperationsRepository
 
     private lateinit var securityHandler: SecurityHandler
     private lateinit var orderScopeHandler: OrderScopeHandler
+    private lateinit var posScopeHandler: PosScopeHandler
     private lateinit var actorAdapter: AuthenticatedActorAdapter
 
     private lateinit var uomService: UnitOfMeasureService
@@ -79,6 +85,7 @@ class HttpServerVerticle(
     private lateinit var variantService: ProductVariantService
     private lateinit var locationService: LocationService
     private lateinit var orderProcessService: OrderProcessService
+    private lateinit var posOperationsService: PosOperationsService
 
     private lateinit var productHandler: ProductHandler
     private lateinit var locationHandler: LocationHandler
@@ -117,26 +124,30 @@ class HttpServerVerticle(
         variantRepository = ProductVariantRepository(pool)
         locationRepository = LocationRepository(pool)
         orderProcessRepository = OrderProcessRepository(pool)
+        posOperationsRepository = PosOperationsRepository(pool)
 
         UnitOfMeasureService.register(coreVertx, UnitOfMeasureServiceImpl(uomRepository))
         ProductService.register(coreVertx, ProductServiceImpl(productRepository))
         ProductVariantService.register(coreVertx, ProductVariantServiceImpl(variantRepository))
         LocationService.register(coreVertx, LocationServiceImpl(locationRepository))
         OrderProcessService.register(coreVertx, OrderProcessServiceImpl(orderProcessRepository))
+        PosOperationsService.register(coreVertx, PosOperationsServiceImpl(posOperationsRepository))
 
         uomService = UnitOfMeasureService.createProxy(coreVertx)
         productService = ProductService.createProxy(coreVertx)
         variantService = ProductVariantService.createProxy(coreVertx)
         locationService = LocationService.createProxy(coreVertx)
         orderProcessService = OrderProcessService.createProxy(coreVertx)
+        posOperationsService = PosOperationsService.createProxy(coreVertx)
 
         productHandler = ProductHandler(productService, variantService)
         locationHandler = LocationHandler(locationService)
         uomHandler = UnitOfMeasureHandler(uomService)
         actorAdapter = AuthenticatedActorAdapter()
         orderScopeHandler = OrderScopeHandler(OrderScopeRepository(pool), actorAdapter)
+        posScopeHandler = PosScopeHandler()
         orderProcessHandler = OrderProcessHandler(orderProcessService, actorAdapter)
-        posOperationsHandler = PosOperationsHandler()
+        posOperationsHandler = PosOperationsHandler(posOperationsService)
 
         loadApiContracts(startFuture)
     }
@@ -366,12 +377,14 @@ class HttpServerVerticle(
     private fun registerPosOperationsHandlers(routerBuilder: RouterBuilder) {
         routerBuilder.getRoute("listPosTerminals")
             .addHandler(securityHandler.authorizeOperation("listPosTerminals"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::listPosTerminals)
         routerBuilder.getRoute("createPosTerminal")
             .addHandler(securityHandler.authorizeOperation("createPosTerminal"))
             .addHandler(posOperationsHandler::createPosTerminal)
         routerBuilder.getRoute("getPosTerminal")
             .addHandler(securityHandler.authorizeOperation("getPosTerminal"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::getPosTerminal)
         routerBuilder.getRoute("updatePosTerminal")
             .addHandler(securityHandler.authorizeOperation("updatePosTerminal"))
