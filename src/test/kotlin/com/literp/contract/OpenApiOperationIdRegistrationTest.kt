@@ -1,11 +1,11 @@
 package com.literp.contract
 
 import com.literp.security.ExplicitSecurityPolicy
+import java.nio.file.Path
 import kotlin.io.path.readLines
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import java.nio.file.Path
 
 class OpenApiOperationIdRegistrationTest {
     @Test

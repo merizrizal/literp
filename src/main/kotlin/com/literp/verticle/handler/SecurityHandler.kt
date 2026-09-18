@@ -6,9 +6,9 @@ import com.literp.security.AuthorizationDecision
 import com.literp.security.CredentialVerifier
 import com.literp.security.SecurityPolicy
 import io.vertx.core.Handler
+import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.ext.web.RoutingContext as CoreRoutingContext
 import io.vertx.ext.web.handler.JWTAuthHandler as CoreJWTAuthHandler
-import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.handler.JWTAuthHandler as RxJWTAuthHandler
 
 const val AUTHENTICATED_PRINCIPAL_CONTEXT_KEY = "literp.authenticatedPrincipal"

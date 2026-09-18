@@ -3,7 +3,10 @@ package com.literp.verticle.handler
 import com.literp.security.AuthorizationDecision
 import com.literp.security.ResourceScopeRequirement
 import io.vertx.core.Handler
+import io.vertx.core.json.JsonObject
+import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
+import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 
 const val POS_AUTHORIZED_LOCATION_IDS_CONTEXT_KEY = "literp.pos.authorizedLocationIds"
 
@@ -42,10 +45,35 @@ class PosScopeHandler : BaseHandler(PosScopeHandler::class.java) {
         }
 
         when (resourceDecision.resourceScope) {
-            ResourceScopeRequirement.POS_AUTHORIZED_LOCATION_SET -> authorizeTerminalList(context, principal.locationIds)
-            ResourceScopeRequirement.POS_TERMINAL_LOCATION -> authorizeTerminalRead(context, principal.locationIds)
+            ResourceScopeRequirement.POS_AUTHORIZED_LOCATION ->
+                authorizeTerminalCreate(context, principal.locationIds)
+            ResourceScopeRequirement.POS_AUTHORIZED_LOCATION_SET ->
+                authorizeTerminalList(context, principal.locationIds)
+            ResourceScopeRequirement.POS_TERMINAL_LOCATION ->
+                authorizeTerminalResource(context, principal.locationIds)
             else -> respondForbidden(context)
         }
+    }
+
+    private fun authorizeTerminalCreate(context: RoutingContext, authorizedLocationIds: Set<String>) {
+        if (authorizedLocationIds.isEmpty()) {
+            respondForbidden(context)
+            return
+        }
+
+        val locationId = (requestBody(context)?.getValue("locationId") as? String)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        if (locationId == null) {
+            putErrorResponse(context, 400, "locationId is required")
+            return
+        }
+        if (locationId !in authorizedLocationIds) {
+            respondForbidden(context)
+            return
+        }
+
+        continueWithAuthorizedLocations(context, authorizedLocationIds)
     }
 
     private fun authorizeTerminalList(context: RoutingContext, authorizedLocationIds: Set<String>) {
@@ -63,13 +91,19 @@ class PosScopeHandler : BaseHandler(PosScopeHandler::class.java) {
         continueWithAuthorizedLocations(context, authorizedLocationIds)
     }
 
-    private fun authorizeTerminalRead(context: RoutingContext, authorizedLocationIds: Set<String>) {
+    private fun authorizeTerminalResource(context: RoutingContext, authorizedLocationIds: Set<String>) {
         if (authorizedLocationIds.isEmpty()) {
             respondForbidden(context)
             return
         }
 
         continueWithAuthorizedLocations(context, authorizedLocationIds)
+    }
+
+    private fun requestBody(context: RoutingContext): JsonObject? {
+        val validatedRequest = context.get<ValidatedRequest>(RouterBuilder.KEY_META_DATA_VALIDATED_REQUEST)
+        return validatedRequest?.body?.jsonObject
+            ?: runCatching { context.body().asJsonObject() }.getOrNull()
     }
 
     private fun continueWithAuthorizedLocations(context: RoutingContext, authorizedLocationIds: Set<String>) {

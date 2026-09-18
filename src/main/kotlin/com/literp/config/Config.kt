@@ -2,7 +2,7 @@ package com.literp.config
 
 import java.io.File
 import java.io.FileInputStream
-import java.util.*
+import java.util.Properties
 
 class Config {
 

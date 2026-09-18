@@ -24,6 +24,25 @@ public interface PosOperationsService {
 
     Future<JsonObject> getPosTerminal(String terminalId, JsonArray authorizedLocationIds);
 
+    Future<JsonObject> createPosTerminal(
+        String locationId,
+        String terminalCode,
+        String deviceName,
+        String idempotencyKey,
+        String actorSubject,
+        String organizationId,
+        JsonArray authorizedLocationIds
+    );
+
+    Future<JsonObject> updatePosTerminal(
+        String terminalId,
+        String terminalCode,
+        String deviceName,
+        JsonArray authorizedLocationIds
+    );
+
+    Future<JsonObject> deactivatePosTerminal(String terminalId, JsonArray authorizedLocationIds);
+
     static PosOperationsService createProxy(Vertx vertx) {
         return new PosOperationsServiceVertxEBProxy(vertx, ADDRESS);
     }

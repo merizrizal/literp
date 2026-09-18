@@ -8,8 +8,8 @@ baseline, OpenAPI verification, and migration verification.
 
 | Check | Runtime | Command |
 |---|---|---|
-| Build | Java 25, Gradle wrapper 9.6.0 | `./gradlew build` |
-| Test Baseline | Java 25, Gradle wrapper 9.6.0, isolated PostgreSQL test DB | `./gradlew test` |
+| Build | Java 25, Gradle wrapper 9.7.1 | `./gradlew build` |
+| Test Baseline | Java 25, Gradle wrapper 9.7.1, isolated PostgreSQL test DB | `./gradlew test` |
 | OpenAPI Verification | Python 3.13 | `python scripts/verify_openapi_assets.py` |
 | Migration Verification | Python 3.13, PostgreSQL 18 | `python scripts/verify_migrations.py` |
 

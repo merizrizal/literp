@@ -3,6 +3,9 @@ package com.literp.security
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import java.math.BigInteger
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
@@ -13,15 +16,11 @@ import java.security.Signature
 import java.security.interfaces.RSAPublicKey
 import java.time.Instant
 import java.util.Base64
-import java.util.Comparator
 import java.util.concurrent.ExecutionException
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
 
 class JwtCredentialVerifierTest {
     private val issuer = "https://issuer.example/realm/literp"

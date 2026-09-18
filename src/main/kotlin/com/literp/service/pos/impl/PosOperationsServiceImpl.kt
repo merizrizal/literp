@@ -35,6 +35,44 @@ class PosOperationsServiceImpl(
         authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
     ).toVertxFuture()
 
+    override fun createPosTerminal(
+        locationId: String,
+        terminalCode: String,
+        deviceName: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        organizationId: String,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.createPosTerminal(
+        locationId = locationId,
+        terminalCode = terminalCode,
+        deviceName = deviceName,
+        idempotencyKey = idempotencyKey,
+        actorSubject = actorSubject,
+        organizationId = organizationId,
+        authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
+    override fun updatePosTerminal(
+        terminalId: String,
+        terminalCode: String?,
+        deviceName: String?,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.updatePosTerminal(
+        terminalId = terminalId,
+        terminalCode = terminalCode,
+        deviceName = deviceName,
+        authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
+    override fun deactivatePosTerminal(
+        terminalId: String,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.deactivatePosTerminal(
+        terminalId = terminalId,
+        authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
     private fun JsonArray.toAuthorizedLocationIds(): Set<String> =
         (0 until size())
             .mapNotNull { getString(it)?.trim()?.takeIf(String::isNotBlank) }

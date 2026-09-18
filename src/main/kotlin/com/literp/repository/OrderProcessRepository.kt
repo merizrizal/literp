@@ -10,7 +10,7 @@ import io.vertx.rxjava3.sqlclient.SqlConnection
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.util.*
+import java.util.UUID
 
 class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepository::class.java) {
 

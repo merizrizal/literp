@@ -10,14 +10,15 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
-import java.math.BigDecimal
-import java.time.Instant
-import java.util.UUID
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.math.BigDecimal
+import java.time.Instant
+import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import io.vertx.rxjava3.core.Vertx as RxVertx
@@ -217,27 +218,6 @@ class AuthenticationHttpIntegrationTest {
         val requests = listOf(
             PosPlaceholderRequest(
                 "POST",
-                "/api/v1/pos/terminals",
-                "pos.terminal.write",
-                JsonObject()
-                    .put("locationId", securityFixture.locationId)
-                    .put("terminalCode", "TEST-01")
-                    .put("deviceName", "Front counter"),
-                mapOf("Idempotency-Key" to "pos-create-$terminalId")
-            ),
-            PosPlaceholderRequest(
-                "PATCH",
-                "/api/v1/pos/terminals/$terminalId",
-                "pos.terminal.write",
-                JsonObject().put("deviceName", "Front counter tablet")
-            ),
-            PosPlaceholderRequest(
-                "POST",
-                "/api/v1/pos/terminals/$terminalId/deactivate",
-                "pos.terminal.write"
-            ),
-            PosPlaceholderRequest(
-                "POST",
                 "/api/v1/pos/terminals/$terminalId/shifts",
                 "pos.shift.open",
                 JsonObject().put("openingBalance", BigDecimal("250.00")).put("currency", "USD"),
@@ -311,6 +291,127 @@ class AuthenticationHttpIntegrationTest {
         )
         assertEquals(403, missingCapability.status)
         HttpTestSupport.assertErrorEnvelope(requireNotNull(missingCapability.json), 403, ErrorCodes.FORBIDDEN)
+    }
+
+    @Test
+    fun authenticatedTerminalAdministrationScopesMutationsAndReplaysCreation() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val terminalCode = "HTTP-$suffix"
+        val updatedTerminalCode = "HTTP-U-$suffix"
+        val actorSubject = "terminal-admin-$suffix"
+        val idempotencyKey = "terminal-create-$suffix"
+        val location = locationRepository.createLocation(
+            "POS-$suffix",
+            "POS terminal test $suffix",
+            "WAREHOUSE",
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val locationId = location.getString("locationId")
+        var terminalId: String? = null
+        val headers = securityFixture.authorization(
+            capabilities = setOf("pos.terminal.write"),
+            locationIds = setOf(locationId),
+            operator = false,
+            principalKind = "service",
+            subject = actorSubject
+        )
+        val createBody = JsonObject()
+            .put("locationId", locationId)
+            .put("terminalCode", terminalCode)
+            .put("deviceName", "HTTP terminal $suffix")
+
+        try {
+            val created = http.expect(
+                "POST",
+                "/api/v1/pos/terminals",
+                201,
+                createBody,
+                headers + ("Idempotency-Key" to idempotencyKey)
+            )
+            val createdData = requireNotNull(created.json).getJsonObject("data")
+            terminalId = requireNotNull(createdData.getString("terminalId"))
+            val terminalId = requireNotNull(terminalId)
+            assertEquals(locationId, createdData.getString("locationId"))
+            assertTrue(createdData.getBoolean("isActive"))
+
+            val replay = http.expect(
+                "POST",
+                "/api/v1/pos/terminals",
+                201,
+                createBody,
+                headers + ("Idempotency-Key" to idempotencyKey)
+            )
+            assertEquals(terminalId, requireNotNull(replay.json).getJsonObject("data").getString("terminalId"))
+
+            val changedReplay = http.request(
+                "POST",
+                "/api/v1/pos/terminals",
+                createBody.copy().put("terminalCode", "HTTP-C-$suffix"),
+                headers + ("Idempotency-Key" to idempotencyKey)
+            )
+            assertEquals(409, changedReplay.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(changedReplay.json), 409, ErrorCodes.CONFLICT)
+
+            val missingKey = http.request("POST", "/api/v1/pos/terminals", createBody, headers)
+            assertEquals(400, missingKey.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(missingKey.json), 400, ErrorCodes.VALIDATION_ERROR)
+
+            val updated = http.expect(
+                "PATCH",
+                "/api/v1/pos/terminals/$terminalId",
+                200,
+                JsonObject().put("terminalCode", updatedTerminalCode).put("deviceName", "Updated terminal $suffix"),
+                headers
+            )
+            val updatedData = requireNotNull(updated.json).getJsonObject("data")
+            assertEquals(updatedTerminalCode, updatedData.getString("terminalCode"))
+            assertEquals("Updated terminal $suffix", updatedData.getString("deviceName"))
+
+            val hiddenUpdate = http.request(
+                "PATCH",
+                "/api/v1/pos/terminals/$terminalId",
+                JsonObject().put("deviceName", "Hidden update"),
+                securityFixture.authorization(
+                    capabilities = setOf("pos.terminal.write"),
+                    locationIds = setOf(UUID.randomUUID().toString()),
+                    operator = false,
+                    principalKind = "service",
+                    subject = "other-admin-$suffix"
+                )
+            )
+            assertEquals(404, hiddenUpdate.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(hiddenUpdate.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+            val deactivated = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/deactivate",
+                200,
+                headers = headers
+            )
+            assertFalse(requireNotNull(deactivated.json).getJsonObject("data").getBoolean("isActive"))
+
+            val repeatedDeactivation = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/deactivate",
+                200,
+                headers = headers
+            )
+            assertFalse(requireNotNull(repeatedDeactivation.json).getJsonObject("data").getBoolean("isActive"))
+        } finally {
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'createPosTerminal'
+                  AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, locationId, idempotencyKey)).blockingGet()
+            terminalId?.let {
+                pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+                    .rxExecute(Tuple.of(it)).blockingGet()
+            }
+            locationRepository.deleteLocation(locationId).blockingGet()
+        }
     }
 
     @Test

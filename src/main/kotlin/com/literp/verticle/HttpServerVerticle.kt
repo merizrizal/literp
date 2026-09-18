@@ -1,9 +1,9 @@
 package com.literp.verticle
 
-import com.literp.config.Config
 import com.literp.common.ErrorCodes
-import com.literp.observability.HttpMetrics
+import com.literp.config.Config
 import com.literp.db.DatabaseConnection
+import com.literp.observability.HttpMetrics
 import com.literp.repository.LocationRepository
 import com.literp.repository.OrderProcessRepository
 import com.literp.repository.OrderScopeRepository
@@ -11,6 +11,10 @@ import com.literp.repository.PosOperationsRepository
 import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
 import com.literp.repository.UnitOfMeasureRepository
+import com.literp.security.ExplicitSecurityPolicy
+import com.literp.security.JwtCredentialVerifier
+import com.literp.security.SecurityConfig
+import com.literp.security.UtilityOperationIds
 import com.literp.service.master.LocationService
 import com.literp.service.master.ProductService
 import com.literp.service.master.ProductVariantService
@@ -23,19 +27,15 @@ import com.literp.service.order.OrderProcessService
 import com.literp.service.order.impl.OrderProcessServiceImpl
 import com.literp.service.pos.PosOperationsService
 import com.literp.service.pos.impl.PosOperationsServiceImpl
-import com.literp.security.ExplicitSecurityPolicy
-import com.literp.security.JwtCredentialVerifier
-import com.literp.security.SecurityConfig
 import com.literp.verticle.handler.AuthenticatedActorAdapter
 import com.literp.verticle.handler.LocationHandler
+import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
 import com.literp.verticle.handler.OrderProcessHandler
+import com.literp.verticle.handler.OrderScopeHandler
 import com.literp.verticle.handler.PosOperationsHandler
 import com.literp.verticle.handler.PosScopeHandler
-import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
-import com.literp.verticle.handler.OrderScopeHandler
-import com.literp.verticle.handler.SecurityHandler
-import com.literp.security.UtilityOperationIds
 import com.literp.verticle.handler.ProductHandler
+import com.literp.verticle.handler.SecurityHandler
 import com.literp.verticle.handler.UnitOfMeasureHandler
 import io.reactivex.rxjava3.observers.DisposableSingleObserver
 import io.vertx.core.Promise
@@ -43,15 +43,15 @@ import io.vertx.core.http.HttpMethod
 import io.vertx.core.http.HttpServerOptions
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
+import io.vertx.ext.web.handler.HttpException
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.rxjava3.core.Vertx
 import io.vertx.rxjava3.ext.web.Router
-import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.ext.web.RoutingContext
-import io.vertx.ext.web.handler.HttpException
 import io.vertx.rxjava3.ext.web.handler.HSTSHandler
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
 import io.vertx.rxjava3.openapi.contract.OpenAPIContract
+import io.vertx.rxjava3.sqlclient.Pool
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -381,6 +381,7 @@ class HttpServerVerticle(
             .addHandler(posOperationsHandler::listPosTerminals)
         routerBuilder.getRoute("createPosTerminal")
             .addHandler(securityHandler.authorizeOperation("createPosTerminal"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::createPosTerminal)
         routerBuilder.getRoute("getPosTerminal")
             .addHandler(securityHandler.authorizeOperation("getPosTerminal"))
@@ -388,9 +389,11 @@ class HttpServerVerticle(
             .addHandler(posOperationsHandler::getPosTerminal)
         routerBuilder.getRoute("updatePosTerminal")
             .addHandler(securityHandler.authorizeOperation("updatePosTerminal"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::updatePosTerminal)
         routerBuilder.getRoute("deactivatePosTerminal")
             .addHandler(securityHandler.authorizeOperation("deactivatePosTerminal"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::deactivatePosTerminal)
         routerBuilder.getRoute("openPosShift")
             .addHandler(securityHandler.authorizeOperation("openPosShift"))

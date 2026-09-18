@@ -1,8 +1,8 @@
 package com.literp.contract
 
+import com.literp.service.pos.PosOperationsService
 import com.literp.test.HttpTestSupport
 import com.literp.test.HttpTestSupport.Companion.assertErrorEnvelope
-import com.literp.service.pos.PosOperationsService
 import com.literp.verticle.handler.PosOperationsHandler
 import io.vertx.core.Future
 import io.vertx.core.Vertx
@@ -13,12 +13,12 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import io.vertx.rxjava3.core.Vertx as RxVertx
-import java.nio.file.Files
-import java.nio.file.Path
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PosOperationsContractTest {
@@ -78,6 +78,7 @@ class PosOperationsContractTest {
         assertEquals(expectedFiles, actualFiles, "POS Bruno request inventory must match the contract")
         assertEquals(10, actualFiles.size, "Every POS operation must have one Bruno request")
 
+        val placeholderOperationIds = placeholderRequests().map { it.operationId }.toSet()
         requests.forEach { request ->
             val document = Files.readString(collectionDir.resolve(request.fileName))
             val operationIdCount = Regex(
@@ -102,10 +103,12 @@ class PosOperationsContractTest {
                 document.contains("request: ${request.method} ${request.contractPath}"),
                 "${request.fileName} must document its method and contract path"
             )
-            assertTrue(
-                document.contains("501 NOT_IMPLEMENTED"),
-                "${request.fileName} must document placeholder availability"
-            )
+            if (request.operationId in placeholderOperationIds) {
+                assertTrue(
+                    document.contains("501 NOT_IMPLEMENTED"),
+                    "${request.fileName} must document placeholder availability"
+                )
+            }
             assertFalse(document.contains("Authorization:"), "${request.fileName} must not contain credentials")
             assertFalse(document.contains("accessToken"), "${request.fileName} must not contain token variables")
             assertFalse(
@@ -129,6 +132,28 @@ class PosOperationsContractTest {
             terminalId: String,
             authorizedLocationIds: JsonArray
         ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal reads are not exercised by this placeholder test")
+
+        override fun createPosTerminal(
+            locationId: String,
+            terminalCode: String,
+            deviceName: String,
+            idempotencyKey: String,
+            actorSubject: String,
+            organizationId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal creation is not exercised by this placeholder test")
+
+        override fun updatePosTerminal(
+            terminalId: String,
+            terminalCode: String,
+            deviceName: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal update is not exercised by this placeholder test")
+
+        override fun deactivatePosTerminal(
+            terminalId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal deactivation is not exercised by this placeholder test")
     }
 
     private fun createRouter(handler: PosOperationsHandler): Router = Router.router(rxVertx).apply {
@@ -145,9 +170,6 @@ class PosOperationsContractTest {
     }
 
     private fun placeholderRequests(): List<PlaceholderRequest> = listOf(
-        PlaceholderRequest("createPosTerminal", "POST", "/api/v1/pos/terminals"),
-        PlaceholderRequest("updatePosTerminal", "PATCH", "/api/v1/pos/terminals/terminal-1"),
-        PlaceholderRequest("deactivatePosTerminal", "POST", "/api/v1/pos/terminals/terminal-1/deactivate"),
         PlaceholderRequest("openPosShift", "POST", "/api/v1/pos/terminals/terminal-1/shifts"),
         PlaceholderRequest("getCurrentPosShift", "GET", "/api/v1/pos/terminals/terminal-1/current-shift"),
         PlaceholderRequest("closePosShift", "POST", "/api/v1/pos/shifts/shift-1/close"),

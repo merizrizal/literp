@@ -30,6 +30,24 @@ SEED_MINIMUMS: Final[dict[str, int]] = {
     "sales_order": 3,
 }
 
+POS_COMMAND_LEDGER_COLUMNS: Final[frozenset[str]] = frozenset(
+    {
+        "command_id",
+        "organization_id",
+        "actor_subject",
+        "operation_id",
+        "target_id",
+        "idempotency_key",
+        "request_fingerprint",
+        "response_status",
+        "response_payload",
+        "created_at",
+        "updated_at",
+    }
+)
+POS_COMMAND_LEDGER_CONSTRAINT: Final[str] = "uq_pos_command_ledger_scope_key"
+POS_COMMAND_LEDGER_INDEX: Final[str] = "idx_pos_command_ledger_operation_target_created"
+
 
 class MigrationVerificationError(Exception):
     pass
@@ -78,8 +96,57 @@ def run_migration(config: Config, root_dir: Path, db_url: str) -> None:
     command.upgrade(config, "head")
 
 
+def verify_pos_command_ledger(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'pos_command_ledger'
+        """
+    )
+    actual_columns = {row[0] for row in cursor.fetchall()}
+    missing_columns = POS_COMMAND_LEDGER_COLUMNS - actual_columns
+    if missing_columns:
+        raise MigrationVerificationError(
+            "pos_command_ledger is missing columns: " + ", ".join(sorted(missing_columns))
+        )
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_constraint constraint_entry
+        JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+        JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+        WHERE schema_entry.nspname = 'public'
+          AND table_entry.relname = 'pos_command_ledger'
+          AND constraint_entry.conname = %s
+          AND constraint_entry.contype = 'u'
+        """,
+        (POS_COMMAND_LEDGER_CONSTRAINT,),
+    )
+    if cursor.fetchone() is None:
+        raise MigrationVerificationError(
+            f"Missing POS command-ledger uniqueness constraint: {POS_COMMAND_LEDGER_CONSTRAINT}"
+        )
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'pos_command_ledger'
+          AND indexname = %s
+        """,
+        (POS_COMMAND_LEDGER_INDEX,),
+    )
+    if cursor.fetchone() is None:
+        raise MigrationVerificationError(
+            f"Missing POS command-ledger index: {POS_COMMAND_LEDGER_INDEX}"
+        )
+
+
 def verify_database(db_url: str, expected_head: str) -> None:
-    print("Verifying Alembic head and deterministic seed data...")
+    print("Verifying Alembic head, deterministic seed data, and POS ledger schema...")
     with psycopg.connect(db_url) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT version_num FROM alembic_version")
@@ -102,6 +169,8 @@ def verify_database(db_url: str, expected_head: str) -> None:
                         f"Expected at least {minimum_count} rows in {table_name}, "
                         f"found {actual_count}"
                     )
+
+            verify_pos_command_ledger(cursor)
 
     print(f"Alembic head verified: {expected_head}")
     for table_name, minimum_count in SEED_MINIMUMS.items():
