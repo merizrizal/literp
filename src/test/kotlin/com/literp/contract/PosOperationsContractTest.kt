@@ -154,6 +154,21 @@ class PosOperationsContractTest {
             terminalId: String,
             authorizedLocationIds: JsonArray
         ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal deactivation is not exercised by this placeholder test")
+
+        override fun openPosShift(
+            terminalId: String,
+            openingBalance: String,
+            currency: String,
+            idempotencyKey: String,
+            actorSubject: String,
+            organizationId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Shift opening is not exercised by this placeholder test")
+
+        override fun getCurrentPosShift(
+            terminalId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Current shift lookup is not exercised by this placeholder test")
     }
 
     private fun createRouter(handler: PosOperationsHandler): Router = Router.router(rxVertx).apply {
@@ -170,8 +185,6 @@ class PosOperationsContractTest {
     }
 
     private fun placeholderRequests(): List<PlaceholderRequest> = listOf(
-        PlaceholderRequest("openPosShift", "POST", "/api/v1/pos/terminals/terminal-1/shifts"),
-        PlaceholderRequest("getCurrentPosShift", "GET", "/api/v1/pos/terminals/terminal-1/current-shift"),
         PlaceholderRequest("closePosShift", "POST", "/api/v1/pos/shifts/shift-1/close"),
         PlaceholderRequest("getPosReceiptByNumber", "GET", "/api/v1/pos/receipts/by-number/receipt-1"),
         PlaceholderRequest("listPosReceiptsBySalesOrder", "GET", "/api/v1/pos/orders/order-1/receipts")

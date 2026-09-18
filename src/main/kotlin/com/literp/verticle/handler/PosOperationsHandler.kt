@@ -170,11 +170,70 @@ class PosOperationsHandler(
     }
 
     fun openPosShift(context: RoutingContext) {
-        respondNotImplemented(context)
+        val terminalId = context.pathParam("terminalId")?.trim()
+        if (terminalId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "terminalId is required")
+            return
+        }
+
+        val body = requestBody(context)
+        if (hasUnsupportedFields(context, body, OPEN_SHIFT_FIELDS)) return
+        val openingBalance = body?.getValue("openingBalance")?.toString()
+        val currency = bodyString(body, "currency")
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
+        if (openingBalance.isNullOrBlank() || currency.isNullOrBlank()) {
+            putErrorResponse(context, 400, "openingBalance and currency are required")
+            return
+        }
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        val authorizedLocationIds = authorizedLocationIds(context) ?: return
+        val principal = authenticatedPrincipal(context) ?: return
+
+        posOperationsService.openPosShift(
+            terminalId,
+            openingBalance,
+            currency,
+            idempotencyKey,
+            principal.subject,
+            principal.organizationId,
+            JsonArray(authorizedLocationIds.toList())
+        ).onSuccess { result ->
+            putSuccessResponse(context, 201, result)
+        }.onFailure { error ->
+            putMappedErrorResponse(
+                context = context,
+                error = error,
+                internalErrorMessage = "Failed to open POS shift",
+                notFoundMessage = "POS terminal not found"
+            )
+        }
     }
 
     fun getCurrentPosShift(context: RoutingContext) {
-        respondNotImplemented(context)
+        val terminalId = context.pathParam("terminalId")?.trim()
+        if (terminalId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "terminalId is required")
+            return
+        }
+
+        val authorizedLocationIds = authorizedLocationIds(context) ?: return
+        posOperationsService.getCurrentPosShift(
+            terminalId,
+            JsonArray(authorizedLocationIds.toList())
+        ).onSuccess { result ->
+            putSuccessResponse(context, 200, result)
+        }.onFailure { error ->
+            putMappedErrorResponse(
+                context = context,
+                error = error,
+                internalErrorMessage = "Failed to get current POS shift",
+                notFoundMessage = "Current POS shift not found"
+            )
+        }
     }
 
     fun closePosShift(context: RoutingContext) {
@@ -244,5 +303,6 @@ class PosOperationsHandler(
         val TERMINAL_SORT_FIELDS = setOf("terminalCode", "createdAt")
         val CREATE_TERMINAL_FIELDS = setOf("locationId", "terminalCode", "deviceName")
         val UPDATE_TERMINAL_FIELDS = setOf("terminalCode", "deviceName")
+        val OPEN_SHIFT_FIELDS = setOf("openingBalance", "currency")
     }
 }

@@ -7,6 +7,8 @@ import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Row
 import io.vertx.rxjava3.sqlclient.SqlConnection
 import io.vertx.rxjava3.sqlclient.Tuple
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.HexFormat
@@ -254,6 +256,181 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
         }
     }
 
+    fun openPosShift(
+        terminalId: String,
+        openingBalance: String,
+        currency: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        organizationId: String,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> = Single.defer {
+        val normalizedTerminalId = requiredValue(terminalId, "terminalId", 255)
+        val normalizedOpeningBalance = parseMoney(openingBalance, "openingBalance")
+        val normalizedCurrency = requiredCurrency(currency)
+        val normalizedIdempotencyKey = requiredValue(idempotencyKey, "Idempotency-Key", 128)
+        val normalizedActorSubject = requiredValue(actorSubject, "actorSubject", 255)
+        val normalizedOrganizationId = requiredValue(organizationId, "organizationId", 255)
+        validateScope(locationId = null, authorizedLocationIds = authorizedLocationIds)
+
+        val requestFingerprint = requestFingerprint(
+            "openPosShift",
+            normalizedTerminalId,
+            normalizedOpeningBalance.toPlainString(),
+            normalizedCurrency
+        )
+
+        inTransaction { connection ->
+            selectScopedTerminalForUpdate(connection, normalizedTerminalId, authorizedLocationIds)
+                .flatMap { terminalRow ->
+                    if (!terminalRow.getBoolean("is_active")) {
+                        Single.error<JsonObject>(PosOperationsConflict("Terminal is inactive"))
+                    } else {
+                        claimPosCommand(
+                            connection = connection,
+                            organizationId = normalizedOrganizationId,
+                            actorSubject = normalizedActorSubject,
+                            operationId = "openPosShift",
+                            targetId = normalizedTerminalId,
+                            idempotencyKey = normalizedIdempotencyKey,
+                            requestFingerprint = requestFingerprint
+                        ).flatMap { command ->
+                            command.responsePayload?.let { Single.just(it) }
+                                ?: connection.preparedQuery(
+                                    "SELECT 1 FROM pos_shift WHERE terminal_id = $1 AND status = 'OPEN' LIMIT 1"
+                                ).rxExecute(Tuple.of(normalizedTerminalId)).flatMap { openShiftResult ->
+                                    if (openShiftResult.size() > 0) {
+                                        Single.error<JsonObject>(PosOperationsConflict("Terminal already has an open shift"))
+                                    } else {
+                                        connection.preparedQuery(
+                                            """
+                                            SELECT COALESCE(MAX(shift_number), 0) + 1 AS next_shift_number
+                                            FROM pos_shift
+                                            WHERE terminal_id = $1
+                                              AND shift_date = (NOW() AT TIME ZONE 'UTC')::date
+                                            """.trimIndent()
+                                        ).rxExecute(Tuple.of(normalizedTerminalId)).flatMap { numberResult ->
+                                            val shiftNumber = numberResult.first().getInteger("next_shift_number")
+                                            val shiftId = UUID.randomUUID().toString()
+                                            connection.preparedQuery(
+                                                """
+                                                INSERT INTO pos_shift (
+                                                    shift_id,
+                                                    terminal_id,
+                                                    operator_id,
+                                                    shift_date,
+                                                    shift_number,
+                                                    opened_at,
+                                                    closed_at,
+                                                    opening_balance,
+                                                    closing_balance,
+                                                    status,
+                                                    created_at,
+                                                    currency,
+                                                    expected_cash,
+                                                    cash_variance,
+                                                    closed_by,
+                                                    is_reconcilable
+                                                )
+                                                VALUES (
+                                                    $1,
+                                                    $2,
+                                                    $3,
+                                                    (NOW() AT TIME ZONE 'UTC')::date,
+                                                    $4,
+                                                    (NOW() AT TIME ZONE 'UTC'),
+                                                    NULL,
+                                                    $5,
+                                                    NULL,
+                                                    'OPEN',
+                                                    (NOW() AT TIME ZONE 'UTC'),
+                                                    $6,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL,
+                                                    true
+                                                )
+                                                RETURNING shift_id, terminal_id, operator_id, shift_date, shift_number,
+                                                    opened_at, closed_at, opening_balance, closing_balance, status,
+                                                    created_at, currency, expected_cash, cash_variance, closed_by
+                                                """.trimIndent()
+                                            ).rxExecute(
+                                                Tuple.tuple()
+                                                    .addString(shiftId)
+                                                    .addString(normalizedTerminalId)
+                                                    .addString(normalizedActorSubject)
+                                                    .addInteger(shiftNumber)
+                                                    .addValue(normalizedOpeningBalance)
+                                                    .addString(normalizedCurrency)
+                                            ).flatMap { result ->
+                                                if (result.size() == 0) {
+                                                    Single.error<JsonObject>(IllegalStateException("POS shift opening returned no row"))
+                                                } else {
+                                                    val response = mapShiftRow(result.first())
+                                                    storePosCommand(
+                                                        connection = connection,
+                                                        organizationId = normalizedOrganizationId,
+                                                        actorSubject = normalizedActorSubject,
+                                                        operationId = "openPosShift",
+                                                        targetId = normalizedTerminalId,
+                                                        idempotencyKey = normalizedIdempotencyKey,
+                                                        requestFingerprint = requestFingerprint,
+                                                        responseStatus = 201,
+                                                        responsePayload = response
+                                                    ).map { response }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                        }
+                    }
+                }
+        }.onErrorResumeNext { error ->
+            if (isUniqueViolation(error)) {
+                Single.error(PosOperationsConflict("Terminal already has an open shift"))
+            } else {
+                Single.error(error)
+            }
+        }
+    }
+
+    fun getCurrentPosShift(
+        terminalId: String,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> = Single.defer {
+        val normalizedTerminalId = requiredValue(terminalId, "terminalId", 255)
+        validateScope(locationId = null, authorizedLocationIds = authorizedLocationIds)
+
+        val params = mutableListOf<Any?>(normalizedTerminalId)
+        val locationPlaceholders = authorizedLocationIds.toList().sorted().mapIndexed { index, locationId ->
+            params.add(locationId)
+            "$${index + 2}"
+        }
+        val query = """
+            SELECT s.shift_id, s.terminal_id, s.operator_id, s.shift_date, s.shift_number,
+                s.opened_at, s.closed_at, s.opening_balance, s.closing_balance, s.status,
+                s.created_at, s.currency, s.expected_cash, s.cash_variance, s.closed_by
+            FROM pos_shift s
+            JOIN pos_terminal t ON t.terminal_id = s.terminal_id
+            WHERE s.terminal_id = $1
+              AND t.location_id IN (${locationPlaceholders.joinToString(", ")})
+              AND s.status = 'OPEN'
+            ORDER BY s.shift_date DESC, s.shift_number DESC
+            LIMIT 1
+        """.trimIndent()
+
+        pool.preparedQuery(query)
+            .rxExecute(Tuple.from(params))
+            .flatMap { result ->
+                if (result.size() == 0) {
+                    Single.error<JsonObject>(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(mapShiftRow(result.first()))
+                }
+            }
+    }
+
     fun getPosTerminal(
         terminalId: String,
         authorizedLocationIds: Set<String>
@@ -323,6 +500,34 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
 
     private fun optionalValue(value: String?, name: String, maximumLength: Int): String? =
         value?.let { requiredValue(it, name, maximumLength) }
+
+    private fun parseMoney(value: String, name: String): BigDecimal {
+        val normalized = value.trim()
+        if (normalized.isBlank()) {
+            throw PosOperationsValidation("$name is required")
+        }
+
+        val parsed = try {
+            BigDecimal(normalized)
+        } catch (_: NumberFormatException) {
+            throw PosOperationsValidation("$name must be a decimal amount")
+        }
+        if (parsed.signum() < 0 || parsed > BigDecimal("999999999999.99")) {
+            throw PosOperationsValidation("$name must be between 0 and 999999999999.99")
+        }
+        if (parsed.scale() > 2) {
+            throw PosOperationsValidation("$name must have at most two decimal places")
+        }
+        return parsed.setScale(2, RoundingMode.UNNECESSARY)
+    }
+
+    private fun requiredCurrency(value: String): String {
+        val normalized = value.trim()
+        if (normalized.length != 3 || normalized.any { it !in 'A'..'Z' }) {
+            throw PosOperationsValidation("currency must be three uppercase letters")
+        }
+        return normalized
+    }
 
     private fun requestFingerprint(vararg values: String): String {
         val canonicalValue = values.joinToString(0x1f.toChar().toString())
@@ -470,6 +675,23 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
                 }
             }
     }
+
+    private fun mapShiftRow(row: Row): JsonObject = JsonObject()
+        .put("shiftId", row.getString("shift_id"))
+        .put("terminalId", row.getString("terminal_id"))
+        .put("operatorId", row.getString("operator_id"))
+        .put("shiftDate", row.getLocalDate("shift_date")?.toString())
+        .put("shiftNumber", row.getInteger("shift_number"))
+        .put("openedAt", row.getLocalDateTime("opened_at")?.toString())
+        .put("closedAt", row.getLocalDateTime("closed_at")?.toString())
+        .put("openingBalance", row.getBigDecimal("opening_balance"))
+        .put("closingBalance", row.getBigDecimal("closing_balance"))
+        .put("status", row.getString("status"))
+        .put("createdAt", row.getLocalDateTime("created_at")?.toString())
+        .put("currency", row.getString("currency"))
+        .put("expectedCash", row.getBigDecimal("expected_cash"))
+        .put("cashVariance", row.getBigDecimal("cash_variance"))
+        .put("closedBy", row.getString("closed_by"))
 
     private fun mapTerminalRow(row: Row): JsonObject = JsonObject()
         .put("terminalId", row.getString("terminal_id"))

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
 import kotlin.test.assertEquals
@@ -182,6 +183,103 @@ class PosOperationsRepositoryTest {
     }
 
     @Test
+    fun shiftOpeningReplaysUsesTrustedActorAndCurrentLookupReturnsOpenShift() {
+        val suffix = suffix()
+        val locationId = createLocation("PSO-$suffix")
+        val terminalId = createTerminal(locationId, "PSO-1-$suffix", true)
+        val actorSubject = "repo-shift-owner-$suffix-${"x".repeat(40)}"
+        val organizationId = "repo-shift-org-$suffix"
+        val idempotencyKey = "open-shift-$suffix"
+        var shiftId: String? = null
+
+        try {
+            val opened = repository.openPosShift(
+                terminalId = terminalId,
+                openingBalance = "250.00",
+                currency = "USD",
+                idempotencyKey = idempotencyKey,
+                actorSubject = actorSubject,
+                organizationId = organizationId,
+                authorizedLocationIds = setOf(locationId)
+            ).blockingGet()
+            shiftId = opened.getString("shiftId")
+            assertTrue(isShiftReconcilable(requireNotNull(shiftId)))
+            assertEquals(terminalId, opened.getString("terminalId"))
+            assertEquals(actorSubject, opened.getString("operatorId"))
+            assertEquals("USD", opened.getString("currency"))
+            assertEquals("OPEN", opened.getString("status"))
+            assertEquals(BigDecimal("250.00"), decimalValue(opened, "openingBalance"))
+            assertEquals(null, decimalValue(opened, "closingBalance"))
+            assertEquals(null, decimalValue(opened, "expectedCash"))
+            assertEquals(null, decimalValue(opened, "cashVariance"))
+            assertEquals(1L, commandLedgerCount(
+                organizationId,
+                actorSubject,
+                terminalId,
+                idempotencyKey,
+                operationId = "openPosShift"
+            ))
+
+            val current = repository.getCurrentPosShift(terminalId, setOf(locationId)).blockingGet()
+            assertEquals(shiftId, current.getString("shiftId"))
+
+            val replay = repository.openPosShift(
+                terminalId,
+                "250.00",
+                "USD",
+                idempotencyKey,
+                actorSubject,
+                organizationId,
+                setOf(locationId)
+            ).blockingGet()
+            assertEquals(shiftId, replay.getString("shiftId"))
+            assertEquals(opened.getString("openedAt"), replay.getString("openedAt"))
+            assertEquals(1L, commandLedgerCount(
+                organizationId,
+                actorSubject,
+                terminalId,
+                idempotencyKey,
+                operationId = "openPosShift"
+            ))
+
+            assertFailureMessage {
+                repository.openPosShift(
+                    terminalId,
+                    "251.00",
+                    "USD",
+                    idempotencyKey,
+                    actorSubject,
+                    organizationId,
+                    setOf(locationId)
+                ).blockingGet()
+            }.also { assertEquals("Idempotency key conflict", it) }
+
+            assertFailureMessage {
+                repository.openPosShift(
+                    terminalId,
+                    "300.00",
+                    "USD",
+                    "different-$suffix",
+                    actorSubject,
+                    organizationId,
+                    setOf(locationId)
+                ).blockingGet()
+            }.also { assertEquals("Terminal already has an open shift", it) }
+        } finally {
+            deleteCommandLedger(
+                organizationId,
+                actorSubject,
+                terminalId,
+                idempotencyKey,
+                operationId = "openPosShift"
+            )
+            shiftId?.let(::deleteShift)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
     fun concurrentCreateRetriesWithTheSameKeyProduceOneTerminal() {
         val suffix = suffix()
         val locationId = createLocation("PTX-$suffix")
@@ -265,6 +363,104 @@ class PosOperationsRepositoryTest {
     }
 
     @Test
+    fun currentShiftDoesNotFabricateLegacyTrustFields() {
+        val suffix = suffix()
+        val locationId = createLocation("PSL-$suffix")
+        val terminalId = createTerminal(locationId, "PSL-1-$suffix", true)
+        val shiftId = createOpenShift(terminalId, "legacy-operator-$suffix")
+
+        try {
+            assertFalse(isShiftReconcilable(shiftId))
+            val current = repository.getCurrentPosShift(terminalId, setOf(locationId)).blockingGet()
+            assertEquals(shiftId, current.getString("shiftId"))
+            assertEquals(null, current.getString("currency"))
+            assertEquals(null, decimalValue(current, "expectedCash"))
+            assertEquals(null, decimalValue(current, "cashVariance"))
+            assertEquals(null, current.getString("closedBy"))
+        } finally {
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun shiftOpeningRejectsExcessPrecisionAndNonUppercaseCurrency() {
+        assertFailureMessage {
+            repository.openPosShift(
+                "terminal-1",
+                "1.001",
+                "USD",
+                "precision-key",
+                "actor",
+                "organization",
+                setOf("authorized-location")
+            ).blockingGet()
+        }.also { assertEquals("openingBalance must have at most two decimal places", it) }
+
+        assertFailureMessage {
+            repository.openPosShift(
+                "terminal-1",
+                "1.00",
+                "usd",
+                "currency-key",
+                "actor",
+                "organization",
+                setOf("authorized-location")
+            ).blockingGet()
+        }.also { assertEquals("currency must be three uppercase letters", it) }
+    }
+
+    @Test
+    fun concurrentShiftOpeningWithSameKeyProducesOneOpenShift() {
+        val suffix = suffix()
+        val locationId = createLocation("PSC-$suffix")
+        val terminalId = createTerminal(locationId, "PSC-1-$suffix", true)
+        val actorSubject = "repo-shift-concurrent-$suffix"
+        val organizationId = "repo-shift-concurrent-org-$suffix"
+        val idempotencyKey = "open-concurrent-$suffix"
+        var shiftId: String? = null
+
+        try {
+            fun openShift(): JsonObject = repository.openPosShift(
+                terminalId,
+                "300.00",
+                "EUR",
+                idempotencyKey,
+                actorSubject,
+                organizationId,
+                setOf(locationId)
+            ).blockingGet()
+
+            val first = CompletableFuture.supplyAsync { openShift() }
+            val second = CompletableFuture.supplyAsync { openShift() }
+            val responses = listOf(first.get(), second.get())
+            val shiftIds = responses.map { it.getString("shiftId") }.toSet()
+            assertEquals(1, shiftIds.size)
+            shiftId = shiftIds.single()
+            assertEquals(1L, commandLedgerCount(
+                organizationId,
+                actorSubject,
+                terminalId,
+                idempotencyKey,
+                operationId = "openPosShift"
+            ))
+            assertEquals(1L, openShiftCount(terminalId))
+        } finally {
+            deleteCommandLedger(
+                organizationId,
+                actorSubject,
+                terminalId,
+                idempotencyKey,
+                operationId = "openPosShift"
+            )
+            shiftId?.let(::deleteShift)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
     fun rejectsEmptyAndOutOfScopeLocationGrants() {
         assertFailsWith<PosOperationsScopeViolation> {
             repository.listPosTerminals(
@@ -328,6 +524,20 @@ class PosOperationsRepositoryTest {
         return shiftId
     }
 
+    private fun isShiftReconcilable(shiftId: String): Boolean = pool.preparedQuery(
+        "SELECT is_reconcilable FROM pos_shift WHERE shift_id = $1"
+    ).rxExecute(Tuple.of(shiftId))
+        .blockingGet()
+        .first()
+        .getBoolean("is_reconcilable")
+
+    private fun openShiftCount(terminalId: String): Long = pool.preparedQuery(
+        "SELECT COUNT(*) AS total FROM pos_shift WHERE terminal_id = $1 AND status = 'OPEN'"
+    ).rxExecute(Tuple.of(terminalId))
+        .blockingGet()
+        .first()
+        .getLong("total")
+
     private fun deleteShift(shiftId: String) {
         pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
             .rxExecute(Tuple.of(shiftId))
@@ -338,15 +548,16 @@ class PosOperationsRepositoryTest {
         organizationId: String,
         actorSubject: String,
         targetId: String,
-        idempotencyKey: String
+        idempotencyKey: String,
+        operationId: String = "createPosTerminal"
     ): Long = pool.preparedQuery(
         """
         SELECT COUNT(*) AS total
         FROM pos_command_ledger
-        WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'createPosTerminal'
-          AND target_id = $3 AND idempotency_key = $4
+        WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = $3
+          AND target_id = $4 AND idempotency_key = $5
         """.trimIndent()
-    ).rxExecute(Tuple.of(organizationId, actorSubject, targetId, idempotencyKey))
+    ).rxExecute(Tuple.of(organizationId, actorSubject, operationId, targetId, idempotencyKey))
         .blockingGet()
         .first()
         .getLong("total")
@@ -355,15 +566,16 @@ class PosOperationsRepositoryTest {
         organizationId: String,
         actorSubject: String,
         targetId: String,
-        idempotencyKey: String
+        idempotencyKey: String,
+        operationId: String = "createPosTerminal"
     ) {
         pool.preparedQuery(
             """
             DELETE FROM pos_command_ledger
-            WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'createPosTerminal'
-              AND target_id = $3 AND idempotency_key = $4
+            WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = $3
+              AND target_id = $4 AND idempotency_key = $5
             """.trimIndent()
-        ).rxExecute(Tuple.of(organizationId, actorSubject, targetId, idempotencyKey)).blockingGet()
+        ).rxExecute(Tuple.of(organizationId, actorSubject, operationId, targetId, idempotencyKey)).blockingGet()
     }
 
     private fun deleteTerminalByCode(terminalCode: String) {
@@ -381,6 +593,9 @@ class PosOperationsRepositoryTest {
     private fun deleteLocation(locationId: String) {
         locationRepository.deleteLocation(locationId).blockingGet()
     }
+
+    private fun decimalValue(response: JsonObject, fieldName: String): BigDecimal? =
+        response.getValue(fieldName)?.toString()?.toBigDecimal()
 
     private fun assertFailureMessage(block: () -> Unit): String {
         val error = assertFailsWith<Exception>(block = block)

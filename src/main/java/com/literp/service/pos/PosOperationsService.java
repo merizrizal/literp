@@ -43,6 +43,18 @@ public interface PosOperationsService {
 
     Future<JsonObject> deactivatePosTerminal(String terminalId, JsonArray authorizedLocationIds);
 
+    Future<JsonObject> openPosShift(
+        String terminalId,
+        String openingBalance,
+        String currency,
+        String idempotencyKey,
+        String actorSubject,
+        String organizationId,
+        JsonArray authorizedLocationIds
+    );
+
+    Future<JsonObject> getCurrentPosShift(String terminalId, JsonArray authorizedLocationIds);
+
     static PosOperationsService createProxy(Vertx vertx) {
         return new PosOperationsServiceVertxEBProxy(vertx, ADDRESS);
     }
