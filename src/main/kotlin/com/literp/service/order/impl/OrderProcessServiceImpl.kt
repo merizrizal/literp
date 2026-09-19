@@ -34,6 +34,26 @@ class OrderProcessServiceImpl(
             .toVertxFuture()
     }
 
+    override fun createAttributedSalesOrderDraft(
+        salesChannel: String,
+        locationId: String,
+        customerId: String?,
+        currency: String,
+        notes: String?,
+        shiftId: String,
+        actorSubject: String
+    ): Future<JsonObject> = repository
+        .createAttributedSalesOrderDraft(
+            salesChannel,
+            locationId,
+            customerId,
+            currency,
+            notes,
+            shiftId,
+            actorSubject
+        )
+        .toVertxFuture()
+
     override fun getSalesOrder(salesOrderId: String): Future<JsonObject> {
         return repository.getSalesOrder(salesOrderId).toVertxFuture()
     }

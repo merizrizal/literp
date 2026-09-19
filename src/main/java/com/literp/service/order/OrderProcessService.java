@@ -16,6 +16,16 @@ public interface OrderProcessService {
 
     Future<JsonObject> createSalesOrderDraft(String salesChannel, String locationId, String customerId, String currency, String notes);
 
+    Future<JsonObject> createAttributedSalesOrderDraft(
+        String salesChannel,
+        String locationId,
+        String customerId,
+        String currency,
+        String notes,
+        String shiftId,
+        String actorSubject
+    );
+
     Future<JsonObject> getSalesOrder(String salesOrderId);
 
     Future<JsonObject> addSalesOrderLine(String salesOrderId, String productId, String sku, String quantityOrdered, String unitPrice);

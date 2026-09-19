@@ -129,6 +129,7 @@ class SecurityTestFixture(
             "master-data.write",
             "order.read",
             "order.write",
+            "pos.order.use",
             "order.confirm",
             "payment.capture",
             "order.fulfill",

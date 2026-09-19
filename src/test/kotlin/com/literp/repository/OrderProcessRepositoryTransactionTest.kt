@@ -1,5 +1,6 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import com.literp.test.TestDatabase
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
@@ -42,6 +43,115 @@ class OrderProcessRepositoryTransactionTest {
         }
         if (::coreVertx.isInitialized) {
             coreVertx.close().toCompletionStage().toCompletableFuture().get()
+        }
+    }
+
+    @Test
+    fun attributedDraftPersistsContextAndRollsBackOrderOnContextFailure() {
+        val suffix = suffix()
+        val locationId = createLocation("POSCTX-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSCTX-$suffix")
+        val actorSubject = "pos-draft-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        var attributedOrderId: String? = null
+        var contextlessOrderId: String? = null
+
+        try {
+            val attributed = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                "attributed draft",
+                shiftId,
+                actorSubject
+            ).blockingGet()
+            attributedOrderId = attributed.getString("salesOrderId")
+            val posContext = attributed.getJsonObject("posContext")
+            assertEquals(shiftId, posContext.getString("shiftId"))
+            assertEquals(actorSubject, posContext.getString("draftOperatorId"))
+            assertEquals(1L, countLong(
+                "SELECT COUNT(*) AS cnt FROM pos_order_context WHERE sales_order_id = $1",
+                attributedOrderId
+            ))
+
+            val readBack = orderRepository.getSalesOrder(attributedOrderId).blockingGet()
+            assertEquals(shiftId, readBack.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(actorSubject, readBack.getJsonObject("posContext").getString("draftOperatorId"))
+
+            val contextless = orderRepository
+                .createSalesOrderDraft("POS", locationId, null, "USD", "legacy draft")
+                .blockingGet()
+            contextlessOrderId = contextless.getString("salesOrderId")
+            assertEquals(null, contextless.getValue("posContext"))
+
+            val orderCountBeforeFailure = countLong(
+                "SELECT COUNT(*) AS cnt FROM sales_order WHERE location_id = $1",
+                locationId
+            )
+            installContextFailureTrigger(suffix)
+            assertFailsWithMessage("forced POS context failure") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS",
+                    locationId,
+                    null,
+                    "USD",
+                    "must roll back",
+                    shiftId,
+                    actorSubject
+                ).blockingGet()
+            }
+            assertEquals(
+                orderCountBeforeFailure,
+                countLong("SELECT COUNT(*) AS cnt FROM sales_order WHERE location_id = $1", locationId)
+            )
+        } finally {
+            cleanupTrigger("trg_fail_pos_context_$suffix", "fn_fail_pos_context_$suffix")
+            contextlessOrderId?.let(::cleanupOrderGraph)
+            attributedOrderId?.let(::cleanupOrderGraph)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun attributedDraftRejectsForeignClosedOwnerAndCurrencyContexts() {
+        val suffix = suffix()
+        val locationId = createLocation("POSRULE-$suffix").getString("locationId")
+        val foreignLocationId = createLocation("POSFOREIGN-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSRULE-$suffix")
+        val actorSubject = "pos-rule-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val closedShiftId = createShift(terminalId, actorSubject, "USD", "CLOSED", 2)
+
+        try {
+            assertFailsWithMessage("POS shift owner mismatch") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", locationId, null, "USD", null, shiftId, "different-owner"
+                ).blockingGet()
+            }
+            assertFailsWithMessage("POS shift is not open") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", locationId, null, "USD", null, closedShiftId, actorSubject
+                ).blockingGet()
+            }
+            assertFailsWithMessage("POS shift currency does not match") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", locationId, null, "EUR", null, shiftId, actorSubject
+                ).blockingGet()
+            }
+            assertFailsWithMessage(ErrorCodes.fromStatus(404)) {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", foreignLocationId, null, "USD", null, shiftId, actorSubject
+                ).blockingGet()
+            }
+        } finally {
+            deleteShift(closedShiftId)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(foreignLocationId)
+            deleteLocation(locationId)
         }
     }
 
@@ -580,6 +690,82 @@ class OrderProcessRepositoryTransactionTest {
         )
     }
 
+    private fun createTerminal(locationId: String, terminalCode: String): String {
+        val terminalId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO pos_terminal (
+                terminal_id, location_id, terminal_code, device_name, is_active, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, true, NOW(), NOW())
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.of(terminalId, locationId, terminalCode, "Repository test terminal $terminalCode")
+        ).blockingGet()
+        return terminalId
+    }
+
+    private fun createShift(
+        terminalId: String,
+        operatorId: String,
+        currency: String,
+        status: String,
+        shiftNumber: Int = 1
+    ): String {
+        val shiftId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO pos_shift (
+                shift_id, terminal_id, operator_id, shift_date, shift_number,
+                opened_at, opening_balance, status, created_at, currency, is_reconcilable
+            )
+            VALUES ($1, $2, $3, CURRENT_DATE, $4, NOW(), 0, $5::shift_status, NOW(), $6, true)
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.tuple()
+                .addString(shiftId)
+                .addString(terminalId)
+                .addString(operatorId)
+                .addInteger(shiftNumber)
+                .addString(status)
+                .addString(currency)
+        ).blockingGet()
+        return shiftId
+    }
+
+    private fun deleteShift(shiftId: String) {
+        pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
+            .rxExecute(Tuple.of(shiftId))
+            .blockingGet()
+    }
+
+    private fun deleteTerminal(terminalId: String) {
+        pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+            .rxExecute(Tuple.of(terminalId))
+            .blockingGet()
+    }
+
+    private fun installContextFailureTrigger(suffix: String) {
+        execSql(
+            """
+            CREATE OR REPLACE FUNCTION fn_fail_pos_context_$suffix()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'forced POS context failure';
+            END;
+            $$ LANGUAGE plpgsql;
+            """.trimIndent()
+        )
+        execSql(
+            """
+            CREATE TRIGGER trg_fail_pos_context_$suffix
+            BEFORE INSERT ON pos_order_context
+            FOR EACH ROW
+            EXECUTE FUNCTION fn_fail_pos_context_$suffix();
+            """.trimIndent()
+        )
+    }
+
     private fun createLocation(code: String): JsonObject {
         return locationRepository.createLocation(code, "Test Location $code", "WAREHOUSE", true, JsonObject()).blockingGet()
     }
@@ -690,6 +876,7 @@ class OrderProcessRepositoryTransactionTest {
         runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON inventory_reservation;") }
         runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON inventory_movement;") }
         runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON sales_order_line;") }
+        runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON pos_order_context;") }
         runCatching { execSql("DROP FUNCTION IF EXISTS $functionName();") }
     }
 
@@ -750,6 +937,7 @@ class OrderProcessRepositoryTransactionTest {
     }
 
     private fun cleanupOrderGraph(orderId: String) {
+        execSql("DELETE FROM pos_order_context WHERE sales_order_id = '$orderId';")
         execSql("DELETE FROM payment WHERE sales_order_id = '$orderId';")
         cleanupInventoryMovements(orderId)
         execSql("DELETE FROM sales_order WHERE sales_order_id = '$orderId';")

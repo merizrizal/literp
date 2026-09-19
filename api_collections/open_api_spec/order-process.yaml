@@ -89,6 +89,8 @@ paths:
                     $ref: '#/components/schemas/SalesOrder'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -407,6 +409,13 @@ components:
         notes: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        posContext:
+          type: object
+          nullable: true
+          readOnly: true
+          properties:
+            shiftId: { type: string }
+            draftOperatorId: { type: string }
 
     SalesOrderLine:
       type: object
@@ -460,6 +469,13 @@ components:
         notes:
           type: string
           nullable: true
+        posContext:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [shiftId]
+          properties:
+            shiftId: { type: string }
 
     AddSalesOrderLineRequest:
       type: object

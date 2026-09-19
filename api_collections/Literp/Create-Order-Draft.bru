@@ -30,6 +30,12 @@ script:post-response {
   }
 }
 
+docs {
+  operationId: createSalesOrderDraft
+  request: POST /api/v1/orders
+  note: Optional POS attribution uses posContext.shiftId with an open shift owned by the authenticated human principal.
+}
+
 settings {
   encodeUrl: true
   timeout: 0

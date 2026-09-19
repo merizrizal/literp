@@ -160,6 +160,9 @@
           "400": {
             "$ref": "#/components/responses/BadRequest"
           },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -709,6 +712,19 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "posContext": {
+            "type": "object",
+            "nullable": true,
+            "readOnly": true,
+            "properties": {
+              "shiftId": {
+                "type": "string"
+              },
+              "draftOperatorId": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -812,6 +828,19 @@
           "notes": {
             "type": "string",
             "nullable": true
+          },
+          "posContext": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": false,
+            "required": [
+              "shiftId"
+            ],
+            "properties": {
+              "shiftId": {
+                "type": "string"
+              }
+            }
           }
         }
       },

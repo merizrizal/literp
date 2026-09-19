@@ -28,14 +28,14 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         val rawOrder = parts.getOrNull(1)?.trim()?.uppercase() ?: "DESC"
 
         val sortField = when (rawField.lowercase()) {
-            "ordernumber", "order_number" -> "order_number"
-            "orderdate", "order_date" -> "order_date"
-            "saleschannel", "sales_channel" -> "sales_channel"
-            "status" -> "status"
-            "totalamount", "total_amount" -> "total_amount"
-            "createdat", "created_at" -> "created_at"
-            "updatedat", "updated_at" -> "updated_at"
-            else -> "order_date"
+            "ordernumber", "order_number" -> "sales_order.order_number"
+            "orderdate", "order_date" -> "sales_order.order_date"
+            "saleschannel", "sales_channel" -> "sales_order.sales_channel"
+            "status" -> "sales_order.status"
+            "totalamount", "total_amount" -> "sales_order.total_amount"
+            "createdat", "created_at" -> "sales_order.created_at"
+            "updatedat", "updated_at" -> "sales_order.updated_at"
+            else -> "sales_order.order_date"
         }
         val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "DESC"
 
@@ -57,8 +57,15 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
 
         val countQuery = "SELECT COUNT(*) AS total FROM sales_order $whereClause"
         val dataQuery = """
-            SELECT sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at
+            SELECT sales_order.sales_order_id, sales_order.order_number, sales_order.order_date,
+                sales_order.sales_channel, sales_order.customer_id, sales_order.location_id,
+                sales_order.status, sales_order.total_amount, sales_order.currency, sales_order.notes,
+                sales_order.created_at, sales_order.updated_at,
+                pos_order_context.shift_id AS pos_shift_id,
+                pos_order_context.draft_operator_id AS pos_draft_operator_id
             FROM sales_order
+            LEFT JOIN pos_order_context
+                ON pos_order_context.sales_order_id = sales_order.sales_order_id
             $whereClause
             ORDER BY $sortField $sortOrder
             LIMIT $size OFFSET $offset
@@ -73,7 +80,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                 pool.preparedQuery(dataQuery).rxExecute(Tuple.from(params))
             }
             .map { result ->
-                val data = result.map { row -> mapSalesOrderRow(row) }
+                val data = result.map { row -> mapSalesOrderWithContext(row) }
                 JsonObject()
                     .put("data", data)
                     .put(
@@ -117,11 +124,110 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
+    fun createAttributedSalesOrderDraft(
+        salesChannel: String,
+        locationId: String,
+        customerId: String?,
+        currency: String,
+        notes: String?,
+        shiftId: String,
+        actorSubject: String
+    ): Single<JsonObject> {
+        val normalizedSalesChannel = salesChannel.trim().uppercase()
+        val normalizedLocationId = locationId.trim()
+        val normalizedCurrency = currency.trim().uppercase()
+        val normalizedShiftId = shiftId.trim()
+        val normalizedActorSubject = actorSubject.trim()
+
+        if (normalizedSalesChannel != "POS") {
+            return Single.error(PosOrderValidation("POS attribution requires salesChannel=POS"))
+        }
+        if (normalizedLocationId.isBlank()) {
+            return Single.error(PosOrderValidation("locationId is required"))
+        }
+        if (normalizedCurrency.isBlank()) {
+            return Single.error(PosOrderValidation("currency is required"))
+        }
+        if (normalizedShiftId.isBlank()) {
+            return Single.error(PosOrderValidation("posContext.shiftId is required"))
+        }
+        if (normalizedActorSubject.isBlank()) {
+            return Single.error(PosOrderValidation("actorSubject is required"))
+        }
+        if (normalizedActorSubject.length > 255) {
+            return Single.error(PosOrderValidation("actorSubject must be at most 255 characters"))
+        }
+
+        val normalizedCustomerId = customerId?.trim()?.takeIf { it.isNotBlank() }
+        val insertOrderQuery = """
+            INSERT INTO sales_order (
+                sales_order_id, order_number, order_date, sales_channel, customer_id,
+                location_id, status, total_amount, currency, notes, created_at, updated_at
+            )
+            VALUES ($1, $2, NOW(), $3, $4, $5, 'DRAFT', 0, $6, $7, NOW(), NOW())
+            RETURNING sales_order_id, order_number, order_date, sales_channel, customer_id,
+                location_id, status, total_amount, currency, notes, created_at, updated_at
+        """.trimIndent()
+        val insertContextQuery = """
+            INSERT INTO pos_order_context (sales_order_id, shift_id, draft_operator_id, created_at)
+            VALUES ($1, $2, $3, NOW())
+        """.trimIndent()
+
+        return inTransaction { connection ->
+            lockPosDraftContext(
+                connection,
+                normalizedShiftId,
+                normalizedLocationId,
+                normalizedCurrency,
+                normalizedActorSubject
+            ).flatMap { context ->
+                generateOrderNumber(connection).flatMap { orderNumber ->
+                    val orderId = UUID.randomUUID().toString()
+                    connection.preparedQuery(insertOrderQuery)
+                        .rxExecute(
+                            Tuple.tuple()
+                                .addString(orderId)
+                                .addString(orderNumber)
+                                .addString(normalizedSalesChannel)
+                                .addValue(normalizedCustomerId)
+                                .addString(normalizedLocationId)
+                                .addString(normalizedCurrency)
+                                .addValue(notes)
+                        )
+                        .flatMap { orderResult ->
+                            connection.preparedQuery(insertContextQuery)
+                                .rxExecute(
+                                    Tuple.tuple()
+                                        .addString(orderId)
+                                        .addString(context.shiftId)
+                                        .addString(context.draftOperatorId)
+                                )
+                                .map {
+                                    mapSalesOrderRow(
+                                        orderResult.first(),
+                                        JsonObject()
+                                            .put("shiftId", context.shiftId)
+                                            .put("draftOperatorId", context.draftOperatorId)
+                                    )
+                                }
+                        }
+                }
+            }
+        }
+    }
+
     fun getSalesOrder(orderId: String): Single<JsonObject> {
         val orderQuery = """
-            SELECT sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at
+            SELECT sales_order.sales_order_id, sales_order.order_number, sales_order.order_date,
+                sales_order.sales_channel, sales_order.customer_id, sales_order.location_id,
+                sales_order.status, sales_order.total_amount, sales_order.currency, sales_order.notes,
+                sales_order.created_at, sales_order.updated_at,
+                pos_order_context.shift_id AS pos_shift_id,
+                pos_order_context.draft_operator_id AS pos_draft_operator_id
             FROM sales_order
-            WHERE sales_order_id = $1
+            LEFT JOIN pos_order_context
+                ON pos_order_context.sales_order_id = sales_order.sales_order_id
+            WHERE sales_order.sales_order_id = $1
         """.trimIndent()
         val linesQuery = """
             SELECT line_id, sales_order_id, product_id, sku, quantity_ordered, quantity_fulfilled, unit_price, line_total, status, created_at, updated_at
@@ -148,7 +254,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                 if (orderResult.size() == 0) {
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
-                    val order = mapSalesOrderRow(orderResult.first())
+                    val order = mapSalesOrderWithContext(orderResult.first())
                     pool.preparedQuery(linesQuery)
                         .rxExecute(Tuple.of(orderId))
                         .flatMap { linesResult ->
@@ -843,7 +949,68 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
-    private fun mapSalesOrderRow(row: Row): JsonObject {
+    private fun lockPosDraftContext(
+        connection: SqlConnection,
+        shiftId: String,
+        locationId: String,
+        currency: String,
+        actorSubject: String
+    ): Single<PosDraftContext> {
+        val terminalQuery = """
+            SELECT t.terminal_id, t.location_id, t.is_active
+            FROM pos_terminal t
+            JOIN pos_shift s ON s.terminal_id = t.terminal_id
+            WHERE s.shift_id = $1
+            FOR UPDATE OF t
+        """.trimIndent()
+        val shiftQuery = """
+            SELECT shift_id, status, operator_id, currency
+            FROM pos_shift
+            WHERE shift_id = $1
+            FOR UPDATE
+        """.trimIndent()
+
+        return connection.preparedQuery(terminalQuery)
+            .rxExecute(Tuple.of(shiftId))
+            .flatMap { terminalResult ->
+                if (terminalResult.size() == 0) {
+                    Single.error<PosDraftContext>(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    val terminalRow = terminalResult.first()
+                    when {
+                        terminalRow.getString("location_id") != locationId ->
+                            Single.error(Exception(ErrorCodes.fromStatus(404)))
+                        !terminalRow.getBoolean("is_active") ->
+                            Single.error(PosOrderConflict("POS terminal is inactive"))
+                        else -> connection.preparedQuery(shiftQuery)
+                            .rxExecute(Tuple.of(shiftId))
+                            .flatMap { shiftResult ->
+                                if (shiftResult.size() == 0) {
+                                    Single.error<PosDraftContext>(Exception(ErrorCodes.fromStatus(404)))
+                                } else {
+                                    val shiftRow = shiftResult.first()
+                                    when {
+                                        shiftRow.getString("operator_id") != actorSubject ->
+                                            Single.error(PosOrderScopeViolation("POS shift owner mismatch"))
+                                        shiftRow.getString("status") != "OPEN" ->
+                                            Single.error(PosOrderConflict("POS shift is not open"))
+                                        shiftRow.getString("currency") != currency ->
+                                            Single.error(PosOrderConflict("POS shift currency does not match order currency"))
+                                        else -> Single.just(
+                                            PosDraftContext(
+                                                shiftId = shiftRow.getString("shift_id"),
+                                                draftOperatorId = actorSubject
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
+    }
+
+    private fun mapSalesOrderRow(row: Row, posContext: JsonObject? = null): JsonObject {
         return JsonObject()
             .put("salesOrderId", row.getString("sales_order_id"))
             .put("orderNumber", row.getString("order_number"))
@@ -857,6 +1024,17 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .put("notes", row.getString("notes"))
             .put("createdAt", row.getLocalDateTime("created_at")?.toString())
             .put("updatedAt", row.getLocalDateTime("updated_at")?.toString())
+            .put("posContext", posContext)
+    }
+
+    private fun mapSalesOrderWithContext(row: Row): JsonObject {
+        val shiftId = row.getString("pos_shift_id")
+        val posContext = shiftId?.let {
+            JsonObject()
+                .put("shiftId", it)
+                .put("draftOperatorId", row.getString("pos_draft_operator_id"))
+        }
+        return mapSalesOrderRow(row, posContext)
     }
 
     private fun mapSalesOrderLineRow(row: Row): JsonObject {
@@ -1059,6 +1237,24 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             }
     }
 
+    private data class PosDraftContext(
+        val shiftId: String,
+        val draftOperatorId: String
+    )
+
+    private fun generateOrderNumber(connection: SqlConnection): Single<String> {
+        val sequenceQuery = "SELECT nextval('sales_order_number_seq') AS sequence_value"
+        return connection.preparedQuery(sequenceQuery)
+            .rxExecute(Tuple.tuple())
+            .map { result ->
+                val sequenceValue = result.first().getLong("sequence_value")
+                    ?: throw IllegalStateException("sales_order_number_seq did not return a value")
+                val epoch = LocalDateTime.now().toString().replace(":", "").replace("-", "").replace(".", "")
+                val suffix = sequenceValue.toString().padStart(6, '0')
+                "SO-$epoch-$suffix"
+            }
+    }
+
     private fun generateOrderNumber(): Single<String> {
         val sequenceQuery = "SELECT nextval('sales_order_number_seq') AS sequence_value"
         return pool.preparedQuery(sequenceQuery)
@@ -1072,3 +1268,9 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             }
     }
 }
+
+class PosOrderScopeViolation(message: String) : IllegalArgumentException(message)
+
+class PosOrderValidation(message: String) : IllegalArgumentException(message)
+
+class PosOrderConflict(message: String) : IllegalStateException(message)

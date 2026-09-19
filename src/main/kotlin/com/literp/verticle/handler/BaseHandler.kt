@@ -4,6 +4,9 @@ import com.literp.common.ErrorCodes
 import com.literp.repository.PosOperationsConflict
 import com.literp.repository.PosOperationsScopeViolation
 import com.literp.repository.PosOperationsValidation
+import com.literp.repository.PosOrderConflict
+import com.literp.repository.PosOrderScopeViolation
+import com.literp.repository.PosOrderValidation
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.ext.web.RoutingContext
@@ -144,6 +147,12 @@ open class BaseHandler(clazz: Class<*>) {
         conflictMessage: String? = null
     ) {
         when {
+            error is PosOrderScopeViolation ->
+                putErrorResponse(context, 403, "Forbidden", ErrorCodes.FORBIDDEN)
+            error is PosOrderValidation ->
+                putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
+            error is PosOrderConflict ->
+                putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
             error is PosOperationsScopeViolation ->
                 putErrorResponse(context, 403, "Forbidden", ErrorCodes.FORBIDDEN)
             error is PosOperationsValidation ->
