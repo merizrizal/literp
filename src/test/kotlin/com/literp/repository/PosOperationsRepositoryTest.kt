@@ -385,6 +385,51 @@ class PosOperationsRepositoryTest {
     }
 
     @Test
+    fun shiftClosingRejectsLegacyUnreconcilableStateWithoutClaimingACommand() {
+        val suffix = suffix()
+        val locationId = createLocation("PSL-CLOSE-$suffix")
+        val terminalId = createTerminal(locationId, "PSL-CLOSE-1-$suffix", true)
+        val actorSubject = "legacy-shift-owner-$suffix"
+        val shiftId = createOpenShift(terminalId, actorSubject)
+        val organizationId = "legacy-close-org-$suffix"
+        val idempotencyKey = "legacy-close-$suffix"
+
+        try {
+            assertFailureMessage {
+                repository.closePosShift(
+                    shiftId = shiftId,
+                    closingBalance = "0.00",
+                    idempotencyKey = idempotencyKey,
+                    actorSubject = actorSubject,
+                    organizationId = organizationId,
+                    authorizedLocationIds = setOf(locationId)
+                ).blockingGet()
+            }.also { assertEquals("POS shift is not reconciliable", it) }
+            assertEquals(
+                0L,
+                commandLedgerCount(
+                    organizationId,
+                    actorSubject,
+                    shiftId,
+                    idempotencyKey,
+                    operationId = "closePosShift"
+                )
+            )
+        } finally {
+            deleteCommandLedger(
+                organizationId,
+                actorSubject,
+                shiftId,
+                idempotencyKey,
+                operationId = "closePosShift"
+            )
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
     fun shiftOpeningRejectsExcessPrecisionAndNonUppercaseCurrency() {
         assertFailureMessage {
             repository.openPosShift(

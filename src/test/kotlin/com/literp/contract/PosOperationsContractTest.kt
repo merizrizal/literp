@@ -67,7 +67,7 @@ class PosOperationsContractTest {
     }
 
     @Test
-    fun everyPosOperationHasOneDocumentedBrunoPlaceholder() {
+    fun everyPosOperationHasOneDocumentedBrunoRequest() {
         val collectionDir = Path.of("api_collections/Literp")
         val requests = brunoRequests()
         val expectedFiles = requests.map { it.fileName }.sorted()
@@ -169,6 +169,15 @@ class PosOperationsContractTest {
             terminalId: String,
             authorizedLocationIds: JsonArray
         ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Current shift lookup is not exercised by this placeholder test")
+
+        override fun closePosShift(
+            shiftId: String,
+            closingBalance: String,
+            idempotencyKey: String,
+            actorSubject: String,
+            organizationId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Shift closing is not exercised by this placeholder test")
     }
 
     private fun createRouter(handler: PosOperationsHandler): Router = Router.router(rxVertx).apply {
@@ -185,7 +194,6 @@ class PosOperationsContractTest {
     }
 
     private fun placeholderRequests(): List<PlaceholderRequest> = listOf(
-        PlaceholderRequest("closePosShift", "POST", "/api/v1/pos/shifts/shift-1/close"),
         PlaceholderRequest("getPosReceiptByNumber", "GET", "/api/v1/pos/receipts/by-number/receipt-1"),
         PlaceholderRequest("listPosReceiptsBySalesOrder", "GET", "/api/v1/pos/orders/order-1/receipts")
     )

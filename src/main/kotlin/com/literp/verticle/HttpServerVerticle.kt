@@ -405,6 +405,7 @@ class HttpServerVerticle(
             .addHandler(posOperationsHandler::getCurrentPosShift)
         routerBuilder.getRoute("closePosShift")
             .addHandler(securityHandler.authorizeOperation("closePosShift"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::closePosShift)
         routerBuilder.getRoute("getPosReceiptByNumber")
             .addHandler(securityHandler.authorizeOperation("getPosReceiptByNumber"))

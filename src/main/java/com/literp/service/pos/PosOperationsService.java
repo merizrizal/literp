@@ -55,6 +55,15 @@ public interface PosOperationsService {
 
     Future<JsonObject> getCurrentPosShift(String terminalId, JsonArray authorizedLocationIds);
 
+    Future<JsonObject> closePosShift(
+        String shiftId,
+        String closingBalance,
+        String idempotencyKey,
+        String actorSubject,
+        String organizationId,
+        JsonArray authorizedLocationIds
+    );
+
     static PosOperationsService createProxy(Vertx vertx) {
         return new PosOperationsServiceVertxEBProxy(vertx, ADDRESS);
     }

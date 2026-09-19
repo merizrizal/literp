@@ -21,6 +21,7 @@ class OrderProcessRepositoryTransactionTest {
     private lateinit var rxVertx: RxVertx
     private lateinit var pool: Pool
     private lateinit var orderRepository: OrderProcessRepository
+    private lateinit var posOperationsRepository: PosOperationsRepository
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
 
@@ -32,6 +33,7 @@ class OrderProcessRepositoryTransactionTest {
         TestDatabase.assumeAvailable(pool)
 
         orderRepository = OrderProcessRepository(pool)
+        posOperationsRepository = PosOperationsRepository(pool)
         productRepository = ProductRepository(pool)
         locationRepository = LocationRepository(pool)
     }
@@ -162,6 +164,8 @@ class OrderProcessRepositoryTransactionTest {
         val terminalId = createTerminal(locationId, "POSCMD-$suffix")
         val actorSubject = "pos-command-owner-$suffix"
         val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val closeKey = "POSCMD-CLOSE-$suffix"
+        val closeOrganizationId = "repo-pos-close-$suffix"
         val stockReference = "POSCMD-STOCK-$suffix"
         var orderId: String? = null
 
@@ -233,9 +237,38 @@ class OrderProcessRepositoryTransactionTest {
                 assertEquals(shiftId, queryString("SELECT shift_id FROM pos_payment_context WHERE payment_id = $1", paymentId, "shift_id"))
                 assertEquals(actorSubject, queryString("SELECT capture_operator_id FROM pos_payment_context WHERE payment_id = $1", paymentId, "capture_operator_id"))
 
-                pool.preparedQuery("UPDATE pos_shift SET status = 'CLOSED' WHERE shift_id = $1")
-                    .rxExecute(Tuple.of(shiftId))
-                    .blockingGet()
+                val closed = posOperationsRepository.closePosShift(
+                    shiftId = shiftId,
+                    closingBalance = "25.00",
+                    idempotencyKey = closeKey,
+                    actorSubject = actorSubject,
+                    organizationId = closeOrganizationId,
+                    authorizedLocationIds = setOf(locationId)
+                ).blockingGet()
+                assertEquals("CLOSED", closed.getString("status"))
+                assertEquals("30.00".toBigDecimal(), closed.getValue("expectedCash").toString().toBigDecimal())
+                assertEquals("-5.00".toBigDecimal(), closed.getValue("cashVariance").toString().toBigDecimal())
+                assertEquals(actorSubject, closed.getString("closedBy"))
+
+                val closeReplay = posOperationsRepository.closePosShift(
+                    shiftId = shiftId,
+                    closingBalance = "25.00",
+                    idempotencyKey = closeKey,
+                    actorSubject = actorSubject,
+                    organizationId = closeOrganizationId,
+                    authorizedLocationIds = setOf(locationId)
+                ).blockingGet()
+                assertEquals(closed.getString("closedAt"), closeReplay.getString("closedAt"))
+                assertFailsWithMessage("Idempotency key conflict") {
+                    posOperationsRepository.closePosShift(
+                        shiftId = shiftId,
+                        closingBalance = "26.00",
+                        idempotencyKey = closeKey,
+                        actorSubject = actorSubject,
+                        organizationId = closeOrganizationId,
+                        authorizedLocationIds = setOf(locationId)
+                    ).blockingGet()
+                }
 
                 val confirmedReplay = orderRepository.confirmSalesOrderWithActor(
                     orderId,
@@ -287,6 +320,13 @@ class OrderProcessRepositoryTransactionTest {
             }
         } finally {
             orderId?.let(::cleanupOrderGraph)
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'closePosShift'
+                  AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(closeOrganizationId, actorSubject, shiftId, closeKey)).blockingGet()
             deleteShift(shiftId)
             deleteTerminal(terminalId)
             deleteLocation(locationId)
@@ -419,6 +459,138 @@ class OrderProcessRepositoryTransactionTest {
             orderId?.let(::cleanupOrderGraph)
             cleanupInventoryMovements(stockReference)
             productId?.let(::deleteProduct)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun concurrentAttributedCaptureAndCloseProduceOneStableSnapshot() {
+        val suffix = suffix()
+        val locationId = createLocation("POSCLOSE-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSCLOSE-$suffix")
+        val actorSubject = "pos-close-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val stockReference = "POSCLOSE-STOCK-$suffix"
+        val closeKey = "POSCLOSE-CLOSE-$suffix"
+        val closeOrganizationId = "repo-pos-concurrent-close-$suffix"
+        var orderId: String? = null
+        var productId: String? = null
+
+        try {
+            orderId = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                null,
+                shiftId,
+                actorSubject
+            ).blockingGet().getString("salesOrderId")
+            val product = createProduct("POSCLOSE-PRODUCT-$suffix")
+            productId = product.getString("productId")
+            insertInventoryMovement(
+                productId,
+                "POSCLOSE-PRODUCT-$suffix",
+                "IN",
+                null,
+                locationId,
+                10.toBigDecimal(),
+                stockReference
+            )
+            val attributedOrderId = requireNotNull(orderId)
+            orderRepository.addSalesOrderLineWithActor(
+                attributedOrderId,
+                productId,
+                null,
+                1.toBigDecimal(),
+                10.toBigDecimal(),
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+            orderRepository.confirmSalesOrderWithActor(
+                attributedOrderId,
+                "POSCLOSE-CONFIRM-$suffix",
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+
+            val ready = java.util.concurrent.CountDownLatch(2)
+            val start = java.util.concurrent.CountDownLatch(1)
+            val capture = java.util.concurrent.CompletableFuture.supplyAsync {
+                ready.countDown()
+                check(start.await(5, java.util.concurrent.TimeUnit.SECONDS)) { "Capture did not receive the start signal" }
+                runCatching {
+                    orderRepository.capturePaymentWithActor(
+                        attributedOrderId,
+                        "CASH",
+                        10.toBigDecimal(),
+                        "POSCLOSE-CASH-$suffix",
+                        "POSCLOSE-PAY-$suffix",
+                        actorSubject,
+                        true,
+                        true
+                    ).blockingGet()
+                }
+            }
+            val close = java.util.concurrent.CompletableFuture.supplyAsync {
+                ready.countDown()
+                check(start.await(5, java.util.concurrent.TimeUnit.SECONDS)) { "Close did not receive the start signal" }
+                runCatching {
+                    posOperationsRepository.closePosShift(
+                        shiftId = shiftId,
+                        closingBalance = "10.00",
+                        idempotencyKey = closeKey,
+                        actorSubject = actorSubject,
+                        organizationId = closeOrganizationId,
+                        authorizedLocationIds = setOf(locationId)
+                    ).blockingGet()
+                }
+            }
+            assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS), "Both commands must be ready before release")
+            start.countDown()
+
+            val captureResult = capture.get()
+            val closeResult = close.get()
+            assertTrue(closeResult.isSuccess, closeResult.exceptionOrNull()?.message ?: "Close failed")
+            val closed = closeResult.getOrThrow()
+            val captured = captureResult.isSuccess
+            if (!captured) {
+                val message = captureResult.exceptionOrNull()?.cause?.message
+                    ?: captureResult.exceptionOrNull()?.message.orEmpty()
+                assertTrue(message.contains("POS shift is not open"), "Unexpected capture failure: $message")
+            }
+
+            assertEquals("CLOSED", closed.getString("status"))
+            assertEquals(
+                if (captured) "10.00".toBigDecimal() else "0.00".toBigDecimal(),
+                closed.getValue("expectedCash").toString().toBigDecimal()
+            )
+            assertEquals(
+                if (captured) 1L else 0L,
+                countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", attributedOrderId)
+            )
+            assertEquals(
+                if (captured) 1L else 0L,
+                countLong(
+                    "SELECT COUNT(*) AS cnt FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)",
+                    attributedOrderId
+                )
+            )
+        } finally {
+            orderId?.let(::cleanupOrderGraph)
+            cleanupInventoryMovements(stockReference)
+            productId?.let(::deleteProduct)
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'closePosShift'
+                  AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(closeOrganizationId, actorSubject, shiftId, closeKey)).blockingGet()
             deleteShift(shiftId)
             deleteTerminal(terminalId)
             deleteLocation(locationId)

@@ -99,6 +99,22 @@ class PosOperationsServiceImpl(
         authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
     ).toVertxFuture()
 
+    override fun closePosShift(
+        shiftId: String,
+        closingBalance: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        organizationId: String,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.closePosShift(
+        shiftId = shiftId,
+        closingBalance = closingBalance,
+        idempotencyKey = idempotencyKey,
+        actorSubject = actorSubject,
+        organizationId = organizationId,
+        authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
     private fun JsonArray.toAuthorizedLocationIds(): Set<String> =
         (0 until size())
             .mapNotNull { getString(it)?.trim()?.takeIf(String::isNotBlank) }

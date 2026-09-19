@@ -237,7 +237,44 @@ class PosOperationsHandler(
     }
 
     fun closePosShift(context: RoutingContext) {
-        respondNotImplemented(context)
+        val shiftId = context.pathParam("shiftId")?.trim()
+        if (shiftId.isNullOrBlank()) {
+            putErrorResponse(context, 400, "shiftId is required")
+            return
+        }
+
+        val body = requestBody(context)
+        if (hasUnsupportedFields(context, body, CLOSE_SHIFT_FIELDS)) return
+        val closingBalance = body?.getValue("closingBalance")?.toString()
+        val idempotencyKey = context.request().getHeader("Idempotency-Key")?.trim()
+        if (closingBalance.isNullOrBlank()) {
+            putErrorResponse(context, 400, "closingBalance is required")
+            return
+        }
+        if (idempotencyKey.isNullOrBlank()) {
+            putErrorResponse(context, 400, "Idempotency-Key is required")
+            return
+        }
+
+        val authorizedLocationIds = authorizedLocationIds(context) ?: return
+        val principal = authenticatedPrincipal(context) ?: return
+        posOperationsService.closePosShift(
+            shiftId,
+            closingBalance,
+            idempotencyKey,
+            principal.subject,
+            principal.organizationId,
+            JsonArray(authorizedLocationIds.toList())
+        ).onSuccess { result ->
+            putSuccessResponse(context, 200, result)
+        }.onFailure { error ->
+            putMappedErrorResponse(
+                context = context,
+                error = error,
+                internalErrorMessage = "Failed to close POS shift",
+                notFoundMessage = "POS shift not found"
+            )
+        }
     }
 
     fun getPosReceiptByNumber(context: RoutingContext) {
@@ -304,5 +341,6 @@ class PosOperationsHandler(
         val CREATE_TERMINAL_FIELDS = setOf("locationId", "terminalCode", "deviceName")
         val UPDATE_TERMINAL_FIELDS = setOf("terminalCode", "deviceName")
         val OPEN_SHIFT_FIELDS = setOf("openingBalance", "currency")
+        val CLOSE_SHIFT_FIELDS = setOf("closingBalance")
     }
 }

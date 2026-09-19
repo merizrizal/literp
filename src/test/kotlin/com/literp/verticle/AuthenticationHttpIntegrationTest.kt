@@ -217,14 +217,6 @@ class AuthenticationHttpIntegrationTest {
 
         val requests = listOf(
             PosPlaceholderRequest(
-                "POST",
-                "/api/v1/pos/shifts/$shiftId/close",
-                "pos.shift.close",
-                JsonObject().put("closingBalance", BigDecimal("275.00")),
-                mapOf("Idempotency-Key" to "pos-close-$shiftId"),
-                principalKind = "human"
-            ),
-            PosPlaceholderRequest(
                 "GET",
                 "/api/v1/pos/receipts/by-number/receipt-1",
                 "pos.receipt.read"
@@ -415,6 +407,7 @@ class AuthenticationHttpIntegrationTest {
         val terminalId = createPosTerminal(locationId, "PSS-1-$suffix")
         val actorSubject = "http-shift-owner-$suffix"
         val idempotencyKey = "http-open-shift-$suffix"
+        val closeIdempotencyKey = "http-close-shift-$suffix"
         val openingBody = JsonObject()
             .put("openingBalance", BigDecimal("250.00"))
             .put("currency", "USD")
@@ -479,6 +472,93 @@ class AuthenticationHttpIntegrationTest {
             assertEquals(409, changedReplay.status)
             HttpTestSupport.assertErrorEnvelope(requireNotNull(changedReplay.json), 409, ErrorCodes.CONFLICT)
 
+            val closingBody = JsonObject().put("closingBalance", BigDecimal("245.00"))
+            val closeHeaders = securityFixture.authorization(
+                capabilities = setOf("pos.shift.close"),
+                locationIds = setOf(locationId),
+                operator = false,
+                principalKind = "human",
+                subject = actorSubject
+            ) + ("Idempotency-Key" to closeIdempotencyKey)
+            val ownerMismatch = http.request(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                closingBody,
+                securityFixture.authorization(
+                    capabilities = setOf("pos.shift.close"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "human",
+                    subject = "different-shift-owner-$suffix"
+                ) + ("Idempotency-Key" to "owner-mismatch-close-$suffix")
+            )
+            assertEquals(403, ownerMismatch.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(ownerMismatch.json), 403, ErrorCodes.FORBIDDEN)
+
+            val closed = http.expect(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                200,
+                closingBody,
+                closeHeaders
+            )
+            val closedData = requireNotNull(closed.json).getJsonObject("data")
+            assertEquals("CLOSED", closedData.getString("status"))
+            assertEquals(actorSubject, closedData.getString("closedBy"))
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("expectedCash").toString()).compareTo(BigDecimal("250.00"))
+            )
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("cashVariance").toString()).compareTo(BigDecimal("-5.00"))
+            )
+            assertNotNull(closedData.getString("closedAt"))
+
+            val closeReplay = http.expect(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                200,
+                closingBody,
+                closeHeaders
+            )
+            assertEquals(
+                closedData.getString("closedAt"),
+                requireNotNull(closeReplay.json).getJsonObject("data").getString("closedAt")
+            )
+
+            val changedCloseReplay = http.request(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                closingBody.copy().put("closingBalance", BigDecimal("246.00")),
+                closeHeaders
+            )
+            assertEquals(409, changedCloseReplay.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(changedCloseReplay.json), 409, ErrorCodes.CONFLICT)
+
+            val newCloseKey = http.request(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                closingBody,
+                closeHeaders + ("Idempotency-Key" to "new-close-key-$suffix")
+            )
+            assertEquals(409, newCloseKey.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(newCloseKey.json), 409, ErrorCodes.CONFLICT)
+
+            val currentAfterClose = http.request(
+                "GET",
+                "/api/v1/pos/terminals/$terminalId/current-shift",
+                headers = securityFixture.authorization(
+                    capabilities = setOf("pos.shift.read"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            assertEquals(404, currentAfterClose.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(currentAfterClose.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
             val serviceOpen = http.request(
                 "POST",
                 "/api/v1/pos/terminals/$terminalId/shifts",
@@ -515,6 +595,15 @@ class AuthenticationHttpIntegrationTest {
                   AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
                 """.trimIndent()
             ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, idempotencyKey)).blockingGet()
+            shiftId?.let {
+                pool.preparedQuery(
+                    """
+                    DELETE FROM pos_command_ledger
+                    WHERE organization_id = $1 AND actor_subject = $2
+                      AND operation_id = 'closePosShift' AND target_id = $3 AND idempotency_key = $4
+                    """.trimIndent()
+                ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, it, closeIdempotencyKey)).blockingGet()
+            }
             shiftId?.let {
                 pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
                     .rxExecute(Tuple.of(it)).blockingGet()

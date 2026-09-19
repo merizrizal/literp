@@ -431,6 +431,115 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
             }
     }
 
+    fun closePosShift(
+        shiftId: String,
+        closingBalance: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        organizationId: String,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> = Single.defer {
+        val normalizedShiftId = requiredValue(shiftId, "shiftId", 255)
+        val normalizedClosingBalance = parseMoney(closingBalance, "closingBalance")
+        val normalizedIdempotencyKey = requiredValue(idempotencyKey, "Idempotency-Key", 128)
+        val normalizedActorSubject = requiredValue(actorSubject, "actorSubject", 255)
+        val normalizedOrganizationId = requiredValue(organizationId, "organizationId", 255)
+        validateScope(locationId = null, authorizedLocationIds = authorizedLocationIds)
+
+        val requestFingerprint = requestFingerprint(
+            "closePosShift",
+            normalizedShiftId,
+            normalizedClosingBalance.toPlainString()
+        )
+
+        inTransaction { connection ->
+            selectScopedTerminalByShiftForUpdate(connection, normalizedShiftId, authorizedLocationIds)
+                .flatMap {
+                    selectPosShiftForUpdate(connection, normalizedShiftId)
+                }
+                .flatMap { shiftRow ->
+                    if (shiftRow.getString("operator_id") != normalizedActorSubject) {
+                        Single.error<JsonObject>(PosOperationsScopeViolation("POS shift owner mismatch"))
+                    } else {
+                        claimPosCommand(
+                            connection = connection,
+                            organizationId = normalizedOrganizationId,
+                            actorSubject = normalizedActorSubject,
+                            operationId = "closePosShift",
+                            targetId = normalizedShiftId,
+                            idempotencyKey = normalizedIdempotencyKey,
+                            requestFingerprint = requestFingerprint
+                        ).flatMap { command ->
+                            command.responsePayload?.let { Single.just(it) }
+                                ?: when {
+                                    shiftRow.getBoolean("is_reconcilable") != true ->
+                                        Single.error<JsonObject>(PosOperationsConflict("POS shift is not reconciliable"))
+                                    shiftRow.getString("status") != "OPEN" ->
+                                        Single.error<JsonObject>(PosOperationsConflict("POS shift is not open"))
+                                    else -> connection.preparedQuery(
+                                        """
+                                        SELECT COALESCE(SUM(p.amount), 0) AS captured_cash
+                                        FROM pos_payment_context c
+                                        JOIN payment p ON p.payment_id = c.payment_id
+                                        WHERE c.shift_id = $1
+                                          AND p.status = 'CAPTURED'
+                                          AND p.payment_method = 'CASH'
+                                        """.trimIndent()
+                                    ).rxExecute(Tuple.of(normalizedShiftId)).flatMap { cashResult ->
+                                        val capturedCash = cashResult.first().getBigDecimal("captured_cash")
+                                        val expectedCash = shiftRow.getBigDecimal("opening_balance").add(capturedCash)
+                                        if (expectedCash < BigDecimal.ZERO || expectedCash > BigDecimal("999999999999.99")) {
+                                            Single.error<JsonObject>(PosOperationsConflict("Expected cash exceeds supported range"))
+                                        } else {
+                                            val cashVariance = normalizedClosingBalance.subtract(expectedCash)
+                                            connection.preparedQuery(
+                                                """
+                                                UPDATE pos_shift
+                                                SET closed_at = NOW(),
+                                                    closing_balance = $2,
+                                                    expected_cash = $3,
+                                                    cash_variance = $4,
+                                                    closed_by = $5,
+                                                    status = 'CLOSED'
+                                                WHERE shift_id = $1 AND status = 'OPEN'
+                                                RETURNING shift_id, terminal_id, operator_id, shift_date, shift_number,
+                                                    opened_at, closed_at, opening_balance, closing_balance, status,
+                                                    created_at, currency, expected_cash, cash_variance, closed_by
+                                                """.trimIndent()
+                                            ).rxExecute(
+                                                Tuple.tuple()
+                                                    .addString(normalizedShiftId)
+                                                    .addValue(normalizedClosingBalance)
+                                                    .addValue(expectedCash)
+                                                    .addValue(cashVariance)
+                                                    .addString(normalizedActorSubject)
+                                            ).flatMap { closeResult ->
+                                                if (closeResult.size() == 0) {
+                                                    Single.error<JsonObject>(PosOperationsConflict("POS shift is not open"))
+                                                } else {
+                                                    val response = mapShiftRow(closeResult.first())
+                                                    storePosCommand(
+                                                        connection = connection,
+                                                        organizationId = normalizedOrganizationId,
+                                                        actorSubject = normalizedActorSubject,
+                                                        operationId = "closePosShift",
+                                                        targetId = normalizedShiftId,
+                                                        idempotencyKey = normalizedIdempotencyKey,
+                                                        requestFingerprint = requestFingerprint,
+                                                        responseStatus = 200,
+                                                        responsePayload = response
+                                                    ).map { response }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                        }
+                    }
+                }
+        }
+    }
+
     fun getPosTerminal(
         terminalId: String,
         authorizedLocationIds: Set<String>
@@ -485,6 +594,50 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
                     Single.just(result.first())
                 }
             }
+    }
+
+    private fun selectScopedTerminalByShiftForUpdate(
+        connection: SqlConnection,
+        shiftId: String,
+        authorizedLocationIds: Set<String>
+    ): Single<Row> {
+        val params = mutableListOf<Any?>(shiftId)
+        val locationPlaceholders = authorizedLocationIds.toList().sorted().mapIndexed { index, locationId ->
+            params.add(locationId)
+            "$${index + 2}"
+        }
+        val query = """
+            SELECT t.terminal_id
+            FROM pos_terminal t
+            JOIN pos_shift s ON s.terminal_id = t.terminal_id
+            WHERE s.shift_id = $1 AND t.location_id IN (${locationPlaceholders.joinToString(", ")})
+            FOR UPDATE OF t
+        """.trimIndent()
+
+        return connection.preparedQuery(query)
+            .rxExecute(Tuple.from(params))
+            .flatMap { result ->
+                if (result.size() == 0) {
+                    Single.error<Row>(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(result.first())
+                }
+            }
+    }
+
+    private fun selectPosShiftForUpdate(connection: SqlConnection, shiftId: String): Single<Row> = connection.preparedQuery(
+        """
+        SELECT shift_id, operator_id, opening_balance, status, is_reconcilable
+        FROM pos_shift
+        WHERE shift_id = $1
+        FOR UPDATE
+        """.trimIndent()
+    ).rxExecute(Tuple.of(shiftId)).flatMap { result ->
+        if (result.size() == 0) {
+            Single.error<Row>(Exception(ErrorCodes.fromStatus(404)))
+        } else {
+            Single.just(result.first())
+        }
     }
 
     private fun requiredValue(value: String, name: String, maximumLength: Int): String {
