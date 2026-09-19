@@ -1,5 +1,6 @@
 package com.literp.verticle.handler
 
+import com.literp.security.AuthenticatedPrincipal
 import com.literp.security.PrincipalKind
 import com.literp.service.order.OrderProcessService
 import io.vertx.core.json.JsonObject
@@ -173,8 +174,17 @@ class OrderProcessHandler(
             return
         }
 
-        orderService.addSalesOrderLine(orderId, productId, sku, quantityOrdered, unitPrice)
-            .onSuccess { result -> putSuccessResponse(context, 201, result) }
+        val principal = commandActor(context) ?: return
+        orderService.addSalesOrderLineWithActor(
+            orderId,
+            productId,
+            sku,
+            quantityOrdered,
+            unitPrice,
+            principal.subject,
+            principal.principalKind == PrincipalKind.HUMAN,
+            "pos.order.use" in principal.capabilities
+        ).onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -193,8 +203,14 @@ class OrderProcessHandler(
             return
         }
 
-        orderService.confirmSalesOrder(orderId, idempotencyKey)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+        val principal = commandActor(context) ?: return
+        orderService.confirmSalesOrderWithActor(
+            orderId,
+            idempotencyKey,
+            principal.subject,
+            principal.principalKind == PrincipalKind.HUMAN,
+            "pos.order.use" in principal.capabilities
+        ).onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -223,8 +239,17 @@ class OrderProcessHandler(
             return
         }
 
-        orderService.capturePayment(orderId, paymentMethod, amount, transactionRef, idempotencyKey)
-            .onSuccess { result -> putSuccessResponse(context, 201, result) }
+        val principal = commandActor(context) ?: return
+        orderService.capturePaymentWithActor(
+            orderId,
+            paymentMethod,
+            amount,
+            transactionRef,
+            idempotencyKey,
+            principal.subject,
+            principal.principalKind == PrincipalKind.HUMAN,
+            "pos.order.use" in principal.capabilities
+        ).onSuccess { result -> putSuccessResponse(context, 201, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -268,8 +293,15 @@ class OrderProcessHandler(
             return
         }
 
-        orderService.cancelSalesOrder(orderId, reason, idempotencyKey)
-            .onSuccess { result -> putSuccessResponse(context, 200, result) }
+        val principal = commandActor(context) ?: return
+        orderService.cancelSalesOrderWithActor(
+            orderId,
+            reason,
+            idempotencyKey,
+            principal.subject,
+            principal.principalKind == PrincipalKind.HUMAN,
+            "pos.order.use" in principal.capabilities
+        ).onSuccess { result -> putSuccessResponse(context, 200, result) }
             .onFailure { error ->
                 putMappedErrorResponse(
                     context = context,
@@ -277,5 +309,15 @@ class OrderProcessHandler(
                     internalErrorMessage = "Failed to cancel sales order"
                 )
             }
+    }
+
+    private fun commandActor(context: RoutingContext): AuthenticatedPrincipal? {
+        val principal = context.authenticatedPrincipal()
+        if (principal == null) {
+            context.response().putHeader("WWW-Authenticate", "Bearer")
+            putErrorResponse(context, 401, "Authentication required", SecurityFailureCodes.UNAUTHENTICATED)
+            return null
+        }
+        return principal
     }
 }

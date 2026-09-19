@@ -223,6 +223,7 @@
           "Order Process"
         ],
         "summary": "Add line to draft order",
+        "description": "For an attributed POS order, the authenticated human must own its open shift and hold the POS order capability. Context-less orders retain the existing lifecycle.",
         "operationId": "addSalesOrderLine",
         "parameters": [
           {
@@ -287,6 +288,7 @@
           "Order Process"
         ],
         "summary": "Confirm order and reserve stock",
+        "description": "For an attributed POS order, the authenticated human must own its open shift and hold the POS order capability. Context-less orders retain the existing lifecycle.",
         "operationId": "confirmSalesOrder",
         "parameters": [
           {
@@ -347,6 +349,7 @@
           "Order Process"
         ],
         "summary": "Capture payment for sales order",
+        "description": "Attributed POS payments persist the verified capture actor and shift atomically. Attributed CASH captures cannot exceed the order's remaining balance; context-less payment behavior is unchanged.",
         "operationId": "capturePayment",
         "parameters": [
           {
@@ -490,6 +493,7 @@
           "Order Process"
         ],
         "summary": "Cancel sales order",
+        "description": "For an attributed POS order, the authenticated human must own its open shift and hold the POS order capability. Context-less orders retain the existing lifecycle.",
         "operationId": "cancelSalesOrder",
         "parameters": [
           {

@@ -22,6 +22,12 @@ body:json {
   }
 }
 
+docs {
+  operationId: capturePayment
+  request: POST /api/v1/orders/{salesOrderId}/payments
+  note: Attributed POS payments require the authenticated shift owner; CASH captures are net drawer inflow and cannot exceed the order's remaining balance. Context-less orders retain existing payment behavior.
+}
+
 settings {
   encodeUrl: true
   timeout: 0

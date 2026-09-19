@@ -76,6 +76,28 @@ class OrderProcessServiceImpl(
             .toVertxFuture()
     }
 
+    override fun addSalesOrderLineWithActor(
+        salesOrderId: String,
+        productId: String,
+        sku: String?,
+        quantityOrdered: String,
+        unitPrice: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Future<JsonObject> = repository
+        .addSalesOrderLineWithActor(
+            salesOrderId,
+            productId,
+            sku,
+            BigDecimal(quantityOrdered),
+            BigDecimal(unitPrice),
+            actorSubject,
+            humanActor,
+            posOrderUse
+        )
+        .toVertxFuture()
+
     override fun getCurrentStock(productId: String, locationId: String): Future<JsonObject> {
         return repository.getCurrentStock(productId, locationId).toVertxFuture()
     }
@@ -88,6 +110,16 @@ class OrderProcessServiceImpl(
         return repository.confirmSalesOrder(salesOrderId, idempotencyKey).toVertxFuture()
     }
 
+    override fun confirmSalesOrderWithActor(
+        salesOrderId: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Future<JsonObject> = repository
+        .confirmSalesOrderWithActor(salesOrderId, idempotencyKey, actorSubject, humanActor, posOrderUse)
+        .toVertxFuture()
+
     override fun capturePayment(
         salesOrderId: String,
         paymentMethod: String,
@@ -98,6 +130,28 @@ class OrderProcessServiceImpl(
         return repository.capturePayment(salesOrderId, paymentMethod, BigDecimal(amount), transactionRef, idempotencyKey).toVertxFuture()
     }
 
+    override fun capturePaymentWithActor(
+        salesOrderId: String,
+        paymentMethod: String,
+        amount: String,
+        transactionRef: String?,
+        idempotencyKey: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Future<JsonObject> = repository
+        .capturePaymentWithActor(
+            salesOrderId,
+            paymentMethod,
+            BigDecimal(amount),
+            transactionRef,
+            idempotencyKey,
+            actorSubject,
+            humanActor,
+            posOrderUse
+        )
+        .toVertxFuture()
+
     override fun fulfillSalesOrder(salesOrderId: String, createdBy: String?, notes: String?, idempotencyKey: String): Future<JsonObject> {
         return repository.fulfillSalesOrder(salesOrderId, createdBy, notes, idempotencyKey).toVertxFuture()
     }
@@ -105,4 +159,15 @@ class OrderProcessServiceImpl(
     override fun cancelSalesOrder(salesOrderId: String, reason: String?, idempotencyKey: String): Future<JsonObject> {
         return repository.cancelSalesOrder(salesOrderId, reason, idempotencyKey).toVertxFuture()
     }
+
+    override fun cancelSalesOrderWithActor(
+        salesOrderId: String,
+        reason: String?,
+        idempotencyKey: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Future<JsonObject> = repository
+        .cancelSalesOrderWithActor(salesOrderId, reason, idempotencyKey, actorSubject, humanActor, posOrderUse)
+        .toVertxFuture()
 }

@@ -30,17 +30,43 @@ public interface OrderProcessService {
 
     Future<JsonObject> addSalesOrderLine(String salesOrderId, String productId, String sku, String quantityOrdered, String unitPrice);
 
+    Future<JsonObject> addSalesOrderLineWithActor(
+        String salesOrderId,
+        String productId,
+        String sku,
+        String quantityOrdered,
+        String unitPrice,
+        String actorSubject,
+        boolean humanActor,
+        boolean posOrderUse
+    );
+
     Future<JsonObject> getCurrentStock(String productId, String locationId);
 
     Future<JsonObject> getAvailableStock(String productId, String locationId);
 
     Future<JsonObject> confirmSalesOrder(String salesOrderId, String idempotencyKey);
 
+    Future<JsonObject> confirmSalesOrderWithActor(String salesOrderId, String idempotencyKey, String actorSubject, boolean humanActor, boolean posOrderUse);
+
     Future<JsonObject> capturePayment(String salesOrderId, String paymentMethod, String amount, String transactionRef, String idempotencyKey);
+
+    Future<JsonObject> capturePaymentWithActor(
+        String salesOrderId,
+        String paymentMethod,
+        String amount,
+        String transactionRef,
+        String idempotencyKey,
+        String actorSubject,
+        boolean humanActor,
+        boolean posOrderUse
+    );
 
     Future<JsonObject> fulfillSalesOrder(String salesOrderId, String createdBy, String notes, String idempotencyKey);
 
     Future<JsonObject> cancelSalesOrder(String salesOrderId, String reason, String idempotencyKey);
+
+    Future<JsonObject> cancelSalesOrderWithActor(String salesOrderId, String reason, String idempotencyKey, String actorSubject, boolean humanActor, boolean posOrderUse);
 
     static OrderProcessService createProxy(Vertx vertx) {
         return new OrderProcessServiceVertxEBProxy(vertx, ADDRESS);

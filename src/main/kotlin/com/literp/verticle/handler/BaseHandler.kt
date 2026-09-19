@@ -126,6 +126,10 @@ open class BaseHandler(clazz: Class<*>) {
                 || message.contains("draft", ignoreCase = true)
                 || message.contains("insufficient captured payment", ignoreCase = true)
                 || message.contains("insufficient available stock", ignoreCase = true)
+                || message.contains("shift is not open", ignoreCase = true)
+                || message.contains("remaining order balance", ignoreCase = true)
+                || message.contains("POS order", ignoreCase = true)
+                || message.contains("actor context is inconsistent", ignoreCase = true)
     }
 
     protected fun isValidationError(message: String?): Boolean {
@@ -147,7 +151,10 @@ open class BaseHandler(clazz: Class<*>) {
         conflictMessage: String? = null
     ) {
         when {
-            error is PosOrderScopeViolation ->
+            error is PosOrderScopeViolation ||
+                error.message?.contains("pos.order.use", ignoreCase = true) == true ||
+                error.message?.contains("shift owner mismatch", ignoreCase = true) == true ||
+                error.message?.contains("human shift owner", ignoreCase = true) == true ->
                 putErrorResponse(context, 403, "Forbidden", ErrorCodes.FORBIDDEN)
             error is PosOrderValidation ->
                 putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")

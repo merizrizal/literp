@@ -91,6 +91,24 @@ POS_ORDER_CONTEXT_FOREIGN_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 
+POS_PAYMENT_CONTEXT_COLUMNS: Final[frozenset[str]] = frozenset(
+    {
+        "payment_id",
+        "shift_id",
+        "capture_operator_id",
+        "created_at",
+    }
+)
+POS_PAYMENT_CONTEXT_INDEX: Final[str] = "idx_pos_payment_context_shift"
+POS_PAYMENT_CONTEXT_PRIMARY_KEY: Final[str] = "pk_pos_payment_context"
+POS_PAYMENT_CONTEXT_FOREIGN_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "fk_pos_payment_context_payment",
+        "fk_pos_payment_context_shift",
+    }
+)
+
+
 class MigrationVerificationError(Exception):
     pass
 
@@ -325,9 +343,78 @@ def verify_pos_order_context(cursor) -> None:
             )
 
 
+def verify_pos_payment_context(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'pos_payment_context'
+        """
+    )
+    actual_columns = {row[0] for row in cursor.fetchall()}
+    missing_columns = POS_PAYMENT_CONTEXT_COLUMNS - actual_columns
+    if missing_columns:
+        raise MigrationVerificationError(
+            "pos_payment_context is missing columns: "
+            + ", ".join(sorted(missing_columns))
+        )
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_constraint constraint_entry
+        JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+        JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+        WHERE schema_entry.nspname = 'public'
+          AND table_entry.relname = 'pos_payment_context'
+          AND constraint_entry.conname = %s
+          AND constraint_entry.contype = 'p'
+        """,
+        (POS_PAYMENT_CONTEXT_PRIMARY_KEY,),
+    )
+    if cursor.fetchone() is None:
+        raise MigrationVerificationError(
+            f"Missing POS payment-context primary key: {POS_PAYMENT_CONTEXT_PRIMARY_KEY}"
+        )
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'pos_payment_context'
+          AND indexname = %s
+        """,
+        (POS_PAYMENT_CONTEXT_INDEX,),
+    )
+    if cursor.fetchone() is None:
+        raise MigrationVerificationError(
+            f"Missing POS payment-context index: {POS_PAYMENT_CONTEXT_INDEX}"
+        )
+
+    for foreign_key_name in POS_PAYMENT_CONTEXT_FOREIGN_KEYS:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM pg_constraint constraint_entry
+            JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+            JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+            WHERE schema_entry.nspname = 'public'
+              AND table_entry.relname = 'pos_payment_context'
+              AND constraint_entry.conname = %s
+              AND constraint_entry.contype = 'f'
+            """,
+            (foreign_key_name,),
+        )
+        if cursor.fetchone() is None:
+            raise MigrationVerificationError(
+                f"Missing POS payment-context foreign key: {foreign_key_name}"
+            )
+
+
 def verify_database(db_url: str, expected_head: str) -> None:
     print(
-        "Verifying Alembic head, deterministic seed data, POS ledger schema, shift invariants, and order context..."
+        "Verifying Alembic head, deterministic seed data, POS ledger schema, shift invariants, order context, and payment context..."
     )
     with psycopg.connect(db_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT version_num FROM alembic_version")
@@ -356,6 +443,7 @@ def verify_database(db_url: str, expected_head: str) -> None:
         verify_pos_command_ledger(cursor)
         verify_pos_shift_invariants(cursor)
         verify_pos_order_context(cursor)
+        verify_pos_payment_context(cursor)
 
     print(f"Alembic head verified: {expected_head}")
     for table_name, minimum_count in SEED_MINIMUMS.items():

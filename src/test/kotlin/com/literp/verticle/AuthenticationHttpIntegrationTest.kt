@@ -660,6 +660,156 @@ class AuthenticationHttpIntegrationTest {
     }
 
     @Test
+    fun attributedCommandsUseTrustedActorAndPersistPaymentContext() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val location = locationRepository.createLocation(
+            "POC-$suffix",
+            "POS command location $suffix",
+            "WAREHOUSE",
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val locationId = location.getString("locationId")
+        val terminalId = createPosTerminal(locationId, "POC-1-$suffix")
+        val sku = "POC-$suffix"
+        val product = productRepository.createProduct(
+            sku,
+            "POS command product $suffix",
+            "STOCK",
+            TestDatabase.SEED_UOM_UNIT,
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val productId = product.getString("productId")
+        val stockReference = "POC-STOCK-$suffix"
+        insertPosStock(productId, sku, locationId, stockReference)
+        val actorSubject = "http-pos-command-owner-$suffix"
+        val openKey = "POC-OPEN-$suffix"
+        var shiftId: String? = null
+        var orderId: String? = null
+
+        try {
+            val opened = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                201,
+                JsonObject().put("openingBalance", 0).put("currency", "USD"),
+                securityFixture.authorization(
+                    capabilities = setOf("pos.shift.open"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                ) + ("Idempotency-Key" to openKey)
+            )
+            shiftId = requireNotNull(opened.json).getJsonObject("data").getString("shiftId")
+
+            val attributedHeaders = securityFixture.authorization(
+                capabilities = setOf("order.write", "pos.order.use"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            )
+            val draft = http.expect(
+                "POST",
+                "/api/v1/orders",
+                201,
+                JsonObject()
+                    .put("salesChannel", "POS")
+                    .put("locationId", locationId)
+                    .put("currency", "USD")
+                    .put("posContext", JsonObject().put("shiftId", shiftId)),
+                attributedHeaders
+            )
+            orderId = requireNotNull(draft.json).getJsonObject("data").getString("salesOrderId")
+
+            val missingPosUse = http.request(
+                "POST",
+                "/api/v1/orders/$orderId/lines",
+                JsonObject().put("productId", productId).put("quantityOrdered", 1).put("unitPrice", 10),
+                securityFixture.authorization(
+                    capabilities = setOf("order.write"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            assertEquals(403, missingPosUse.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(missingPosUse.json), 403, ErrorCodes.FORBIDDEN)
+
+            http.expect(
+                "POST",
+                "/api/v1/orders/$orderId/lines",
+                201,
+                JsonObject().put("productId", productId).put("quantityOrdered", 1).put("unitPrice", 10),
+                attributedHeaders
+            )
+            http.expect(
+                "POST",
+                "/api/v1/orders/$orderId/confirm",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("order.confirm", "pos.order.use"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                ) + ("Idempotency-Key" to "POC-CONFIRM-$suffix")
+            )
+
+            val paymentHeaders = securityFixture.authorization(
+                capabilities = setOf("payment.capture", "pos.order.use"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            ) + ("Idempotency-Key" to "POC-PAY-$suffix")
+            val paymentBody = JsonObject()
+                .put("paymentMethod", "CASH")
+                .put("amount", 10)
+                .put("transactionRef", "POC-CASH-$suffix")
+            val payment = http.expect("POST", "/api/v1/orders/$orderId/payments", 201, paymentBody, paymentHeaders)
+            val replay = http.expect("POST", "/api/v1/orders/$orderId/payments", 201, paymentBody, paymentHeaders)
+            val paymentId = requireNotNull(payment.json).getJsonObject("data").getJsonObject("payment").getString("paymentId")
+            assertEquals(
+                paymentId,
+                requireNotNull(replay.json).getJsonObject("data").getJsonObject("payment").getString("paymentId")
+            )
+            assertEquals(
+                1,
+                pool.preparedQuery("SELECT COUNT(*) AS cnt FROM pos_payment_context WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(paymentId)).blockingGet().first().getInteger("cnt")
+            )
+            assertEquals(
+                actorSubject,
+                pool.preparedQuery("SELECT capture_operator_id FROM pos_payment_context WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(paymentId)).blockingGet().first().getString("capture_operator_id")
+            )
+        } finally {
+            orderId?.let {
+                runCatching {
+                    pool.preparedQuery("DELETE FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)")
+                        .rxExecute(Tuple.of(it)).blockingGet()
+                }
+                runCatching { pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1").rxExecute(Tuple.of(it)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM payment WHERE sales_order_id = $1").rxExecute(Tuple.of(it)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1").rxExecute(Tuple.of(it)).blockingGet() }
+            }
+            runCatching { pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1").rxExecute(Tuple.of(stockReference)).blockingGet() }
+            runCatching { productRepository.deleteProduct(productId).blockingGet() }
+            runCatching {
+                pool.preparedQuery(
+                    """
+                    DELETE FROM pos_command_ledger
+                    WHERE organization_id = $1 AND actor_subject = $2
+                      AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
+                    """.trimIndent()
+                ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, openKey)).blockingGet()
+            }
+            shiftId?.let { runCatching { pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1").rxExecute(Tuple.of(it)).blockingGet() } }
+            runCatching { pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1").rxExecute(Tuple.of(terminalId)).blockingGet() }
+            runCatching { locationRepository.deleteLocation(locationId).blockingGet() }
+        }
+    }
+
+    @Test
     fun authenticatedUnknownPathsRemainNotFoundAndKnownOperationsApplyCapabilities() {
         val unknown = http.request(
             "GET",
@@ -1003,6 +1153,22 @@ class AuthenticationHttpIntegrationTest {
         return seed
     }
 
+    private fun insertPosStock(productId: String, sku: String, locationId: String, referenceId: String) {
+        pool.preparedQuery(
+            """
+            INSERT INTO inventory_movement (movement_id, product_id, sku, movement_type, from_location_id, to_location_id, quantity, reference_type, reference_id, notes, created_by, created_at)
+            VALUES ($1, $2, $3, 'IN', NULL, $4, 10, 'ADJUSTMENT', $5, 'POS command stock', 'test', NOW())
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.tuple()
+                .addString(UUID.randomUUID().toString())
+                .addString(productId)
+                .addString(sku)
+                .addString(locationId)
+                .addString(referenceId)
+        ).blockingGet()
+    }
+
     private fun insertInventoryMovement(seed: ScopedOrderSeed, locationId: String, quantity: BigDecimal) {
         pool.preparedQuery(
             """
@@ -1022,6 +1188,11 @@ class AuthenticationHttpIntegrationTest {
 
     private fun cleanupScopedOrderSeed(seed: ScopedOrderSeed, orderIds: Collection<String>) {
         orderIds.forEach { orderId ->
+            runCatching {
+                pool.preparedQuery("DELETE FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)")
+                    .rxExecute(Tuple.of(orderId)).blockingGet()
+            }
+            runCatching { pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
             runCatching { pool.preparedQuery("DELETE FROM payment WHERE sales_order_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
             runCatching { pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
             runCatching { pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
