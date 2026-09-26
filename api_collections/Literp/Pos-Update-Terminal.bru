@@ -20,7 +20,7 @@ body:json {
 docs {
   operationId: updatePosTerminal
   request: PATCH /api/v1/pos/terminals/{terminalId}
-  status: Authenticated placeholder (501 NOT_IMPLEMENTED); terminal behavior is not implemented yet.
+  status: Authenticated; updates terminal code/name only within the caller's authorized location scope.
 }
 
 settings {

@@ -67,7 +67,7 @@ cookies, or query parameters as identity.
 
 ## Authorization surface
 
-All 31 business operation IDs require bearer authentication and an explicit
+All 41 registered business operation IDs require bearer authentication and an explicit
 capability. Location-scoped order and stock operations additionally use the
 verified location grants. An order's persisted location is checked before
 nested order reads, command dispatch, idempotency lookup, or mutation. Missing
@@ -264,10 +264,10 @@ details.
 
 | Evidence | Status | Notes |
 |---|---|---|
-| Production-router authentication and authorization tests | Complete locally | Deterministic generated-key fixture; 31 anonymous rejections and authorized/denied scope cases are covered |
-| Full Gradle regression/build | Complete locally | Chunk 7 recorded 65 tests, zero skips/failures/errors |
+| Production-router authentication and authorization tests | Complete locally | Deterministic generated-key fixture; 41 anonymous rejections and authorized/denied scope cases are covered |
+| Full Gradle regression/build | Complete locally | Chunk 8: `rtk proxy ./gradlew test` passed 92 tests, 0 skipped/failures/errors; `rtk proxy ./gradlew build` passed |
 | OpenAPI YAML/JSON synchronization | Complete locally | `rtk python scripts/verify_openapi_assets.py` passed in the approved Python environment |
-| Bruno authenticated smoke | Pending | Requires an approved non-production access token supplied outside repository artifacts |
+| Bruno authenticated smoke | Pending | No approved `LITERP_ACCESS_TOKEN` or `bru` CLI is available in this environment; do not store tokens in the repository |
 | Genuine provider token smoke | Pending | Local service-token smoke is recorded above; confirm human/service flows, audience, claim mappers, ID-token rejection, expiry, and logout behavior with the actual provider |
 | Key rollover smoke | Pending | Local overlap/retirement simulation is recorded above; repeat active/old key overlap and removed-key rejection in the deployment |
 | Deployment/network acceptance | Pending | Confirm HTTPS/private proxy topology, environment ownership, JWKS provisioning, and audit sink/retention owner |

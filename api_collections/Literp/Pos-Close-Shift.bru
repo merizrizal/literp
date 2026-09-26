@@ -23,7 +23,7 @@ body:json {
 docs {
   operationId: closePosShift
   request: POST /api/v1/pos/shifts/{shiftId}/close
-  status: Authenticated placeholder (501 NOT_IMPLEMENTED); shift behavior is not implemented yet.
+  status: Authenticated; human shift owner only; server-calculated expected cash/variance; Idempotency-Key required.
 }
 
 settings {

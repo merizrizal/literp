@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Literp POS Operations API",
-    "description": "POS terminal, shift, and receipt-lookup contract for location-scoped\npoint-of-sale operations. The authenticated handlers are registered as\nsafe placeholders and return 501 until terminal, shift, and receipt\nbehavior is implemented. Receipt generation and refunds remain future\navailability and are not exposed by this contract.\n",
+    "description": "Location-scoped POS terminal and shift operations, plus receipt lookup.\nThe eight terminal and shift operations are implemented. The two receipt\nlookup operations remain authenticated placeholders that return 501.\nReceipt generation and refunds are not exposed by this contract.\n",
     "version": "0.0.1"
   },
   "servers": [
@@ -114,9 +114,6 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -172,9 +169,6 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -213,9 +207,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -268,9 +259,6 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -312,9 +300,6 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -380,9 +365,6 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -421,9 +403,6 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -487,9 +466,6 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"

@@ -2,11 +2,10 @@ openapi: 3.0.3
 info:
   title: Literp POS Operations API
   description: |
-    POS terminal, shift, and receipt-lookup contract for location-scoped
-    point-of-sale operations. The authenticated handlers are registered as
-    safe placeholders and return 501 until terminal, shift, and receipt
-    behavior is implemented. Receipt generation and refunds remain future
-    availability and are not exposed by this contract.
+    Location-scoped POS terminal and shift operations, plus receipt lookup.
+    The eight terminal and shift operations are implemented. The two receipt
+    lookup operations remain authenticated placeholders that return 501.
+    Receipt generation and refunds are not exposed by this contract.
   version: 0.0.1
 
 servers:
@@ -74,8 +73,6 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -111,8 +108,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -137,8 +132,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -172,8 +165,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -200,8 +191,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -244,8 +233,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -270,8 +257,6 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -313,8 +298,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 

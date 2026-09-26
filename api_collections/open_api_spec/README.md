@@ -65,8 +65,9 @@ Manage POS order lifecycle from draft to confirmation, payment capture, fulfillm
 **Location:** `pos-operations.yaml` / `pos-operations.json`
 
 Publish the authenticated contract for POS terminals, shifts, and receipt
-lookup. All ten operations are currently safe placeholders that return
-`501 NOT_IMPLEMENTED` after the authentication and authorization boundary.
+lookup. The eight terminal and shift operations are implemented. The two receipt
+lookup operations remain safe authenticated placeholders that return
+`501 NOT_IMPLEMENTED`; receipt generation and refunds are not exposed.
 
 **Documentation:** See [pos-operations-README.md](pos-operations-README.md) for contract and publication details.
 
@@ -191,7 +192,7 @@ The current handlers return error responses in this shape:
 - **404** - Not Found (resource doesn't exist; scoped order denials are indistinguishable)
 - **409** - Conflict (duplicate, referential conflict)
 - **500** - Server Error (unexpected error)
-- **501** - Not Implemented (authenticated POS contract placeholder)
+- **501** - Not Implemented (authenticated POS receipt-lookup placeholders only)
 
 ## Design Principles
 

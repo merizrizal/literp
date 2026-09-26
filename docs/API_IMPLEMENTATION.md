@@ -35,6 +35,7 @@ This document describes the implementation that exists on the current branch, no
 - `ProductVariantRepository`
 - `LocationRepository`
 - `OrderProcessRepository`
+- `PosOperationsRepository`
 
 ### Handlers
 
@@ -43,23 +44,28 @@ This document describes the implementation that exists on the current branch, no
 - `ProductHandler`
 - `LocationHandler`
 - `OrderProcessHandler`
+- `PosOperationsHandler`
+- `PosScopeHandler`
 
 ### Service proxies
 
 Java interfaces:
 - `src/main/java/com/literp/service/master/*`
 - `src/main/java/com/literp/service/order/*`
+- `src/main/java/com/literp/service/pos/*`
 
 Kotlin implementations:
 - `src/main/kotlin/com/literp/service/master/impl/*`
 - `src/main/kotlin/com/literp/service/order/impl/OrderProcessServiceImpl.kt`
+- `src/main/kotlin/com/literp/service/pos/impl/PosOperationsServiceImpl.kt`
 
 ## Routing
 
-The HTTP server loads 3 OpenAPI contracts:
+The HTTP server loads 4 OpenAPI contracts:
 - `api_collections/open_api_spec/product-catalog.yaml`
 - `api_collections/open_api_spec/locations.yaml`
 - `api_collections/open_api_spec/order-process.yaml`
+- `api_collections/open_api_spec/pos-operations.yaml`
 
 It also exposes five utility routes outside `/api/v1`:
 - `GET /`
@@ -116,7 +122,21 @@ It also exposes five utility routes outside `/api/v1`:
 - `POST /orders/{salesOrderId}/fulfill`
 - `POST /orders/{salesOrderId}/cancel`
 
-Total API endpoints: `31`
+### POS Terminal and Shift
+
+- `GET /pos/terminals`
+- `POST /pos/terminals`
+- `GET /pos/terminals/{terminalId}`
+- `PATCH /pos/terminals/{terminalId}`
+- `POST /pos/terminals/{terminalId}/deactivate`
+- `POST /pos/terminals/{terminalId}/shifts`
+- `GET /pos/terminals/{terminalId}/current-shift`
+- `POST /pos/shifts/{shiftId}/close`
+
+Receipt lookup routes are registered as authenticated `501 NOT_IMPLEMENTED`
+placeholders; receipt generation and refunds are not implemented.
+
+Implemented API operations: `39` (`41` registered, including two receipt placeholders).
 
 ## Database and Seed Data
 

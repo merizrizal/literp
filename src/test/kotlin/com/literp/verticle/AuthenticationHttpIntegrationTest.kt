@@ -170,7 +170,7 @@ class AuthenticationHttpIntegrationTest {
     }
 
     @Test
-    fun authenticatedPosReadsEnforceScopesAndRemainingOperationsStayPlaceholders() {
+    fun authenticatedPosReadsEnforceScopesAndReceiptLookupsRemainPlaceholders() {
         val terminalId = UUID.randomUUID().toString()
         val shiftId = UUID.randomUUID().toString()
         val salesOrderId = UUID.randomUUID().toString()
@@ -749,7 +749,7 @@ class AuthenticationHttpIntegrationTest {
     }
 
     @Test
-    fun attributedCommandsUseTrustedActorAndPersistPaymentContext() {
+    fun authenticatedPosLifecycleReconcilesCashAndAllowsFulfillmentAfterClose() {
         val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
         val location = locationRepository.createLocation(
             "POC-$suffix",
@@ -759,25 +759,54 @@ class AuthenticationHttpIntegrationTest {
             JsonObject().put("testRun", suffix)
         ).blockingGet()
         val locationId = location.getString("locationId")
-        val terminalId = createPosTerminal(locationId, "POC-1-$suffix")
+        val terminalCode = "POC-$suffix"
+        val terminalCreateKey = "POC-TERMINAL-$suffix"
+        val terminalAdminSubject = "http-pos-terminal-admin-$suffix"
+        var createdTerminalId: String? = null
         val sku = "POC-$suffix"
-        val product = productRepository.createProduct(
-            sku,
-            "POS command product $suffix",
-            "STOCK",
-            TestDatabase.SEED_UOM_UNIT,
-            true,
-            JsonObject().put("testRun", suffix)
-        ).blockingGet()
-        val productId = product.getString("productId")
         val stockReference = "POC-STOCK-$suffix"
-        insertPosStock(productId, sku, locationId, stockReference)
+        var createdProductId: String? = null
         val actorSubject = "http-pos-command-owner-$suffix"
         val openKey = "POC-OPEN-$suffix"
+        val closeKey = "POC-CLOSE-$suffix"
         var shiftId: String? = null
         var orderId: String? = null
 
         try {
+            val product = productRepository.createProduct(
+                sku,
+                "POS command product $suffix",
+                "STOCK",
+                TestDatabase.SEED_UOM_UNIT,
+                true,
+                JsonObject().put("testRun", suffix)
+            ).blockingGet()
+            val productId = product.getString("productId")
+            createdProductId = productId
+            insertPosStock(productId, sku, locationId, stockReference)
+
+            val createdTerminal = http.expect(
+                "POST",
+                "/api/v1/pos/terminals",
+                201,
+                JsonObject()
+                    .put("locationId", locationId)
+                    .put("terminalCode", terminalCode)
+                    .put("deviceName", "POS command terminal $suffix"),
+                securityFixture.authorization(
+                    capabilities = setOf("pos.terminal.write"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "service",
+                    subject = terminalAdminSubject
+                ) + ("Idempotency-Key" to terminalCreateKey)
+            )
+            val terminalData = requireNotNull(createdTerminal.json).getJsonObject("data")
+            val terminalId = requireNotNull(terminalData.getString("terminalId"))
+            createdTerminalId = terminalId
+            assertEquals(locationId, terminalData.getString("locationId"))
+            assertTrue(terminalData.getBoolean("isActive"))
+
             val opened = http.expect(
                 "POST",
                 "/api/v1/pos/terminals/$terminalId/shifts",
@@ -809,7 +838,10 @@ class AuthenticationHttpIntegrationTest {
                     .put("posContext", JsonObject().put("shiftId", shiftId)),
                 attributedHeaders
             )
-            orderId = requireNotNull(draft.json).getJsonObject("data").getString("salesOrderId")
+            val draftData = requireNotNull(draft.json).getJsonObject("data")
+            orderId = requireNotNull(draftData.getString("salesOrderId"))
+            assertEquals(shiftId, draftData.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(actorSubject, draftData.getJsonObject("posContext").getString("draftOperatorId"))
 
             val missingPosUse = http.request(
                 "POST",
@@ -871,29 +903,135 @@ class AuthenticationHttpIntegrationTest {
                 pool.preparedQuery("SELECT capture_operator_id FROM pos_payment_context WHERE payment_id = $1")
                     .rxExecute(Tuple.of(paymentId)).blockingGet().first().getString("capture_operator_id")
             )
+            val closeHeaders = securityFixture.authorization(
+                capabilities = setOf("pos.shift.close"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            ) + ("Idempotency-Key" to closeKey)
+            val closed = http.expect(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                200,
+                JsonObject().put("closingBalance", BigDecimal("9.50")),
+                closeHeaders
+            )
+            val closedData = requireNotNull(closed.json).getJsonObject("data")
+            assertEquals("CLOSED", closedData.getString("status"))
+            assertEquals(actorSubject, closedData.getString("closedBy"))
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("expectedCash").toString()).compareTo(BigDecimal("10.00"))
+            )
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("cashVariance").toString()).compareTo(BigDecimal("-0.50"))
+            )
+            assertNotNull(closedData.getString("closedAt"))
+
+            val fulfillmentSubject = "http-pos-fulfillment-$suffix"
+            val fulfillment = http.expect(
+                "POST",
+                "/api/v1/orders/$orderId/fulfill",
+                200,
+                JsonObject().put("createdBy", "untrusted-body-actor").put("notes", "POS pickup $suffix"),
+                securityFixture.authorization(
+                    capabilities = setOf("order.fulfill"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = fulfillmentSubject
+                ) + ("Idempotency-Key" to "POC-FULFILL-$suffix")
+            )
+            assertEquals("FULFILLED", requireNotNull(fulfillment.json).getJsonObject("data").getString("status"))
+            assertEquals(1, movementCount(requireNotNull(orderId)))
+            assertEquals(fulfillmentSubject, movementActor(requireNotNull(orderId)))
+
+            val fulfilledOrder = http.expect(
+                "GET",
+                "/api/v1/orders/$orderId",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("order.read"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = fulfillmentSubject
+                )
+            )
+            val fulfilledOrderData = requireNotNull(fulfilledOrder.json).getJsonObject("data")
+            assertEquals("FULFILLED", fulfilledOrderData.getString("status"))
+            assertEquals(shiftId, fulfilledOrderData.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(
+                shiftId,
+                pool.preparedQuery("SELECT shift_id FROM pos_payment_context WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(paymentId)).blockingGet().first().getString("shift_id")
+            )
+            val persistedClose = pool.preparedQuery(
+                "SELECT status, closing_balance, expected_cash, cash_variance, closed_by FROM pos_shift WHERE shift_id = $1"
+            ).rxExecute(Tuple.of(shiftId)).blockingGet().first()
+            assertEquals("CLOSED", persistedClose.getString("status"))
+            assertEquals(actorSubject, persistedClose.getString("closed_by"))
+            assertEquals(0, persistedClose.getBigDecimal("closing_balance").compareTo(BigDecimal("9.50")))
+            assertEquals(0, persistedClose.getBigDecimal("expected_cash").compareTo(BigDecimal("10.00")))
+            assertEquals(0, persistedClose.getBigDecimal("cash_variance").compareTo(BigDecimal("-0.50")))
         } finally {
-            orderId?.let {
+            orderId?.let { id ->
+                runCatching {
+                    pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1")
+                        .rxExecute(Tuple.of(id)).blockingGet()
+                }
                 runCatching {
                     pool.preparedQuery("DELETE FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)")
-                        .rxExecute(Tuple.of(it)).blockingGet()
+                        .rxExecute(Tuple.of(id)).blockingGet()
                 }
-                runCatching { pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1").rxExecute(Tuple.of(it)).blockingGet() }
-                runCatching { pool.preparedQuery("DELETE FROM payment WHERE sales_order_id = $1").rxExecute(Tuple.of(it)).blockingGet() }
-                runCatching { pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1").rxExecute(Tuple.of(it)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1").rxExecute(Tuple.of(id)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM payment WHERE sales_order_id = $1").rxExecute(Tuple.of(id)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1").rxExecute(Tuple.of(id)).blockingGet() }
             }
             runCatching { pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1").rxExecute(Tuple.of(stockReference)).blockingGet() }
-            runCatching { productRepository.deleteProduct(productId).blockingGet() }
+            createdProductId?.let { productId ->
+                runCatching { productRepository.deleteProduct(productId).blockingGet() }
+            }
+            createdTerminalId?.let { terminalId ->
+                runCatching {
+                    pool.preparedQuery(
+                        """
+                        DELETE FROM pos_command_ledger
+                        WHERE organization_id = $1 AND actor_subject = $2
+                          AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
+                        """.trimIndent()
+                    ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, openKey)).blockingGet()
+                }
+            }
+            shiftId?.let { shift ->
+                runCatching {
+                    pool.preparedQuery(
+                        """
+                        DELETE FROM pos_command_ledger
+                        WHERE organization_id = $1 AND actor_subject = $2
+                          AND operation_id = 'closePosShift' AND target_id = $3 AND idempotency_key = $4
+                        """.trimIndent()
+                    ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, shift, closeKey)).blockingGet()
+                }
+                runCatching {
+                    pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
+                        .rxExecute(Tuple.of(shift)).blockingGet()
+                }
+            }
             runCatching {
                 pool.preparedQuery(
                     """
                     DELETE FROM pos_command_ledger
-                    WHERE organization_id = $1 AND actor_subject = $2
-                      AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
+                    WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'createPosTerminal'
+                      AND target_id = $3 AND idempotency_key = $4
                     """.trimIndent()
-                ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, openKey)).blockingGet()
+                ).rxExecute(Tuple.of(securityFixture.organizationId, terminalAdminSubject, locationId, terminalCreateKey)).blockingGet()
             }
-            shiftId?.let { runCatching { pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1").rxExecute(Tuple.of(it)).blockingGet() } }
-            runCatching { pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1").rxExecute(Tuple.of(terminalId)).blockingGet() }
+            createdTerminalId?.let { terminalId ->
+                runCatching {
+                    pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+                        .rxExecute(Tuple.of(terminalId)).blockingGet()
+                }
+            }
             runCatching { locationRepository.deleteLocation(locationId).blockingGet() }
         }
     }

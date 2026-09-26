@@ -7,6 +7,7 @@ import com.literp.verticle.handler.PosOperationsHandler
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonArray
+import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.core.http.HttpServer
 import io.vertx.rxjava3.ext.web.Router
 import org.junit.jupiter.api.AfterAll
@@ -79,8 +80,20 @@ class PosOperationsContractTest {
         assertEquals(10, actualFiles.size, "Every POS operation must have one Bruno request")
 
         val placeholderOperationIds = placeholderRequests().map { it.operationId }.toSet()
+        val openApiPaths = requireNotNull(
+            JsonObject(Files.readString(Path.of("api_collections/open_api_spec/pos-operations.json"))).getJsonObject("paths")
+        )
+
         requests.forEach { request ->
             val document = Files.readString(collectionDir.resolve(request.fileName))
+            val pathItem = requireNotNull(openApiPaths.getJsonObject(request.contractPath.removePrefix("/api/v1")))
+            val operation = requireNotNull(pathItem.getJsonObject(request.method.lowercase()))
+            val responses = requireNotNull(operation.getJsonObject("responses"))
+            assertEquals(
+                request.operationId in placeholderOperationIds,
+                responses.containsKey("501"),
+                "OpenAPI 501 response must match availability for ${request.operationId}"
+            )
             val operationIdCount = Regex(
                 """(?m)^\s*operationId:\s*${Regex.escape(request.operationId)}\s*$"""
             ).findAll(document).count()
@@ -107,6 +120,11 @@ class PosOperationsContractTest {
                 assertTrue(
                     document.contains("501 NOT_IMPLEMENTED"),
                     "${request.fileName} must document placeholder availability"
+                )
+            } else {
+                assertFalse(
+                    document.contains("501 NOT_IMPLEMENTED"),
+                    "${request.fileName} must not describe an implemented operation as a placeholder"
                 )
             }
             assertFalse(document.contains("Authorization:"), "${request.fileName} must not contain credentials")

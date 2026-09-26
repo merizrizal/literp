@@ -97,7 +97,8 @@ provide local evidence. Native Bruno import/smoke validation remains unavailable
 because the installed desktop application cannot start its Linux sandbox helper.
 Genuine-provider, deployment, timed-JWKS, audit-ownership, and external
 authenticated acceptance remain deferred under the authentication baseline.
-This acceptance does not start or authorize 05.2/05.3 behavior implementation.
+At the time, this 05.1 contract acceptance did not start or authorize behavior
+work. Task 05.2 was authorized separately; Task 05.3 remains out of scope.
 
 ### 05.2 POS Terminal And Shift API
 
@@ -105,17 +106,40 @@ Estimate: 4-7 engineer-days
 
 Tasks:
 
-- [ ] Add terminal list/create/get/update/deactivate endpoints
-- [ ] Add shift open/close endpoints
-- [ ] Add current-shift lookup by terminal
-- [ ] Add cashier/operator attribution to POS order workflows
-- [ ] Add cash reconciliation rules for closing shifts
+- [x] Add terminal list/create/get/update/deactivate endpoints
+- [x] Add shift open/close endpoints
+- [x] Add current-shift lookup by terminal
+- [x] Add cashier/operator attribution to POS order workflows
+- [x] Add cash reconciliation rules for closing shifts
 
 Done when:
 
-- [ ] A POS operator can open and close a shift
-- [ ] Active terminal and shift state can be queried
-- [ ] POS order workflows can be attributed to an operator or shift
+- [x] A POS operator can open and close a shift
+- [x] Active terminal and shift state can be queried
+- [x] POS order workflows can be attributed to an operator or shift
+
+**Local acceptance evidence:**
+
+- `rtk proxy ./gradlew test --tests com.literp.verticle.AuthenticationHttpIntegrationTest`:
+  9 tests passed, 0 skipped; includes terminal creation, shift open, attributed
+  order/cash capture, reconciliation, persistence/actor checks, and fulfillment
+  after close.
+- `rtk proxy ./gradlew test`: 92 tests passed, 0 skipped, failures, or errors;
+  run against the confirmed disposable `literp_test` database.
+- `rtk proxy ./gradlew build`: passed; CI build/test/migration/OpenAPI jobs were
+  inspected and already cover these checks.
+- `rtk python scripts/verify_migrations.py`: passed at Alembic head
+  `b2d6f8a1c4e3`.
+- `rtk python scripts/verify_openapi_assets.py`: all four YAML/JSON pairs
+  synchronized; POS contract/Bruno and operation-registration tests passed.
+- The approved non-production Bruno runtime smoke remains pending: no
+  `LITERP_ACCESS_TOKEN` or `bru` CLI is available in this environment.
+  Filesystem contract parity and authenticated HTTP integration coverage passed.
+  No provider, deployment, timed-JWKS, audit-ownership, or external acceptance
+  is claimed.
+
+Receipt lookup operations remain authenticated `501 NOT_IMPLEMENTED`
+placeholders. Receipt generation, refunds, and Task 05.3 remain out of scope.
 
 ### 05.3 Receipt And Refund API
 
