@@ -1,6 +1,12 @@
 package com.literp.verticle.handler
 
 import com.literp.common.ErrorCodes
+import com.literp.repository.PosOperationsConflict
+import com.literp.repository.PosOperationsScopeViolation
+import com.literp.repository.PosOperationsValidation
+import com.literp.repository.PosOrderConflict
+import com.literp.repository.PosOrderScopeViolation
+import com.literp.repository.PosOrderValidation
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.ext.web.RoutingContext
@@ -120,6 +126,10 @@ open class BaseHandler(clazz: Class<*>) {
                 || message.contains("draft", ignoreCase = true)
                 || message.contains("insufficient captured payment", ignoreCase = true)
                 || message.contains("insufficient available stock", ignoreCase = true)
+                || message.contains("shift is not open", ignoreCase = true)
+                || message.contains("remaining order balance", ignoreCase = true)
+                || message.contains("POS order", ignoreCase = true)
+                || message.contains("actor context is inconsistent", ignoreCase = true)
     }
 
     protected fun isValidationError(message: String?): Boolean {
@@ -141,6 +151,21 @@ open class BaseHandler(clazz: Class<*>) {
         conflictMessage: String? = null
     ) {
         when {
+            error is PosOrderScopeViolation ||
+                error.message?.contains("pos.order.use", ignoreCase = true) == true ||
+                error.message?.contains("shift owner mismatch", ignoreCase = true) == true ||
+                error.message?.contains("human shift owner", ignoreCase = true) == true ->
+                putErrorResponse(context, 403, "Forbidden", ErrorCodes.FORBIDDEN)
+            error is PosOrderValidation ->
+                putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
+            error is PosOrderConflict ->
+                putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
+            error is PosOperationsScopeViolation ->
+                putErrorResponse(context, 403, "Forbidden", ErrorCodes.FORBIDDEN)
+            error is PosOperationsValidation ->
+                putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
+            error is PosOperationsConflict ->
+                putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
             isNotFoundError(error.message) -> putErrorResponse(context, 404, notFoundMessage)
             isValidationError(error.message) -> putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
             isConflictError(error.message) -> putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")

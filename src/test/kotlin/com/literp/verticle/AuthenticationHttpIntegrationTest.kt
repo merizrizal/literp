@@ -10,14 +10,15 @@ import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
-import java.math.BigDecimal
-import java.time.Instant
-import java.util.UUID
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.math.BigDecimal
+import java.time.Instant
+import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import io.vertx.rxjava3.core.Vertx as RxVertx
@@ -146,15 +147,892 @@ class AuthenticationHttpIntegrationTest {
             Request("POST", "/api/v1/orders/${UUID.randomUUID()}/confirm"),
             Request("POST", "/api/v1/orders/${UUID.randomUUID()}/payments"),
             Request("POST", "/api/v1/orders/${UUID.randomUUID()}/fulfill"),
-            Request("POST", "/api/v1/orders/${UUID.randomUUID()}/cancel")
+            Request("POST", "/api/v1/orders/${UUID.randomUUID()}/cancel"),
+            Request("GET", "/api/v1/pos/terminals"),
+            Request("POST", "/api/v1/pos/terminals"),
+            Request("GET", "/api/v1/pos/terminals/${UUID.randomUUID()}"),
+            Request("PATCH", "/api/v1/pos/terminals/${UUID.randomUUID()}"),
+            Request("POST", "/api/v1/pos/terminals/${UUID.randomUUID()}/deactivate"),
+            Request("POST", "/api/v1/pos/terminals/${UUID.randomUUID()}/shifts"),
+            Request("GET", "/api/v1/pos/terminals/${UUID.randomUUID()}/current-shift"),
+            Request("POST", "/api/v1/pos/shifts/${UUID.randomUUID()}/close"),
+            Request("GET", "/api/v1/pos/receipts/by-number/receipt-1"),
+            Request("GET", "/api/v1/pos/orders/${UUID.randomUUID()}/receipts")
         )
 
-        assertEquals(31, routeRequests.size)
+        assertEquals(41, routeRequests.size)
         routeRequests.forEach { request ->
             val response = http.request(request.method, request.path)
             assertEquals(401, response.status, "Expected anonymous ${request.method} ${request.path} to be rejected")
             HttpTestSupport.assertErrorEnvelope(requireNotNull(response.json), 401, ErrorCodes.UNAUTHENTICATED)
             assertEquals("Bearer", response.header("WWW-Authenticate"))
+        }
+    }
+
+    @Test
+    fun authenticatedPosReadsEnforceScopesAndReceiptLookupsRemainPlaceholders() {
+        val terminalId = UUID.randomUUID().toString()
+        val shiftId = UUID.randomUUID().toString()
+        val salesOrderId = UUID.randomUUID().toString()
+        val grantedReadHeaders = securityFixture.authorization(
+            capabilities = setOf("pos.terminal.read"),
+            locationIds = setOf(securityFixture.locationId),
+            operator = false,
+            principalKind = "service"
+        )
+
+        val grantedList = http.request("GET", "/api/v1/pos/terminals", headers = grantedReadHeaders)
+        assertEquals(200, grantedList.status)
+        HttpTestSupport.assertListEnvelope(requireNotNull(grantedList.json))
+
+        val outsideLocation = UUID.randomUUID().toString()
+        val outOfScopeList = http.request(
+            "GET",
+            "/api/v1/pos/terminals?locationId=$outsideLocation",
+            headers = grantedReadHeaders
+        )
+        assertEquals(403, outOfScopeList.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(outOfScopeList.json), 403, ErrorCodes.FORBIDDEN)
+
+        val missingTerminal = http.request(
+            "GET",
+            "/api/v1/pos/terminals/$terminalId",
+            headers = grantedReadHeaders
+        )
+        assertEquals(404, missingTerminal.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(missingTerminal.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+        val emptyGrantList = http.request(
+            "GET",
+            "/api/v1/pos/terminals",
+            headers = securityFixture.authorization(
+                capabilities = setOf("pos.terminal.read"),
+                locationIds = emptySet(),
+                operator = false,
+                principalKind = "service"
+            )
+        )
+        assertEquals(403, emptyGrantList.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(emptyGrantList.json), 403, ErrorCodes.FORBIDDEN)
+
+        val requests = listOf(
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/receipts/by-number/receipt-1",
+                "pos.receipt.read"
+            ),
+            PosPlaceholderRequest(
+                "GET",
+                "/api/v1/pos/orders/$salesOrderId/receipts",
+                "pos.receipt.read"
+            )
+        )
+
+        requests.forEachIndexed { index, request ->
+            val requestId = "pos-placeholder-$index"
+            val result = http.request(
+                request.method,
+                request.path,
+                request.body,
+                headers = securityFixture.authorization(
+                    capabilities = setOf(request.capability),
+                    operator = false,
+                    principalKind = request.principalKind
+                ) + request.headers + ("X-Request-ID" to requestId)
+            )
+
+            assertEquals(501, result.status, "Unexpected status for ${request.method} ${request.path}")
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(result.json), 501, "NOT_IMPLEMENTED")
+            assertEquals(requestId, result.header("X-Request-ID"))
+        }
+
+        val serviceOpen = http.request(
+            "POST",
+            "/api/v1/pos/terminals/$terminalId/shifts",
+            JsonObject().put("openingBalance", BigDecimal("250.00")).put("currency", "USD"),
+            securityFixture.authorization(
+                capabilities = setOf("pos.shift.open"),
+                operator = false,
+                principalKind = "service"
+            ) + ("Idempotency-Key" to "pos-service-open-$shiftId")
+        )
+        assertEquals(403, serviceOpen.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(serviceOpen.json), 403, ErrorCodes.FORBIDDEN)
+
+        val missingCapability = http.request(
+            "GET",
+            "/api/v1/pos/terminals",
+            headers = securityFixture.authorization(
+                capabilities = setOf("master-data.read"),
+                operator = false,
+                principalKind = "service"
+            )
+        )
+        assertEquals(403, missingCapability.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(missingCapability.json), 403, ErrorCodes.FORBIDDEN)
+    }
+
+    @Test
+    fun authenticatedTerminalAdministrationScopesMutationsAndReplaysCreation() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val terminalCode = "HTTP-$suffix"
+        val updatedTerminalCode = "HTTP-U-$suffix"
+        val actorSubject = "terminal-admin-$suffix"
+        val idempotencyKey = "terminal-create-$suffix"
+        val location = locationRepository.createLocation(
+            "POS-$suffix",
+            "POS terminal test $suffix",
+            "WAREHOUSE",
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val locationId = location.getString("locationId")
+        var terminalId: String? = null
+        val headers = securityFixture.authorization(
+            capabilities = setOf("pos.terminal.write"),
+            locationIds = setOf(locationId),
+            operator = false,
+            principalKind = "service",
+            subject = actorSubject
+        )
+        val createBody = JsonObject()
+            .put("locationId", locationId)
+            .put("terminalCode", terminalCode)
+            .put("deviceName", "HTTP terminal $suffix")
+
+        try {
+            val created = http.expect(
+                "POST",
+                "/api/v1/pos/terminals",
+                201,
+                createBody,
+                headers + ("Idempotency-Key" to idempotencyKey)
+            )
+            val createdData = requireNotNull(created.json).getJsonObject("data")
+            terminalId = requireNotNull(createdData.getString("terminalId"))
+            val terminalId = requireNotNull(terminalId)
+            assertEquals(locationId, createdData.getString("locationId"))
+            assertTrue(createdData.getBoolean("isActive"))
+
+            val replay = http.expect(
+                "POST",
+                "/api/v1/pos/terminals",
+                201,
+                createBody,
+                headers + ("Idempotency-Key" to idempotencyKey)
+            )
+            assertEquals(terminalId, requireNotNull(replay.json).getJsonObject("data").getString("terminalId"))
+
+            val changedReplay = http.request(
+                "POST",
+                "/api/v1/pos/terminals",
+                createBody.copy().put("terminalCode", "HTTP-C-$suffix"),
+                headers + ("Idempotency-Key" to idempotencyKey)
+            )
+            assertEquals(409, changedReplay.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(changedReplay.json), 409, ErrorCodes.CONFLICT)
+
+            val missingKey = http.request("POST", "/api/v1/pos/terminals", createBody, headers)
+            assertEquals(400, missingKey.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(missingKey.json), 400, ErrorCodes.VALIDATION_ERROR)
+
+            val updated = http.expect(
+                "PATCH",
+                "/api/v1/pos/terminals/$terminalId",
+                200,
+                JsonObject().put("terminalCode", updatedTerminalCode).put("deviceName", "Updated terminal $suffix"),
+                headers
+            )
+            val updatedData = requireNotNull(updated.json).getJsonObject("data")
+            assertEquals(updatedTerminalCode, updatedData.getString("terminalCode"))
+            assertEquals("Updated terminal $suffix", updatedData.getString("deviceName"))
+
+            val hiddenUpdate = http.request(
+                "PATCH",
+                "/api/v1/pos/terminals/$terminalId",
+                JsonObject().put("deviceName", "Hidden update"),
+                securityFixture.authorization(
+                    capabilities = setOf("pos.terminal.write"),
+                    locationIds = setOf(UUID.randomUUID().toString()),
+                    operator = false,
+                    principalKind = "service",
+                    subject = "other-admin-$suffix"
+                )
+            )
+            assertEquals(404, hiddenUpdate.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(hiddenUpdate.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+            val deactivated = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/deactivate",
+                200,
+                headers = headers
+            )
+            assertFalse(requireNotNull(deactivated.json).getJsonObject("data").getBoolean("isActive"))
+
+            val repeatedDeactivation = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/deactivate",
+                200,
+                headers = headers
+            )
+            assertFalse(requireNotNull(repeatedDeactivation.json).getJsonObject("data").getBoolean("isActive"))
+        } finally {
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'createPosTerminal'
+                  AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, locationId, idempotencyKey)).blockingGet()
+            terminalId?.let {
+                pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+                    .rxExecute(Tuple.of(it)).blockingGet()
+            }
+            locationRepository.deleteLocation(locationId).blockingGet()
+        }
+    }
+
+    @Test
+    fun authenticatedHumanCanOpenAndReadCurrentShiftWithScopedReplay() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val location = locationRepository.createLocation(
+            "PSS-$suffix",
+            "POS shift test $suffix",
+            "WAREHOUSE",
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val locationId = location.getString("locationId")
+        val terminalId = createPosTerminal(locationId, "PSS-1-$suffix")
+        val actorSubject = "http-shift-owner-$suffix"
+        val idempotencyKey = "http-open-shift-$suffix"
+        val closeIdempotencyKey = "http-close-shift-$suffix"
+        val openingBody = JsonObject()
+            .put("openingBalance", BigDecimal("250.00"))
+            .put("currency", "USD")
+        val openHeaders = securityFixture.authorization(
+            capabilities = setOf("pos.shift.open"),
+            locationIds = setOf(locationId),
+            operator = false,
+            principalKind = "human",
+            subject = actorSubject
+        ) + ("Idempotency-Key" to idempotencyKey)
+        var shiftId: String? = null
+
+        try {
+            val opened = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                201,
+                openingBody,
+                openHeaders
+            )
+            val openedData = requireNotNull(opened.json).getJsonObject("data")
+            shiftId = requireNotNull(openedData.getString("shiftId"))
+            assertEquals(terminalId, openedData.getString("terminalId"))
+            assertEquals(actorSubject, openedData.getString("operatorId"))
+            assertEquals("USD", openedData.getString("currency"))
+            assertEquals("OPEN", openedData.getString("status"))
+            assertEquals(
+                0,
+                BigDecimal(openedData.getValue("openingBalance").toString()).compareTo(BigDecimal("250.00"))
+            )
+            assertEquals(null, openedData.getValue("expectedCash"))
+
+            val replay = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                201,
+                openingBody,
+                openHeaders
+            )
+            assertEquals(shiftId, requireNotNull(replay.json).getJsonObject("data").getString("shiftId"))
+
+            val current = http.expect(
+                "GET",
+                "/api/v1/pos/terminals/$terminalId/current-shift",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("pos.shift.read"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            assertEquals(shiftId, requireNotNull(current.json).getJsonObject("data").getString("shiftId"))
+
+            val changedReplay = http.request(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                openingBody.copy().put("openingBalance", BigDecimal("251.00")),
+                openHeaders
+            )
+            assertEquals(409, changedReplay.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(changedReplay.json), 409, ErrorCodes.CONFLICT)
+
+            val closingBody = JsonObject().put("closingBalance", BigDecimal("245.00"))
+            val closeHeaders = securityFixture.authorization(
+                capabilities = setOf("pos.shift.close"),
+                locationIds = setOf(locationId),
+                operator = false,
+                principalKind = "human",
+                subject = actorSubject
+            ) + ("Idempotency-Key" to closeIdempotencyKey)
+            val ownerMismatch = http.request(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                closingBody,
+                securityFixture.authorization(
+                    capabilities = setOf("pos.shift.close"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "human",
+                    subject = "different-shift-owner-$suffix"
+                ) + ("Idempotency-Key" to "owner-mismatch-close-$suffix")
+            )
+            assertEquals(403, ownerMismatch.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(ownerMismatch.json), 403, ErrorCodes.FORBIDDEN)
+
+            val closed = http.expect(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                200,
+                closingBody,
+                closeHeaders
+            )
+            val closedData = requireNotNull(closed.json).getJsonObject("data")
+            assertEquals("CLOSED", closedData.getString("status"))
+            assertEquals(actorSubject, closedData.getString("closedBy"))
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("expectedCash").toString()).compareTo(BigDecimal("250.00"))
+            )
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("cashVariance").toString()).compareTo(BigDecimal("-5.00"))
+            )
+            assertNotNull(closedData.getString("closedAt"))
+
+            val closeReplay = http.expect(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                200,
+                closingBody,
+                closeHeaders
+            )
+            assertEquals(
+                closedData.getString("closedAt"),
+                requireNotNull(closeReplay.json).getJsonObject("data").getString("closedAt")
+            )
+
+            val changedCloseReplay = http.request(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                closingBody.copy().put("closingBalance", BigDecimal("246.00")),
+                closeHeaders
+            )
+            assertEquals(409, changedCloseReplay.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(changedCloseReplay.json), 409, ErrorCodes.CONFLICT)
+
+            val newCloseKey = http.request(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                closingBody,
+                closeHeaders + ("Idempotency-Key" to "new-close-key-$suffix")
+            )
+            assertEquals(409, newCloseKey.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(newCloseKey.json), 409, ErrorCodes.CONFLICT)
+
+            val currentAfterClose = http.request(
+                "GET",
+                "/api/v1/pos/terminals/$terminalId/current-shift",
+                headers = securityFixture.authorization(
+                    capabilities = setOf("pos.shift.read"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            assertEquals(404, currentAfterClose.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(currentAfterClose.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+            val serviceOpen = http.request(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                openingBody,
+                securityFixture.authorization(
+                    capabilities = setOf("pos.shift.open"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "service",
+                    subject = "service-shift-$suffix"
+                ) + ("Idempotency-Key" to "service-open-$suffix")
+            )
+            assertEquals(403, serviceOpen.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(serviceOpen.json), 403, ErrorCodes.FORBIDDEN)
+
+            val hiddenCurrent = http.request(
+                "GET",
+                "/api/v1/pos/terminals/$terminalId/current-shift",
+                headers = securityFixture.authorization(
+                    capabilities = setOf("pos.shift.read"),
+                    locationIds = setOf(UUID.randomUUID().toString()),
+                    operator = false,
+                    principalKind = "service",
+                    subject = "hidden-shift-reader-$suffix"
+                )
+            )
+            assertEquals(404, hiddenCurrent.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(hiddenCurrent.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+        } finally {
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2
+                  AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, idempotencyKey)).blockingGet()
+            shiftId?.let {
+                pool.preparedQuery(
+                    """
+                    DELETE FROM pos_command_ledger
+                    WHERE organization_id = $1 AND actor_subject = $2
+                      AND operation_id = 'closePosShift' AND target_id = $3 AND idempotency_key = $4
+                    """.trimIndent()
+                ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, it, closeIdempotencyKey)).blockingGet()
+            }
+            shiftId?.let {
+                pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
+                    .rxExecute(Tuple.of(it)).blockingGet()
+            }
+            pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+                .rxExecute(Tuple.of(terminalId)).blockingGet()
+            locationRepository.deleteLocation(locationId).blockingGet()
+        }
+    }
+
+    @Test
+    fun humanCanCreateScopedAttributedDraftWithServerActor() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val location = locationRepository.createLocation(
+            "POD-$suffix",
+            "POS order draft test $suffix",
+            "WAREHOUSE",
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val locationId = location.getString("locationId")
+        val terminalId = createPosTerminal(locationId, "POD-1-$suffix")
+        val actorSubject = "http-pos-draft-owner-$suffix"
+        val openKey = "http-pos-draft-open-$suffix"
+        val openingBody = JsonObject()
+            .put("openingBalance", BigDecimal("100.00"))
+            .put("currency", "USD")
+        var shiftId: String? = null
+        var orderId: String? = null
+
+        try {
+            val opened = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                201,
+                openingBody,
+                securityFixture.authorization(
+                    capabilities = setOf("pos.shift.open"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                ) + ("Idempotency-Key" to openKey)
+            )
+            shiftId = requireNotNull(opened.json).getJsonObject("data").getString("shiftId")
+
+            val draftBody = JsonObject()
+                .put("salesChannel", "POS")
+                .put("locationId", locationId)
+                .put("currency", "USD")
+                .put("posContext", JsonObject().put("shiftId", shiftId))
+            val attributedHeaders = securityFixture.authorization(
+                capabilities = setOf("order.write", "pos.order.use"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            )
+
+            val created = http.expect("POST", "/api/v1/orders", 201, draftBody, attributedHeaders)
+            val createdData = requireNotNull(created.json).getJsonObject("data")
+            orderId = requireNotNull(createdData.getString("salesOrderId"))
+            assertEquals(shiftId, createdData.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(actorSubject, createdData.getJsonObject("posContext").getString("draftOperatorId"))
+
+            val readBack = http.expect(
+                "GET",
+                "/api/v1/orders/$orderId",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("order.read"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            assertEquals(shiftId, requireNotNull(readBack.json).getJsonObject("data").getJsonObject("posContext").getString("shiftId"))
+
+            val list = http.expect(
+                "GET",
+                "/api/v1/orders?locationId=$locationId&sort=createdAt,desc",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("order.read"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            val listedContext = requireNotNull(list.json).getJsonArray("data")
+                .map { it as JsonObject }
+                .first { it.getString("salesOrderId") == orderId }
+                .getJsonObject("posContext")
+            assertEquals(shiftId, listedContext.getString("shiftId"))
+
+            val missingUseCapability = http.request(
+                "POST",
+                "/api/v1/orders",
+                draftBody,
+                securityFixture.authorization(
+                    capabilities = setOf("order.write"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = "missing-pos-use-$suffix"
+                )
+            )
+            assertEquals(403, missingUseCapability.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(missingUseCapability.json), 403, ErrorCodes.FORBIDDEN)
+
+            val servicePrincipal = http.request(
+                "POST",
+                "/api/v1/orders",
+                draftBody,
+                securityFixture.authorization(
+                    capabilities = setOf("order.write", "pos.order.use"),
+                    locationIds = setOf(locationId),
+                    principalKind = "service",
+                    subject = "service-pos-draft-$suffix"
+                )
+            )
+            assertEquals(403, servicePrincipal.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(servicePrincipal.json), 403, ErrorCodes.FORBIDDEN)
+        } finally {
+            orderId?.let {
+                pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1")
+                    .rxExecute(Tuple.of(it)).blockingGet()
+                pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1")
+                    .rxExecute(Tuple.of(it)).blockingGet()
+            }
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2
+                  AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, openKey)).blockingGet()
+            shiftId?.let {
+                pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
+                    .rxExecute(Tuple.of(it)).blockingGet()
+            }
+            pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+                .rxExecute(Tuple.of(terminalId)).blockingGet()
+            locationRepository.deleteLocation(locationId).blockingGet()
+        }
+    }
+
+    @Test
+    fun authenticatedPosLifecycleReconcilesCashAndAllowsFulfillmentAfterClose() {
+        val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
+        val location = locationRepository.createLocation(
+            "POC-$suffix",
+            "POS command location $suffix",
+            "WAREHOUSE",
+            true,
+            JsonObject().put("testRun", suffix)
+        ).blockingGet()
+        val locationId = location.getString("locationId")
+        val terminalCode = "POC-$suffix"
+        val terminalCreateKey = "POC-TERMINAL-$suffix"
+        val terminalAdminSubject = "http-pos-terminal-admin-$suffix"
+        var createdTerminalId: String? = null
+        val sku = "POC-$suffix"
+        val stockReference = "POC-STOCK-$suffix"
+        var createdProductId: String? = null
+        val actorSubject = "http-pos-command-owner-$suffix"
+        val openKey = "POC-OPEN-$suffix"
+        val closeKey = "POC-CLOSE-$suffix"
+        var shiftId: String? = null
+        var orderId: String? = null
+
+        try {
+            val product = productRepository.createProduct(
+                sku,
+                "POS command product $suffix",
+                "STOCK",
+                TestDatabase.SEED_UOM_UNIT,
+                true,
+                JsonObject().put("testRun", suffix)
+            ).blockingGet()
+            val productId = product.getString("productId")
+            createdProductId = productId
+            insertPosStock(productId, sku, locationId, stockReference)
+
+            val createdTerminal = http.expect(
+                "POST",
+                "/api/v1/pos/terminals",
+                201,
+                JsonObject()
+                    .put("locationId", locationId)
+                    .put("terminalCode", terminalCode)
+                    .put("deviceName", "POS command terminal $suffix"),
+                securityFixture.authorization(
+                    capabilities = setOf("pos.terminal.write"),
+                    locationIds = setOf(locationId),
+                    operator = false,
+                    principalKind = "service",
+                    subject = terminalAdminSubject
+                ) + ("Idempotency-Key" to terminalCreateKey)
+            )
+            val terminalData = requireNotNull(createdTerminal.json).getJsonObject("data")
+            val terminalId = requireNotNull(terminalData.getString("terminalId"))
+            createdTerminalId = terminalId
+            assertEquals(locationId, terminalData.getString("locationId"))
+            assertTrue(terminalData.getBoolean("isActive"))
+
+            val opened = http.expect(
+                "POST",
+                "/api/v1/pos/terminals/$terminalId/shifts",
+                201,
+                JsonObject().put("openingBalance", 0).put("currency", "USD"),
+                securityFixture.authorization(
+                    capabilities = setOf("pos.shift.open"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                ) + ("Idempotency-Key" to openKey)
+            )
+            shiftId = requireNotNull(opened.json).getJsonObject("data").getString("shiftId")
+
+            val attributedHeaders = securityFixture.authorization(
+                capabilities = setOf("order.write", "pos.order.use"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            )
+            val draft = http.expect(
+                "POST",
+                "/api/v1/orders",
+                201,
+                JsonObject()
+                    .put("salesChannel", "POS")
+                    .put("locationId", locationId)
+                    .put("currency", "USD")
+                    .put("posContext", JsonObject().put("shiftId", shiftId)),
+                attributedHeaders
+            )
+            val draftData = requireNotNull(draft.json).getJsonObject("data")
+            orderId = requireNotNull(draftData.getString("salesOrderId"))
+            assertEquals(shiftId, draftData.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(actorSubject, draftData.getJsonObject("posContext").getString("draftOperatorId"))
+
+            val missingPosUse = http.request(
+                "POST",
+                "/api/v1/orders/$orderId/lines",
+                JsonObject().put("productId", productId).put("quantityOrdered", 1).put("unitPrice", 10),
+                securityFixture.authorization(
+                    capabilities = setOf("order.write"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                )
+            )
+            assertEquals(403, missingPosUse.status)
+            HttpTestSupport.assertErrorEnvelope(requireNotNull(missingPosUse.json), 403, ErrorCodes.FORBIDDEN)
+
+            http.expect(
+                "POST",
+                "/api/v1/orders/$orderId/lines",
+                201,
+                JsonObject().put("productId", productId).put("quantityOrdered", 1).put("unitPrice", 10),
+                attributedHeaders
+            )
+            http.expect(
+                "POST",
+                "/api/v1/orders/$orderId/confirm",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("order.confirm", "pos.order.use"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = actorSubject
+                ) + ("Idempotency-Key" to "POC-CONFIRM-$suffix")
+            )
+
+            val paymentHeaders = securityFixture.authorization(
+                capabilities = setOf("payment.capture", "pos.order.use"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            ) + ("Idempotency-Key" to "POC-PAY-$suffix")
+            val paymentBody = JsonObject()
+                .put("paymentMethod", "CASH")
+                .put("amount", 10)
+                .put("transactionRef", "POC-CASH-$suffix")
+            val payment = http.expect("POST", "/api/v1/orders/$orderId/payments", 201, paymentBody, paymentHeaders)
+            val replay = http.expect("POST", "/api/v1/orders/$orderId/payments", 201, paymentBody, paymentHeaders)
+            val paymentId = requireNotNull(payment.json).getJsonObject("data").getJsonObject("payment").getString("paymentId")
+            assertEquals(
+                paymentId,
+                requireNotNull(replay.json).getJsonObject("data").getJsonObject("payment").getString("paymentId")
+            )
+            assertEquals(
+                1,
+                pool.preparedQuery("SELECT COUNT(*) AS cnt FROM pos_payment_context WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(paymentId)).blockingGet().first().getInteger("cnt")
+            )
+            assertEquals(
+                actorSubject,
+                pool.preparedQuery("SELECT capture_operator_id FROM pos_payment_context WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(paymentId)).blockingGet().first().getString("capture_operator_id")
+            )
+            val closeHeaders = securityFixture.authorization(
+                capabilities = setOf("pos.shift.close"),
+                locationIds = setOf(locationId),
+                principalKind = "human",
+                subject = actorSubject
+            ) + ("Idempotency-Key" to closeKey)
+            val closed = http.expect(
+                "POST",
+                "/api/v1/pos/shifts/$shiftId/close",
+                200,
+                JsonObject().put("closingBalance", BigDecimal("9.50")),
+                closeHeaders
+            )
+            val closedData = requireNotNull(closed.json).getJsonObject("data")
+            assertEquals("CLOSED", closedData.getString("status"))
+            assertEquals(actorSubject, closedData.getString("closedBy"))
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("expectedCash").toString()).compareTo(BigDecimal("10.00"))
+            )
+            assertEquals(
+                0,
+                BigDecimal(closedData.getValue("cashVariance").toString()).compareTo(BigDecimal("-0.50"))
+            )
+            assertNotNull(closedData.getString("closedAt"))
+
+            val fulfillmentSubject = "http-pos-fulfillment-$suffix"
+            val fulfillment = http.expect(
+                "POST",
+                "/api/v1/orders/$orderId/fulfill",
+                200,
+                JsonObject().put("createdBy", "untrusted-body-actor").put("notes", "POS pickup $suffix"),
+                securityFixture.authorization(
+                    capabilities = setOf("order.fulfill"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = fulfillmentSubject
+                ) + ("Idempotency-Key" to "POC-FULFILL-$suffix")
+            )
+            assertEquals("FULFILLED", requireNotNull(fulfillment.json).getJsonObject("data").getString("status"))
+            assertEquals(1, movementCount(requireNotNull(orderId)))
+            assertEquals(fulfillmentSubject, movementActor(requireNotNull(orderId)))
+
+            val fulfilledOrder = http.expect(
+                "GET",
+                "/api/v1/orders/$orderId",
+                200,
+                headers = securityFixture.authorization(
+                    capabilities = setOf("order.read"),
+                    locationIds = setOf(locationId),
+                    principalKind = "human",
+                    subject = fulfillmentSubject
+                )
+            )
+            val fulfilledOrderData = requireNotNull(fulfilledOrder.json).getJsonObject("data")
+            assertEquals("FULFILLED", fulfilledOrderData.getString("status"))
+            assertEquals(shiftId, fulfilledOrderData.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(
+                shiftId,
+                pool.preparedQuery("SELECT shift_id FROM pos_payment_context WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(paymentId)).blockingGet().first().getString("shift_id")
+            )
+            val persistedClose = pool.preparedQuery(
+                "SELECT status, closing_balance, expected_cash, cash_variance, closed_by FROM pos_shift WHERE shift_id = $1"
+            ).rxExecute(Tuple.of(shiftId)).blockingGet().first()
+            assertEquals("CLOSED", persistedClose.getString("status"))
+            assertEquals(actorSubject, persistedClose.getString("closed_by"))
+            assertEquals(0, persistedClose.getBigDecimal("closing_balance").compareTo(BigDecimal("9.50")))
+            assertEquals(0, persistedClose.getBigDecimal("expected_cash").compareTo(BigDecimal("10.00")))
+            assertEquals(0, persistedClose.getBigDecimal("cash_variance").compareTo(BigDecimal("-0.50")))
+        } finally {
+            orderId?.let { id ->
+                runCatching {
+                    pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1")
+                        .rxExecute(Tuple.of(id)).blockingGet()
+                }
+                runCatching {
+                    pool.preparedQuery("DELETE FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)")
+                        .rxExecute(Tuple.of(id)).blockingGet()
+                }
+                runCatching { pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1").rxExecute(Tuple.of(id)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM payment WHERE sales_order_id = $1").rxExecute(Tuple.of(id)).blockingGet() }
+                runCatching { pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1").rxExecute(Tuple.of(id)).blockingGet() }
+            }
+            runCatching { pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1").rxExecute(Tuple.of(stockReference)).blockingGet() }
+            createdProductId?.let { productId ->
+                runCatching { productRepository.deleteProduct(productId).blockingGet() }
+            }
+            createdTerminalId?.let { terminalId ->
+                runCatching {
+                    pool.preparedQuery(
+                        """
+                        DELETE FROM pos_command_ledger
+                        WHERE organization_id = $1 AND actor_subject = $2
+                          AND operation_id = 'openPosShift' AND target_id = $3 AND idempotency_key = $4
+                        """.trimIndent()
+                    ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, terminalId, openKey)).blockingGet()
+                }
+            }
+            shiftId?.let { shift ->
+                runCatching {
+                    pool.preparedQuery(
+                        """
+                        DELETE FROM pos_command_ledger
+                        WHERE organization_id = $1 AND actor_subject = $2
+                          AND operation_id = 'closePosShift' AND target_id = $3 AND idempotency_key = $4
+                        """.trimIndent()
+                    ).rxExecute(Tuple.of(securityFixture.organizationId, actorSubject, shift, closeKey)).blockingGet()
+                }
+                runCatching {
+                    pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
+                        .rxExecute(Tuple.of(shift)).blockingGet()
+                }
+            }
+            runCatching {
+                pool.preparedQuery(
+                    """
+                    DELETE FROM pos_command_ledger
+                    WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'createPosTerminal'
+                      AND target_id = $3 AND idempotency_key = $4
+                    """.trimIndent()
+                ).rxExecute(Tuple.of(securityFixture.organizationId, terminalAdminSubject, locationId, terminalCreateKey)).blockingGet()
+            }
+            createdTerminalId?.let { terminalId ->
+                runCatching {
+                    pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+                        .rxExecute(Tuple.of(terminalId)).blockingGet()
+                }
+            }
+            runCatching { locationRepository.deleteLocation(locationId).blockingGet() }
         }
     }
 
@@ -186,6 +1064,15 @@ class AuthenticationHttpIntegrationTest {
     }
 
     private data class Request(val method: String, val path: String)
+
+    private data class PosPlaceholderRequest(
+        val method: String,
+        val path: String,
+        val capability: String,
+        val body: JsonObject? = null,
+        val headers: Map<String, String> = emptyMap(),
+        val principalKind: String = "service"
+    )
 
     @Test
     fun productionOrderScopesReauthorizeReplaysAndIgnoreSpoofedFulfillmentActors() {
@@ -440,6 +1327,21 @@ class AuthenticationHttpIntegrationTest {
         }
     }
 
+    private fun createPosTerminal(locationId: String, terminalCode: String): String {
+        val terminalId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO pos_terminal (
+                terminal_id, location_id, terminal_code, device_name, is_active, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, true, NOW(), NOW())
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.of(terminalId, locationId, terminalCode, "HTTP shift terminal $terminalCode")
+        ).blockingGet()
+        return terminalId
+    }
+
     private fun createScopedOrderSeed(): ScopedOrderSeed {
         val suffix = UUID.randomUUID().toString().replace("-", "").take(8).uppercase()
         val location = locationRepository.createLocation(
@@ -478,6 +1380,22 @@ class AuthenticationHttpIntegrationTest {
         return seed
     }
 
+    private fun insertPosStock(productId: String, sku: String, locationId: String, referenceId: String) {
+        pool.preparedQuery(
+            """
+            INSERT INTO inventory_movement (movement_id, product_id, sku, movement_type, from_location_id, to_location_id, quantity, reference_type, reference_id, notes, created_by, created_at)
+            VALUES ($1, $2, $3, 'IN', NULL, $4, 10, 'ADJUSTMENT', $5, 'POS command stock', 'test', NOW())
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.tuple()
+                .addString(UUID.randomUUID().toString())
+                .addString(productId)
+                .addString(sku)
+                .addString(locationId)
+                .addString(referenceId)
+        ).blockingGet()
+    }
+
     private fun insertInventoryMovement(seed: ScopedOrderSeed, locationId: String, quantity: BigDecimal) {
         pool.preparedQuery(
             """
@@ -497,6 +1415,11 @@ class AuthenticationHttpIntegrationTest {
 
     private fun cleanupScopedOrderSeed(seed: ScopedOrderSeed, orderIds: Collection<String>) {
         orderIds.forEach { orderId ->
+            runCatching {
+                pool.preparedQuery("DELETE FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)")
+                    .rxExecute(Tuple.of(orderId)).blockingGet()
+            }
+            runCatching { pool.preparedQuery("DELETE FROM pos_order_context WHERE sales_order_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
             runCatching { pool.preparedQuery("DELETE FROM payment WHERE sales_order_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
             runCatching { pool.preparedQuery("DELETE FROM inventory_movement WHERE reference_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }
             runCatching { pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1").rxExecute(Tuple.of(orderId)).blockingGet() }

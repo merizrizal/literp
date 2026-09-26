@@ -63,13 +63,32 @@ API base:
 - `POST /orders/{salesOrderId}/fulfill`
 - `POST /orders/{salesOrderId}/cancel`
 
+### POS Terminal and Shift (implemented)
+
+- `GET /pos/terminals`
+- `POST /pos/terminals`
+- `GET /pos/terminals/{terminalId}`
+- `PATCH /pos/terminals/{terminalId}`
+- `POST /pos/terminals/{terminalId}/deactivate`
+- `POST /pos/terminals/{terminalId}/shifts`
+- `GET /pos/terminals/{terminalId}/current-shift`
+- `POST /pos/shifts/{shiftId}/close`
+
+### POS Receipt Lookup (authenticated placeholders)
+
+- `GET /pos/receipts/by-number/{receiptNumber}`
+- `GET /pos/orders/{salesOrderId}/receipts`
+
+These receipt lookups remain `501 NOT_IMPLEMENTED`; receipt generation and
+refunds are not implemented.
+
 ## Totals
 
 | Area | Count |
 |---|---:|
 | Utility endpoints | 5 |
-| API endpoints | 31 |
-| API domains | 5 |
+| API endpoints | 41 (39 implemented; 2 receipt placeholders) |
+| API domains | 6 |
 
 ## Architecture Path
 

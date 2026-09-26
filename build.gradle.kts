@@ -116,22 +116,6 @@ tasks.register<JavaExec>("runJar") {
     dependsOn(tasks["kotlinJar"])
 }
 
-tasks.register<JavaCompile>("annotationProcessing") {
-    group = "build"
-    description = "Generate vertx codegen"
-    source = sourceSets.main.get().java
-
-    classpath = sourceSets.main.get().compileClasspath
-
-    options.annotationProcessorPath = configurations.annotationProcessor.get()
-    options.debugOptions.debugLevel = "source,lines,vars"
-    options.compilerArgs = listOf(
-        "-proc:only",
-        "-processor", "io.vertx.codegen.CodeGenProcessor"
-    )
-    destinationDirectory = generatedBuildDirectory
-}
-
 tasks.register<Copy>("copyNativeCompile") {
     group = "build"
     description = "Copy native image into project root directory"

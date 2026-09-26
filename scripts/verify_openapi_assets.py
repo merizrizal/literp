@@ -22,6 +22,7 @@ OPENAPI_BUNDLE_NAMES: Final[tuple[str, ...]] = (
     "product-catalog",
     "locations",
     "order-process",
+    "pos-operations",
 )
 
 

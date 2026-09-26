@@ -1,6 +1,7 @@
 package com.literp.verticle
 
 import com.literp.common.ErrorCodes
+import com.literp.observability.HttpMetrics
 import com.literp.repository.LocationRepository
 import com.literp.repository.ProductRepository
 import com.literp.repository.ProductVariantRepository
@@ -9,11 +10,10 @@ import com.literp.service.master.impl.LocationServiceImpl
 import com.literp.service.master.impl.ProductServiceImpl
 import com.literp.service.master.impl.ProductVariantServiceImpl
 import com.literp.service.master.impl.UnitOfMeasureServiceImpl
-import com.literp.observability.HttpMetrics
 import com.literp.test.HttpResult
 import com.literp.test.HttpTestSupport
-import com.literp.test.TestDatabase
 import com.literp.test.SecurityTestFixture
+import com.literp.test.TestDatabase
 import com.literp.verticle.handler.LocationHandler
 import com.literp.verticle.handler.OpenApiBearerAuthenticationHandler
 import com.literp.verticle.handler.ProductHandler

@@ -17,7 +17,6 @@ import java.security.Signature
 import java.security.interfaces.RSAPublicKey
 import java.time.Instant
 import java.util.Base64
-import java.util.Comparator
 
 class SecurityTestFixture(
     private val vertx: Vertx,
@@ -130,12 +129,19 @@ class SecurityTestFixture(
             "master-data.write",
             "order.read",
             "order.write",
+            "pos.order.use",
             "order.confirm",
             "payment.capture",
             "order.fulfill",
             "order.cancel",
             "inventory.read",
-            "operations.read"
+            "operations.read",
+            "pos.terminal.read",
+            "pos.terminal.write",
+            "pos.shift.open",
+            "pos.shift.read",
+            "pos.shift.close",
+            "pos.receipt.read"
         )
     }
 }

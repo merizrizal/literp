@@ -79,6 +79,11 @@ class OrderScopeHandler(
                 listAuthorizedOrders(context, principal.locationIds)
             ResourceScopeRequirement.SALES_ORDER_LOCATION ->
                 authorizeSalesOrder(context, principal.locationIds)
+            ResourceScopeRequirement.POS_AUTHORIZED_LOCATION,
+            ResourceScopeRequirement.POS_AUTHORIZED_LOCATION_SET,
+            ResourceScopeRequirement.POS_TERMINAL_LOCATION,
+            ResourceScopeRequirement.POS_SHIFT_TERMINAL_LOCATION,
+            ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION,
             ResourceScopeRequirement.NONE -> respondForbidden(context)
         }
     }

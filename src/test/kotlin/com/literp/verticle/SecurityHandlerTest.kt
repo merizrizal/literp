@@ -1,36 +1,36 @@
 package com.literp.verticle
 
-import com.literp.verticle.handler.AuthenticatedActorAdapter
-import com.literp.verticle.handler.authenticatedPrincipal
 import com.literp.security.AuthenticatedPrincipal
 import com.literp.security.CredentialVerifier
+import com.literp.security.ExplicitSecurityPolicy
 import com.literp.security.InvalidCredential
 import com.literp.security.PrincipalKind
-import com.literp.security.ExplicitSecurityPolicy
 import com.literp.test.HttpTestSupport
 import com.literp.test.HttpTestSupport.Companion.assertErrorEnvelope
+import com.literp.verticle.handler.AuthenticatedActorAdapter
 import com.literp.verticle.handler.OrderScopeGateway
 import com.literp.verticle.handler.OrderScopeHandler
 import com.literp.verticle.handler.SecurityHandler
+import com.literp.verticle.handler.authenticatedPrincipal
 import io.reactivex.rxjava3.core.Maybe
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.Future
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.core.http.HttpServer
-import io.vertx.rxjava3.core.Vertx as RxVertx
 import io.vertx.rxjava3.ext.web.Router
 import io.vertx.rxjava3.ext.web.handler.BodyHandler
-import java.time.Instant
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import io.vertx.rxjava3.core.Vertx as RxVertx
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SecurityHandlerTest {

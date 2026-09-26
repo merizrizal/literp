@@ -1,0 +1,22 @@
+meta {
+  name: Pos-List-Receipts-By-Order
+  type: http
+  seq: 46
+}
+
+get {
+  url: http://{{host}}:{{port}}/api/v1/pos/orders/{{salesOrderId}}/receipts?page=0&size=20
+  body: none
+  auth: inherit
+}
+
+docs {
+  operationId: listPosReceiptsBySalesOrder
+  request: GET /api/v1/pos/orders/{salesOrderId}/receipts
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); receipt lookup, generation, and refunds are not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

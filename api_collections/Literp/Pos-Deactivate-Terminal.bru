@@ -1,0 +1,22 @@
+meta {
+  name: Pos-Deactivate-Terminal
+  type: http
+  seq: 41
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/terminals/{{terminalId}}/deactivate
+  body: none
+  auth: inherit
+}
+
+docs {
+  operationId: deactivatePosTerminal
+  request: POST /api/v1/pos/terminals/{terminalId}/deactivate
+  status: Authenticated; deactivates a scoped terminal and conflicts while it has an open shift.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

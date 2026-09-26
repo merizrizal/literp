@@ -1,18 +1,19 @@
 package com.literp.repository
 
+import com.literp.common.ErrorCodes
 import com.literp.test.TestDatabase
 import io.vertx.core.Vertx
 import io.vertx.core.json.JsonObject
-import io.vertx.rxjava3.core.Vertx as RxVertx
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Tuple
-import java.util.UUID
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import java.util.UUID
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import io.vertx.rxjava3.core.Vertx as RxVertx
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OrderProcessRepositoryTransactionTest {
@@ -20,6 +21,7 @@ class OrderProcessRepositoryTransactionTest {
     private lateinit var rxVertx: RxVertx
     private lateinit var pool: Pool
     private lateinit var orderRepository: OrderProcessRepository
+    private lateinit var posOperationsRepository: PosOperationsRepository
     private lateinit var productRepository: ProductRepository
     private lateinit var locationRepository: LocationRepository
 
@@ -31,6 +33,7 @@ class OrderProcessRepositoryTransactionTest {
         TestDatabase.assumeAvailable(pool)
 
         orderRepository = OrderProcessRepository(pool)
+        posOperationsRepository = PosOperationsRepository(pool)
         productRepository = ProductRepository(pool)
         locationRepository = LocationRepository(pool)
     }
@@ -42,6 +45,644 @@ class OrderProcessRepositoryTransactionTest {
         }
         if (::coreVertx.isInitialized) {
             coreVertx.close().toCompletionStage().toCompletableFuture().get()
+        }
+    }
+
+    @Test
+    fun attributedDraftPersistsContextAndRollsBackOrderOnContextFailure() {
+        val suffix = suffix()
+        val locationId = createLocation("POSCTX-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSCTX-$suffix")
+        val actorSubject = "pos-draft-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        var attributedOrderId: String? = null
+        var contextlessOrderId: String? = null
+
+        try {
+            val attributed = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                "attributed draft",
+                shiftId,
+                actorSubject
+            ).blockingGet()
+            attributedOrderId = attributed.getString("salesOrderId")
+            val posContext = attributed.getJsonObject("posContext")
+            assertEquals(shiftId, posContext.getString("shiftId"))
+            assertEquals(actorSubject, posContext.getString("draftOperatorId"))
+            assertEquals(1L, countLong(
+                "SELECT COUNT(*) AS cnt FROM pos_order_context WHERE sales_order_id = $1",
+                attributedOrderId
+            ))
+
+            val readBack = orderRepository.getSalesOrder(attributedOrderId).blockingGet()
+            assertEquals(shiftId, readBack.getJsonObject("posContext").getString("shiftId"))
+            assertEquals(actorSubject, readBack.getJsonObject("posContext").getString("draftOperatorId"))
+
+            val contextless = orderRepository
+                .createSalesOrderDraft("POS", locationId, null, "USD", "legacy draft")
+                .blockingGet()
+            contextlessOrderId = contextless.getString("salesOrderId")
+            assertEquals(null, contextless.getValue("posContext"))
+
+            val orderCountBeforeFailure = countLong(
+                "SELECT COUNT(*) AS cnt FROM sales_order WHERE location_id = $1",
+                locationId
+            )
+            installContextFailureTrigger(suffix)
+            assertFailsWithMessage("forced POS context failure") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS",
+                    locationId,
+                    null,
+                    "USD",
+                    "must roll back",
+                    shiftId,
+                    actorSubject
+                ).blockingGet()
+            }
+            assertEquals(
+                orderCountBeforeFailure,
+                countLong("SELECT COUNT(*) AS cnt FROM sales_order WHERE location_id = $1", locationId)
+            )
+        } finally {
+            cleanupTrigger("trg_fail_pos_context_$suffix", "fn_fail_pos_context_$suffix")
+            contextlessOrderId?.let(::cleanupOrderGraph)
+            attributedOrderId?.let(::cleanupOrderGraph)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun attributedDraftRejectsForeignClosedOwnerAndCurrencyContexts() {
+        val suffix = suffix()
+        val locationId = createLocation("POSRULE-$suffix").getString("locationId")
+        val foreignLocationId = createLocation("POSFOREIGN-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSRULE-$suffix")
+        val actorSubject = "pos-rule-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val closedShiftId = createShift(terminalId, actorSubject, "USD", "CLOSED", 2)
+
+        try {
+            assertFailsWithMessage("POS shift owner mismatch") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", locationId, null, "USD", null, shiftId, "different-owner"
+                ).blockingGet()
+            }
+            assertFailsWithMessage("POS shift is not open") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", locationId, null, "USD", null, closedShiftId, actorSubject
+                ).blockingGet()
+            }
+            assertFailsWithMessage("POS shift currency does not match") {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", locationId, null, "EUR", null, shiftId, actorSubject
+                ).blockingGet()
+            }
+            assertFailsWithMessage(ErrorCodes.fromStatus(404)) {
+                orderRepository.createAttributedSalesOrderDraft(
+                    "POS", foreignLocationId, null, "USD", null, shiftId, actorSubject
+                ).blockingGet()
+            }
+        } finally {
+            deleteShift(closedShiftId)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(foreignLocationId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun attributedCommandsPersistPaymentContextAndAllowAuthorizedReplayAfterClose() {
+        val suffix = suffix()
+        val locationId = createLocation("POSCMD-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSCMD-$suffix")
+        val actorSubject = "pos-command-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val closeKey = "POSCMD-CLOSE-$suffix"
+        val closeOrganizationId = "repo-pos-close-$suffix"
+        val stockReference = "POSCMD-STOCK-$suffix"
+        var orderId: String? = null
+
+        try {
+            val draft = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                "attributed command test",
+                shiftId,
+                actorSubject
+            ).blockingGet()
+            orderId = draft.getString("salesOrderId")
+            val product = createProduct("POSCMD-PRODUCT-$suffix")
+            insertInventoryMovement(
+                product.getString("productId"),
+                "POSCMD-PRODUCT-$suffix",
+                "IN",
+                null,
+                locationId,
+                10.toBigDecimal(),
+                stockReference
+            )
+            try {
+                orderRepository.addSalesOrderLineWithActor(
+                    orderId,
+                    product.getString("productId"),
+                    null,
+                    3.toBigDecimal(),
+                    10.toBigDecimal(),
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+                orderRepository.confirmSalesOrderWithActor(
+                    orderId,
+                    "POSCMD-CONFIRM-$suffix",
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+
+                val firstPayment = orderRepository.capturePaymentWithActor(
+                    orderId,
+                    "CASH",
+                    30.toBigDecimal(),
+                    "POSCMD-CASH-$suffix",
+                    "POSCMD-PAY-$suffix",
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+                val replay = orderRepository.capturePaymentWithActor(
+                    orderId,
+                    "CASH",
+                    30.toBigDecimal(),
+                    "POSCMD-CASH-$suffix",
+                    "POSCMD-PAY-$suffix",
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+                val paymentId = firstPayment.getJsonObject("payment").getString("paymentId")
+
+                assertEquals(paymentId, replay.getJsonObject("payment").getString("paymentId"))
+                assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", orderId))
+                assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM pos_payment_context WHERE payment_id = $1", paymentId))
+                assertEquals(shiftId, queryString("SELECT shift_id FROM pos_payment_context WHERE payment_id = $1", paymentId, "shift_id"))
+                assertEquals(actorSubject, queryString("SELECT capture_operator_id FROM pos_payment_context WHERE payment_id = $1", paymentId, "capture_operator_id"))
+
+                val closed = posOperationsRepository.closePosShift(
+                    shiftId = shiftId,
+                    closingBalance = "25.00",
+                    idempotencyKey = closeKey,
+                    actorSubject = actorSubject,
+                    organizationId = closeOrganizationId,
+                    authorizedLocationIds = setOf(locationId)
+                ).blockingGet()
+                assertEquals("CLOSED", closed.getString("status"))
+                assertEquals("30.00".toBigDecimal(), closed.getValue("expectedCash").toString().toBigDecimal())
+                assertEquals("-5.00".toBigDecimal(), closed.getValue("cashVariance").toString().toBigDecimal())
+                assertEquals(actorSubject, closed.getString("closedBy"))
+
+                val closeReplay = posOperationsRepository.closePosShift(
+                    shiftId = shiftId,
+                    closingBalance = "25.00",
+                    idempotencyKey = closeKey,
+                    actorSubject = actorSubject,
+                    organizationId = closeOrganizationId,
+                    authorizedLocationIds = setOf(locationId)
+                ).blockingGet()
+                assertEquals(closed.getString("closedAt"), closeReplay.getString("closedAt"))
+                assertFailsWithMessage("Idempotency key conflict") {
+                    posOperationsRepository.closePosShift(
+                        shiftId = shiftId,
+                        closingBalance = "26.00",
+                        idempotencyKey = closeKey,
+                        actorSubject = actorSubject,
+                        organizationId = closeOrganizationId,
+                        authorizedLocationIds = setOf(locationId)
+                    ).blockingGet()
+                }
+
+                val confirmedReplay = orderRepository.confirmSalesOrderWithActor(
+                    orderId,
+                    "POSCMD-CONFIRM-$suffix",
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+                assertEquals("CONFIRMED", confirmedReplay.getString("status"))
+
+                val closedPaymentReplay = orderRepository.capturePaymentWithActor(
+                    orderId,
+                    "CASH",
+                    30.toBigDecimal(),
+                    "POSCMD-CASH-$suffix",
+                    "POSCMD-PAY-$suffix",
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+                assertEquals(paymentId, closedPaymentReplay.getJsonObject("payment").getString("paymentId"))
+
+                assertFailsWithMessage("POS shift is not open") {
+                    orderRepository.capturePaymentWithActor(
+                        orderId,
+                        "CASH",
+                        1.toBigDecimal(),
+                        "POSCMD-LATE-CASH-$suffix",
+                        "POSCMD-LATE-PAY-$suffix",
+                        actorSubject,
+                        true,
+                        true
+                    ).blockingGet()
+                }
+                assertFailsWithMessage("POS shift is not open") {
+                    orderRepository.cancelSalesOrderWithActor(
+                        orderId,
+                        "late cancellation",
+                        "POSCMD-LATE-CANCEL-$suffix",
+                        actorSubject,
+                        true,
+                        true
+                    ).blockingGet()
+                }
+            } finally {
+                orderId?.let(::cleanupOrderGraph)
+                cleanupInventoryMovements(stockReference)
+                deleteProduct(product.getString("productId"))
+            }
+        } finally {
+            orderId?.let(::cleanupOrderGraph)
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'closePosShift'
+                  AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(closeOrganizationId, actorSubject, shiftId, closeKey)).blockingGet()
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun attributedCommandsRequirePosCapabilityOwnerAndRemainingCashBalance() {
+        val suffix = suffix()
+        val locationId = createLocation("POSGUARD-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSGUARD-$suffix")
+        val actorSubject = "pos-guard-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val stockReference = "POSGUARD-STOCK-$suffix"
+        var orderId: String? = null
+        var productId: String? = null
+
+        try {
+            val draft = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                null,
+                shiftId,
+                actorSubject
+            ).blockingGet()
+            orderId = draft.getString("salesOrderId")
+            val product = createProduct("POSGUARD-PRODUCT-$suffix")
+            productId = product.getString("productId")
+            insertInventoryMovement(
+                productId!!,
+                "POSGUARD-PRODUCT-$suffix",
+                "IN",
+                null,
+                locationId,
+                10.toBigDecimal(),
+                stockReference
+            )
+
+            assertFailsWithMessage("pos.order.use") {
+                orderRepository.addSalesOrderLineWithActor(
+                    orderId,
+                    productId,
+                    null,
+                    3.toBigDecimal(),
+                    10.toBigDecimal(),
+                    actorSubject,
+                    true,
+                    false
+                ).blockingGet()
+            }
+            assertFailsWithMessage("POS shift owner mismatch") {
+                orderRepository.addSalesOrderLineWithActor(
+                    orderId,
+                    productId,
+                    null,
+                    3.toBigDecimal(),
+                    10.toBigDecimal(),
+                    "different-owner-$suffix",
+                    true,
+                    true
+                ).blockingGet()
+            }
+
+            orderRepository.addSalesOrderLineWithActor(
+                orderId,
+                productId,
+                null,
+                3.toBigDecimal(),
+                10.toBigDecimal(),
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+            orderRepository.confirmSalesOrderWithActor(
+                orderId,
+                "POSGUARD-CONFIRM-$suffix",
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+            orderRepository.capturePaymentWithActor(
+                orderId,
+                "CASH",
+                10.toBigDecimal(),
+                "POSGUARD-CASH-1-$suffix",
+                "POSGUARD-PAY-1-$suffix",
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+
+            val concurrentCaptures = listOf(
+                java.util.concurrent.CompletableFuture.supplyAsync {
+                    runCatching {
+                        orderRepository.capturePaymentWithActor(
+                            orderId,
+                            "CASH",
+                            20.toBigDecimal(),
+                            "POSGUARD-CASH-2-$suffix",
+                            "POSGUARD-PAY-2-$suffix",
+                            actorSubject,
+                            true,
+                            true
+                        ).blockingGet()
+                    }
+                },
+                java.util.concurrent.CompletableFuture.supplyAsync {
+                    runCatching {
+                        orderRepository.capturePaymentWithActor(
+                            orderId,
+                            "CASH",
+                            20.toBigDecimal(),
+                            "POSGUARD-CASH-3-$suffix",
+                            "POSGUARD-PAY-3-$suffix",
+                            actorSubject,
+                            true,
+                            true
+                        ).blockingGet()
+                    }
+                }
+            ).map { it.get() }
+
+            assertEquals(1, concurrentCaptures.count { it.isSuccess })
+            assertEquals(1, concurrentCaptures.count { it.isFailure })
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", orderId))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)", orderId))
+        } finally {
+            orderId?.let(::cleanupOrderGraph)
+            cleanupInventoryMovements(stockReference)
+            productId?.let(::deleteProduct)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun concurrentAttributedCaptureAndCloseProduceOneStableSnapshot() {
+        val suffix = suffix()
+        val locationId = createLocation("POSCLOSE-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSCLOSE-$suffix")
+        val actorSubject = "pos-close-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val stockReference = "POSCLOSE-STOCK-$suffix"
+        val closeKey = "POSCLOSE-CLOSE-$suffix"
+        val closeOrganizationId = "repo-pos-concurrent-close-$suffix"
+        var orderId: String? = null
+        var productId: String? = null
+
+        try {
+            orderId = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                null,
+                shiftId,
+                actorSubject
+            ).blockingGet().getString("salesOrderId")
+            val product = createProduct("POSCLOSE-PRODUCT-$suffix")
+            productId = product.getString("productId")
+            insertInventoryMovement(
+                productId,
+                "POSCLOSE-PRODUCT-$suffix",
+                "IN",
+                null,
+                locationId,
+                10.toBigDecimal(),
+                stockReference
+            )
+            val attributedOrderId = requireNotNull(orderId)
+            orderRepository.addSalesOrderLineWithActor(
+                attributedOrderId,
+                productId,
+                null,
+                1.toBigDecimal(),
+                10.toBigDecimal(),
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+            orderRepository.confirmSalesOrderWithActor(
+                attributedOrderId,
+                "POSCLOSE-CONFIRM-$suffix",
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+
+            val ready = java.util.concurrent.CountDownLatch(2)
+            val start = java.util.concurrent.CountDownLatch(1)
+            val capture = java.util.concurrent.CompletableFuture.supplyAsync {
+                ready.countDown()
+                check(start.await(5, java.util.concurrent.TimeUnit.SECONDS)) { "Capture did not receive the start signal" }
+                runCatching {
+                    orderRepository.capturePaymentWithActor(
+                        attributedOrderId,
+                        "CASH",
+                        10.toBigDecimal(),
+                        "POSCLOSE-CASH-$suffix",
+                        "POSCLOSE-PAY-$suffix",
+                        actorSubject,
+                        true,
+                        true
+                    ).blockingGet()
+                }
+            }
+            val close = java.util.concurrent.CompletableFuture.supplyAsync {
+                ready.countDown()
+                check(start.await(5, java.util.concurrent.TimeUnit.SECONDS)) { "Close did not receive the start signal" }
+                runCatching {
+                    posOperationsRepository.closePosShift(
+                        shiftId = shiftId,
+                        closingBalance = "10.00",
+                        idempotencyKey = closeKey,
+                        actorSubject = actorSubject,
+                        organizationId = closeOrganizationId,
+                        authorizedLocationIds = setOf(locationId)
+                    ).blockingGet()
+                }
+            }
+            assertTrue(ready.await(5, java.util.concurrent.TimeUnit.SECONDS), "Both commands must be ready before release")
+            start.countDown()
+
+            val captureResult = capture.get()
+            val closeResult = close.get()
+            assertTrue(closeResult.isSuccess, closeResult.exceptionOrNull()?.message ?: "Close failed")
+            val closed = closeResult.getOrThrow()
+            val captured = captureResult.isSuccess
+            if (!captured) {
+                val message = captureResult.exceptionOrNull()?.cause?.message
+                    ?: captureResult.exceptionOrNull()?.message.orEmpty()
+                assertTrue(message.contains("POS shift is not open"), "Unexpected capture failure: $message")
+            }
+
+            assertEquals("CLOSED", closed.getString("status"))
+            assertEquals(
+                if (captured) "10.00".toBigDecimal() else "0.00".toBigDecimal(),
+                closed.getValue("expectedCash").toString().toBigDecimal()
+            )
+            assertEquals(
+                if (captured) 1L else 0L,
+                countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", attributedOrderId)
+            )
+            assertEquals(
+                if (captured) 1L else 0L,
+                countLong(
+                    "SELECT COUNT(*) AS cnt FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = $1)",
+                    attributedOrderId
+                )
+            )
+        } finally {
+            orderId?.let(::cleanupOrderGraph)
+            cleanupInventoryMovements(stockReference)
+            productId?.let(::deleteProduct)
+            pool.preparedQuery(
+                """
+                DELETE FROM pos_command_ledger
+                WHERE organization_id = $1 AND actor_subject = $2 AND operation_id = 'closePosShift'
+                  AND target_id = $3 AND idempotency_key = $4
+                """.trimIndent()
+            ).rxExecute(Tuple.of(closeOrganizationId, actorSubject, shiftId, closeKey)).blockingGet()
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
+        }
+    }
+
+    @Test
+    fun attributedCaptureRollsBackPaymentContextAndPaymentTogether() {
+        val suffix = suffix()
+        val locationId = createLocation("POSROLL-$suffix").getString("locationId")
+        val terminalId = createTerminal(locationId, "POSROLL-$suffix")
+        val actorSubject = "pos-rollback-owner-$suffix"
+        val shiftId = createShift(terminalId, actorSubject, "USD", "OPEN")
+        val stockReference = "POSROLL-STOCK-$suffix"
+        var orderId: String? = null
+        var productId: String? = null
+
+        try {
+            orderId = orderRepository.createAttributedSalesOrderDraft(
+                "POS",
+                locationId,
+                null,
+                "USD",
+                null,
+                shiftId,
+                actorSubject
+            ).blockingGet().getString("salesOrderId")
+            val product = createProduct("POSROLL-PRODUCT-$suffix")
+            productId = product.getString("productId")
+            insertInventoryMovement(
+                productId,
+                "POSROLL-PRODUCT-$suffix",
+                "IN",
+                null,
+                locationId,
+                10.toBigDecimal(),
+                stockReference
+            )
+            orderRepository.addSalesOrderLineWithActor(
+                orderId,
+                productId,
+                null,
+                3.toBigDecimal(),
+                10.toBigDecimal(),
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+            orderRepository.confirmSalesOrderWithActor(
+                orderId,
+                "POSROLL-CONFIRM-$suffix",
+                actorSubject,
+                true,
+                true
+            ).blockingGet()
+            installPaymentContextFailureTrigger(suffix)
+
+            assertFailsWithMessage("forced payment context failure") {
+                orderRepository.capturePaymentWithActor(
+                    orderId,
+                    "CASH",
+                    30.toBigDecimal(),
+                    "POSROLL-CASH-$suffix",
+                    "POSROLL-PAY-$suffix",
+                    actorSubject,
+                    true,
+                    true
+                ).blockingGet()
+            }
+            assertEquals(0L, countLong("SELECT COUNT(*) AS cnt FROM payment WHERE sales_order_id = $1", orderId))
+            assertEquals(
+                0L,
+                countLong(
+                    "SELECT COUNT(*) AS cnt FROM pos_payment_context pc JOIN payment p ON p.payment_id = pc.payment_id WHERE p.sales_order_id = $1",
+                    orderId
+                )
+            )
+            assertEquals(
+                0L,
+                countLong(
+                    "SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'capturePayment'",
+                    orderId
+                )
+            )
+        } finally {
+            cleanupTrigger("trg_fail_payment_context_$suffix", "fn_fail_payment_context_$suffix")
+            orderId?.let(::cleanupOrderGraph)
+            cleanupInventoryMovements(stockReference)
+            productId?.let(::deleteProduct)
+            deleteShift(shiftId)
+            deleteTerminal(terminalId)
+            deleteLocation(locationId)
         }
     }
 
@@ -580,6 +1221,82 @@ class OrderProcessRepositoryTransactionTest {
         )
     }
 
+    private fun createTerminal(locationId: String, terminalCode: String): String {
+        val terminalId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO pos_terminal (
+                terminal_id, location_id, terminal_code, device_name, is_active, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, true, NOW(), NOW())
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.of(terminalId, locationId, terminalCode, "Repository test terminal $terminalCode")
+        ).blockingGet()
+        return terminalId
+    }
+
+    private fun createShift(
+        terminalId: String,
+        operatorId: String,
+        currency: String,
+        status: String,
+        shiftNumber: Int = 1
+    ): String {
+        val shiftId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO pos_shift (
+                shift_id, terminal_id, operator_id, shift_date, shift_number,
+                opened_at, opening_balance, status, created_at, currency, is_reconcilable
+            )
+            VALUES ($1, $2, $3, CURRENT_DATE, $4, NOW(), 0, $5::shift_status, NOW(), $6, true)
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.tuple()
+                .addString(shiftId)
+                .addString(terminalId)
+                .addString(operatorId)
+                .addInteger(shiftNumber)
+                .addString(status)
+                .addString(currency)
+        ).blockingGet()
+        return shiftId
+    }
+
+    private fun deleteShift(shiftId: String) {
+        pool.preparedQuery("DELETE FROM pos_shift WHERE shift_id = $1")
+            .rxExecute(Tuple.of(shiftId))
+            .blockingGet()
+    }
+
+    private fun deleteTerminal(terminalId: String) {
+        pool.preparedQuery("DELETE FROM pos_terminal WHERE terminal_id = $1")
+            .rxExecute(Tuple.of(terminalId))
+            .blockingGet()
+    }
+
+    private fun installContextFailureTrigger(suffix: String) {
+        execSql(
+            """
+            CREATE OR REPLACE FUNCTION fn_fail_pos_context_$suffix()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'forced POS context failure';
+            END;
+            $$ LANGUAGE plpgsql;
+            """.trimIndent()
+        )
+        execSql(
+            """
+            CREATE TRIGGER trg_fail_pos_context_$suffix
+            BEFORE INSERT ON pos_order_context
+            FOR EACH ROW
+            EXECUTE FUNCTION fn_fail_pos_context_$suffix();
+            """.trimIndent()
+        )
+    }
+
     private fun createLocation(code: String): JsonObject {
         return locationRepository.createLocation(code, "Test Location $code", "WAREHOUSE", true, JsonObject()).blockingGet()
     }
@@ -663,6 +1380,27 @@ class OrderProcessRepositoryTransactionTest {
         )
     }
 
+    private fun installPaymentContextFailureTrigger(suffix: String) {
+        execSql(
+            """
+            CREATE OR REPLACE FUNCTION fn_fail_payment_context_$suffix()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'forced payment context failure';
+            END;
+            $$ LANGUAGE plpgsql;
+            """.trimIndent()
+        )
+        execSql(
+            """
+            CREATE TRIGGER trg_fail_payment_context_$suffix
+            BEFORE INSERT ON pos_payment_context
+            FOR EACH ROW
+            EXECUTE FUNCTION fn_fail_payment_context_$suffix();
+            """.trimIndent()
+        )
+    }
+
     private fun installCancelFailureTrigger(lineId: String, suffix: String) {
         execSql(
             """
@@ -690,6 +1428,8 @@ class OrderProcessRepositoryTransactionTest {
         runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON inventory_reservation;") }
         runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON inventory_movement;") }
         runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON sales_order_line;") }
+        runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON pos_order_context;") }
+        runCatching { execSql("DROP TRIGGER IF EXISTS $triggerName ON pos_payment_context;") }
         runCatching { execSql("DROP FUNCTION IF EXISTS $functionName();") }
     }
 
@@ -750,6 +1490,8 @@ class OrderProcessRepositoryTransactionTest {
     }
 
     private fun cleanupOrderGraph(orderId: String) {
+        execSql("DELETE FROM pos_payment_context WHERE payment_id IN (SELECT payment_id FROM payment WHERE sales_order_id = '$orderId');")
+        execSql("DELETE FROM pos_order_context WHERE sales_order_id = '$orderId';")
         execSql("DELETE FROM payment WHERE sales_order_id = '$orderId';")
         cleanupInventoryMovements(orderId)
         execSql("DELETE FROM sales_order WHERE sales_order_id = '$orderId';")

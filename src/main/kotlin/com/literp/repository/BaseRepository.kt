@@ -40,11 +40,24 @@ abstract class BaseRepository(protected val pool: Pool, clazz: Class<*>) {
         return false
     }
 
+    protected fun isUniqueViolation(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            if (current is PgException && current.sqlState == POSTGRES_UNIQUE_VIOLATION) {
+                return true
+            }
+            current = current.cause
+        }
+
+        return false
+    }
+
     protected fun jsonObjectOrEmpty(value: String?): JsonObject {
         return if (value.isNullOrBlank()) JsonObject() else JsonObject(value)
     }
 
     private companion object {
         private const val POSTGRES_FOREIGN_KEY_VIOLATION = "23503"
+        private const val POSTGRES_UNIQUE_VIOLATION = "23505"
     }
 }

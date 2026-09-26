@@ -80,11 +80,17 @@ enum class ResourceScopeRequirement {
     NONE,
     AUTHORIZED_LOCATION,
     AUTHORIZED_LOCATION_SET,
-    SALES_ORDER_LOCATION
+    SALES_ORDER_LOCATION,
+    POS_AUTHORIZED_LOCATION,
+    POS_AUTHORIZED_LOCATION_SET,
+    POS_TERMINAL_LOCATION,
+    POS_SHIFT_TERMINAL_LOCATION,
+    POS_RECEIPT_ORDER_LOCATION
 }
 
 enum class PrincipalEligibility {
     AUTHENTICATED,
+    HUMAN,
     PUBLIC,
     OPERATOR_OR_SERVICE
 }
@@ -145,6 +151,7 @@ class ExplicitSecurityPolicy(
     ): Boolean = when (eligibility) {
         PrincipalEligibility.AUTHENTICATED,
         PrincipalEligibility.PUBLIC -> true
+        PrincipalEligibility.HUMAN -> principal.principalKind == PrincipalKind.HUMAN
         PrincipalEligibility.OPERATOR_OR_SERVICE ->
             principal.operator || principal.principalKind == PrincipalKind.SERVICE
     }
@@ -233,6 +240,48 @@ private val EXPLICIT_POLICY_RULES: Map<String, PolicyRule> = linkedMapOf(
     "getAvailableStock" to PolicyRule(
         capability = "inventory.read",
         resourceScope = ResourceScopeRequirement.AUTHORIZED_LOCATION
+    ),
+    "listPosTerminals" to PolicyRule(
+        capability = "pos.terminal.read",
+        resourceScope = ResourceScopeRequirement.POS_AUTHORIZED_LOCATION_SET
+    ),
+    "createPosTerminal" to PolicyRule(
+        capability = "pos.terminal.write",
+        resourceScope = ResourceScopeRequirement.POS_AUTHORIZED_LOCATION
+    ),
+    "getPosTerminal" to PolicyRule(
+        capability = "pos.terminal.read",
+        resourceScope = ResourceScopeRequirement.POS_TERMINAL_LOCATION
+    ),
+    "updatePosTerminal" to PolicyRule(
+        capability = "pos.terminal.write",
+        resourceScope = ResourceScopeRequirement.POS_TERMINAL_LOCATION
+    ),
+    "deactivatePosTerminal" to PolicyRule(
+        capability = "pos.terminal.write",
+        resourceScope = ResourceScopeRequirement.POS_TERMINAL_LOCATION
+    ),
+    "openPosShift" to PolicyRule(
+        capability = "pos.shift.open",
+        resourceScope = ResourceScopeRequirement.POS_TERMINAL_LOCATION,
+        principalEligibility = PrincipalEligibility.HUMAN
+    ),
+    "getCurrentPosShift" to PolicyRule(
+        capability = "pos.shift.read",
+        resourceScope = ResourceScopeRequirement.POS_TERMINAL_LOCATION
+    ),
+    "closePosShift" to PolicyRule(
+        capability = "pos.shift.close",
+        resourceScope = ResourceScopeRequirement.POS_SHIFT_TERMINAL_LOCATION,
+        principalEligibility = PrincipalEligibility.HUMAN
+    ),
+    "getPosReceiptByNumber" to PolicyRule(
+        capability = "pos.receipt.read",
+        resourceScope = ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION
+    ),
+    "listPosReceiptsBySalesOrder" to PolicyRule(
+        capability = "pos.receipt.read",
+        resourceScope = ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION
     ),
     UtilityOperationIds.ROOT to PolicyRule(
         capability = null,

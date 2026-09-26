@@ -4,9 +4,9 @@ import com.literp.config.Config
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.pgclient.PgConnectOptions
 import io.vertx.rxjava3.core.Vertx
-import io.vertx.rxjava3.sqlclient.Pool as RxPool
 import io.vertx.sqlclient.Pool
 import io.vertx.sqlclient.PoolOptions
+import io.vertx.rxjava3.sqlclient.Pool as RxPool
 
 object DatabaseConnection {
 

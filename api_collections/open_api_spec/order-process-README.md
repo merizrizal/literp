@@ -58,6 +58,42 @@ Inspect stock quantities by product and location.
   - order already `FULFILLED`
   - captured payment exists
 
+## POS Attribution and Shift Reconciliation
+
+POS orders can opt into shift attribution through the existing `POST /orders`
+request; this does not introduce separate POS order, payment, or fulfillment
+routes:
+
+```json
+{
+  "salesChannel": "POS",
+  "locationId": "<authorized-location-uuid>",
+  "currency": "USD",
+  "posContext": { "shiftId": "<open-shift-uuid>" }
+}
+```
+
+The caller must have `order.write` and `pos.order.use`, and must be the human
+owner of an open shift at the same authorized location and currency. The server
+persists the verified draft actor and shift association. New attributed line edits,
+confirmation, captures, and cancellations require the owner while the shift is
+open; authorized matching retries may replay after close. Fulfillment uses normal
+order authorization, may occur after shift close, and records its own verified
+actor without changing drawer totals.
+
+For an attributed order, each payment capture persists its linked shift and
+verified capture actor. Reconciliation calculates `expectedCash` as opening
+balance plus persisted attributed captured `CASH` payments; other payment methods
+do not contribute. The requested closing balance is counted cash, and
+`cashVariance = closingBalance - expectedCash`; nonzero variance is recorded.
+Attributed `CASH` amounts are net drawer inflow and cannot exceed the remaining
+order balance because change-given/tender handling is not modeled. Refunds, cash
+adjustments, paid-outs, and currency conversion are also outside this contract.
+
+Legacy shifts without trusted currency and payment attribution are not silently
+backfilled or reconciled. They require an explicit remediation process before
+close; historical payment context is never inferred.
+
 ## Request/Response Examples
 
 ### Create Draft Order

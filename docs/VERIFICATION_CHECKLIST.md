@@ -70,7 +70,23 @@ Use this checklist to validate the current implementation, docs, and testing ass
 - [ ] `POST /api/v1/orders/{salesOrderId}/fulfill`
 - [ ] `POST /api/v1/orders/{salesOrderId}/cancel`
 
-Total API endpoints to verify: `31`
+### POS Terminal and Shift
+
+- [x] `GET /api/v1/pos/terminals`
+- [x] `POST /api/v1/pos/terminals`
+- [x] `GET /api/v1/pos/terminals/{terminalId}`
+- [x] `PATCH /api/v1/pos/terminals/{terminalId}`
+- [x] `POST /api/v1/pos/terminals/{terminalId}/deactivate`
+- [x] `POST /api/v1/pos/terminals/{terminalId}/shifts`
+- [x] `GET /api/v1/pos/terminals/{terminalId}/current-shift`
+- [x] `POST /api/v1/pos/shifts/{shiftId}/close`
+
+### POS Receipt Placeholders
+
+- [x] `GET /api/v1/pos/receipts/by-number/{receiptNumber}` returns authenticated `501 NOT_IMPLEMENTED`
+- [x] `GET /api/v1/pos/orders/{salesOrderId}/receipts` returns authenticated `501 NOT_IMPLEMENTED`
+
+Total API operations to verify: `41` (`39` implemented; `2` receipt placeholders)
 
 ## Data and Lifecycle Rules
 
@@ -103,6 +119,14 @@ Total API endpoints to verify: `31`
 - [ ] Fulfillment creates `inventory_movement` rows
 - [ ] Cancel is blocked when captured payment exists
 - [ ] Cancel is blocked for fulfilled orders
+- [x] POS terminal operations enforce location scope and immutable terminal location
+- [x] Shift open/close require a human principal; only the shift owner may close
+- [x] Attributed order commands persist trusted shift and actor linkage
+- [x] Expected cash includes only persisted attributed captured CASH payments
+- [x] Close persists counted balance and signed variance; nonzero variance is allowed
+- [x] Legacy shifts without trusted attribution are not reconciled without remediation
+- [x] Authorized fulfillment may occur after shift close and does not change drawer totals
+- [x] Attributed CASH cannot exceed the order balance when change-given is not modeled
 
 ## Response Verification
 
@@ -119,6 +143,8 @@ Total API endpoints to verify: `31`
 - [ ] `MasterDataRepositoryTest` covers nullable JSON mapping
 - [ ] `MasterDataHttpIntegrationTest` covers all master-data endpoints
 - [ ] `MasterDataHttpIntegrationTest` covers master-data error and validation behavior
+- [x] `AuthenticationHttpIntegrationTest` covers authenticated terminal-to-order-to-close and post-close fulfillment
+- [x] `PosOperationsContractTest` keeps 501 responses limited to the receipt placeholders
 
 ## Seed Data Verification
 
@@ -133,19 +159,20 @@ Total API endpoints to verify: `31`
 
 ## Asset Verification
 
-- [ ] OpenAPI specs exist under `api_collections/open_api_spec`
+- [x] OpenAPI specs exist under `api_collections/open_api_spec`
 - [ ] Bruno collection exists under `api_collections/Literp`
 - [ ] Bruno collection includes utility endpoints
-- [ ] Bruno collection includes all 31 API endpoints
+- [x] Bruno collection includes all 41 registered API operations
+- [ ] Authenticated Bruno runtime smoke with an approved non-production token (pending)
 - [ ] Bruno collection variables are defined in `collection.bru`
 
 ## Documentation Verification
 
 - [ ] `README.md` matches the current branch scope
 - [ ] `docs/QUICK_START.md` matches current startup flow
-- [ ] `docs/API_IMPLEMENTATION.md` reflects actual handler behavior
-- [ ] `docs/API_TESTING_GUIDE.md` includes order-process testing
-- [ ] `docs/ENDPOINTS_OVERVIEW.md` lists 31 endpoints
+- [x] `docs/API_IMPLEMENTATION.md` reflects actual handler behavior
+- [x] `docs/API_TESTING_GUIDE.md` includes order-process testing
+- [x] `docs/ENDPOINTS_OVERVIEW.md` lists 41 registered operations (39 implemented; 2 receipt placeholders)
 - [ ] `docs/CI_VERIFICATION.md` documents required CI checks
 - [ ] `docs/LOCAL_RESET.md` separates non-destructive and destructive reset paths
 - [ ] `docs/IMPLEMENTATION_SUMMARY.md` reflects seed data and Bruno assets

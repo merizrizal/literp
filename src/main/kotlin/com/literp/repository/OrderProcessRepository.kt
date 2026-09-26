@@ -1,6 +1,7 @@
 package com.literp.repository
 
 import com.literp.common.ErrorCodes
+import io.reactivex.rxjava3.core.Completable
 import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.core.Single
 import io.vertx.core.json.JsonObject
@@ -10,7 +11,7 @@ import io.vertx.rxjava3.sqlclient.SqlConnection
 import io.vertx.rxjava3.sqlclient.Tuple
 import java.math.BigDecimal
 import java.time.LocalDateTime
-import java.util.*
+import java.util.UUID
 
 class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepository::class.java) {
 
@@ -28,14 +29,14 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         val rawOrder = parts.getOrNull(1)?.trim()?.uppercase() ?: "DESC"
 
         val sortField = when (rawField.lowercase()) {
-            "ordernumber", "order_number" -> "order_number"
-            "orderdate", "order_date" -> "order_date"
-            "saleschannel", "sales_channel" -> "sales_channel"
-            "status" -> "status"
-            "totalamount", "total_amount" -> "total_amount"
-            "createdat", "created_at" -> "created_at"
-            "updatedat", "updated_at" -> "updated_at"
-            else -> "order_date"
+            "ordernumber", "order_number" -> "sales_order.order_number"
+            "orderdate", "order_date" -> "sales_order.order_date"
+            "saleschannel", "sales_channel" -> "sales_order.sales_channel"
+            "status" -> "sales_order.status"
+            "totalamount", "total_amount" -> "sales_order.total_amount"
+            "createdat", "created_at" -> "sales_order.created_at"
+            "updatedat", "updated_at" -> "sales_order.updated_at"
+            else -> "sales_order.order_date"
         }
         val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "DESC"
 
@@ -57,8 +58,15 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
 
         val countQuery = "SELECT COUNT(*) AS total FROM sales_order $whereClause"
         val dataQuery = """
-            SELECT sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at
+            SELECT sales_order.sales_order_id, sales_order.order_number, sales_order.order_date,
+                sales_order.sales_channel, sales_order.customer_id, sales_order.location_id,
+                sales_order.status, sales_order.total_amount, sales_order.currency, sales_order.notes,
+                sales_order.created_at, sales_order.updated_at,
+                pos_order_context.shift_id AS pos_shift_id,
+                pos_order_context.draft_operator_id AS pos_draft_operator_id
             FROM sales_order
+            LEFT JOIN pos_order_context
+                ON pos_order_context.sales_order_id = sales_order.sales_order_id
             $whereClause
             ORDER BY $sortField $sortOrder
             LIMIT $size OFFSET $offset
@@ -73,7 +81,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                 pool.preparedQuery(dataQuery).rxExecute(Tuple.from(params))
             }
             .map { result ->
-                val data = result.map { row -> mapSalesOrderRow(row) }
+                val data = result.map { row -> mapSalesOrderWithContext(row) }
                 JsonObject()
                     .put("data", data)
                     .put(
@@ -117,11 +125,110 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
+    fun createAttributedSalesOrderDraft(
+        salesChannel: String,
+        locationId: String,
+        customerId: String?,
+        currency: String,
+        notes: String?,
+        shiftId: String,
+        actorSubject: String
+    ): Single<JsonObject> {
+        val normalizedSalesChannel = salesChannel.trim().uppercase()
+        val normalizedLocationId = locationId.trim()
+        val normalizedCurrency = currency.trim().uppercase()
+        val normalizedShiftId = shiftId.trim()
+        val normalizedActorSubject = actorSubject.trim()
+
+        if (normalizedSalesChannel != "POS") {
+            return Single.error(PosOrderValidation("POS attribution requires salesChannel=POS"))
+        }
+        if (normalizedLocationId.isBlank()) {
+            return Single.error(PosOrderValidation("locationId is required"))
+        }
+        if (normalizedCurrency.isBlank()) {
+            return Single.error(PosOrderValidation("currency is required"))
+        }
+        if (normalizedShiftId.isBlank()) {
+            return Single.error(PosOrderValidation("posContext.shiftId is required"))
+        }
+        if (normalizedActorSubject.isBlank()) {
+            return Single.error(PosOrderValidation("actorSubject is required"))
+        }
+        if (normalizedActorSubject.length > 255) {
+            return Single.error(PosOrderValidation("actorSubject must be at most 255 characters"))
+        }
+
+        val normalizedCustomerId = customerId?.trim()?.takeIf { it.isNotBlank() }
+        val insertOrderQuery = """
+            INSERT INTO sales_order (
+                sales_order_id, order_number, order_date, sales_channel, customer_id,
+                location_id, status, total_amount, currency, notes, created_at, updated_at
+            )
+            VALUES ($1, $2, NOW(), $3, $4, $5, 'DRAFT', 0, $6, $7, NOW(), NOW())
+            RETURNING sales_order_id, order_number, order_date, sales_channel, customer_id,
+                location_id, status, total_amount, currency, notes, created_at, updated_at
+        """.trimIndent()
+        val insertContextQuery = """
+            INSERT INTO pos_order_context (sales_order_id, shift_id, draft_operator_id, created_at)
+            VALUES ($1, $2, $3, NOW())
+        """.trimIndent()
+
+        return inTransaction { connection ->
+            lockPosDraftContext(
+                connection,
+                normalizedShiftId,
+                normalizedLocationId,
+                normalizedCurrency,
+                normalizedActorSubject
+            ).flatMap { context ->
+                generateOrderNumber(connection).flatMap { orderNumber ->
+                    val orderId = UUID.randomUUID().toString()
+                    connection.preparedQuery(insertOrderQuery)
+                        .rxExecute(
+                            Tuple.tuple()
+                                .addString(orderId)
+                                .addString(orderNumber)
+                                .addString(normalizedSalesChannel)
+                                .addValue(normalizedCustomerId)
+                                .addString(normalizedLocationId)
+                                .addString(normalizedCurrency)
+                                .addValue(notes)
+                        )
+                        .flatMap { orderResult ->
+                            connection.preparedQuery(insertContextQuery)
+                                .rxExecute(
+                                    Tuple.tuple()
+                                        .addString(orderId)
+                                        .addString(context.shiftId)
+                                        .addString(context.draftOperatorId)
+                                )
+                                .map {
+                                    mapSalesOrderRow(
+                                        orderResult.first(),
+                                        JsonObject()
+                                            .put("shiftId", context.shiftId)
+                                            .put("draftOperatorId", context.draftOperatorId)
+                                    )
+                                }
+                        }
+                }
+            }
+        }
+    }
+
     fun getSalesOrder(orderId: String): Single<JsonObject> {
         val orderQuery = """
-            SELECT sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at
+            SELECT sales_order.sales_order_id, sales_order.order_number, sales_order.order_date,
+                sales_order.sales_channel, sales_order.customer_id, sales_order.location_id,
+                sales_order.status, sales_order.total_amount, sales_order.currency, sales_order.notes,
+                sales_order.created_at, sales_order.updated_at,
+                pos_order_context.shift_id AS pos_shift_id,
+                pos_order_context.draft_operator_id AS pos_draft_operator_id
             FROM sales_order
-            WHERE sales_order_id = $1
+            LEFT JOIN pos_order_context
+                ON pos_order_context.sales_order_id = sales_order.sales_order_id
+            WHERE sales_order.sales_order_id = $1
         """.trimIndent()
         val linesQuery = """
             SELECT line_id, sales_order_id, product_id, sku, quantity_ordered, quantity_fulfilled, unit_price, line_total, status, created_at, updated_at
@@ -148,7 +255,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                 if (orderResult.size() == 0) {
                     Single.error(Exception(ErrorCodes.fromStatus(404)))
                 } else {
-                    val order = mapSalesOrderRow(orderResult.first())
+                    val order = mapSalesOrderWithContext(orderResult.first())
                     pool.preparedQuery(linesQuery)
                         .rxExecute(Tuple.of(orderId))
                         .flatMap { linesResult ->
@@ -270,6 +377,42 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         sku: String?,
         quantityOrdered: BigDecimal,
         unitPrice: BigDecimal
+    ): Single<JsonObject> = addSalesOrderLineInternal(
+        orderId,
+        productId,
+        sku,
+        quantityOrdered,
+        unitPrice,
+        null
+    )
+
+    fun addSalesOrderLineWithActor(
+        orderId: String,
+        productId: String,
+        sku: String?,
+        quantityOrdered: BigDecimal,
+        unitPrice: BigDecimal,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Single<JsonObject> = Single.defer {
+        addSalesOrderLineInternal(
+            orderId,
+            productId,
+            sku,
+            quantityOrdered,
+            unitPrice,
+            normalizeCommandActor(actorSubject, humanActor, posOrderUse)
+        )
+    }
+
+    private fun addSalesOrderLineInternal(
+        orderId: String,
+        productId: String,
+        sku: String?,
+        quantityOrdered: BigDecimal,
+        unitPrice: BigDecimal,
+        actor: PosCommandActor?
     ): Single<JsonObject> {
         val orderQuery = "SELECT status FROM sales_order WHERE sales_order_id = $1"
         val productQuery = "SELECT sku FROM product WHERE product_id = $1 AND active = true"
@@ -289,8 +432,14 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
 
         return inTransaction { connection ->
-            connection.preparedQuery(orderQuery)
-                .rxExecute(Tuple.of(orderId))
+            lockPosOrderCommandContext(connection, orderId, actor)
+                .flatMap { commandContext ->
+                    ensurePosCommandOpen(commandContext)
+                        .flatMap {
+                            connection.preparedQuery(orderQuery)
+                                .rxExecute(Tuple.of(orderId))
+                        }
+                }
                 .flatMap { orderResult ->
                     if (orderResult.size() == 0) {
                         Single.error(Exception("Sales order not found"))
@@ -332,7 +481,28 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
-    fun confirmSalesOrder(orderId: String, idempotencyKey: String): Single<JsonObject> {
+    fun confirmSalesOrder(orderId: String, idempotencyKey: String): Single<JsonObject> =
+        confirmSalesOrderInternal(orderId, idempotencyKey, null)
+
+    fun confirmSalesOrderWithActor(
+        orderId: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Single<JsonObject> = Single.defer {
+        confirmSalesOrderInternal(
+            orderId,
+            idempotencyKey,
+            normalizeCommandActor(actorSubject, humanActor, posOrderUse)
+        )
+    }
+
+    private fun confirmSalesOrderInternal(
+        orderId: String,
+        idempotencyKey: String,
+        actor: PosCommandActor?
+    ): Single<JsonObject> {
         val idempotencyKeyValue = idempotencyKey.trim()
         val commandName = "confirmSalesOrder"
         val requestFingerprint = commandName
@@ -362,11 +532,19 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
 
         return inTransaction { connection ->
-            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
-                .flatMap { state ->
-                    state.responsePayload?.let { storedResponse ->
-                        Single.just(storedResponse)
-                    } ?: connection.preparedQuery(orderQuery)
+            loadPosCommandState(
+                connection,
+                orderId,
+                commandName,
+                idempotencyKeyValue,
+                requestFingerprint,
+                actor
+            ).flatMap { commandState ->
+                val state = commandState.idempotency
+                val requestFingerprint = commandState.requestFingerprint
+                state.responsePayload?.let { storedResponse ->
+                    Single.just(storedResponse)
+                } ?: connection.preparedQuery(orderQuery)
                         .rxExecute(Tuple.of(orderId))
                         .flatMap { orderResult ->
                             if (orderResult.size() == 0) {
@@ -474,6 +652,35 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         amount: BigDecimal,
         transactionRef: String?,
         idempotencyKey: String
+    ): Single<JsonObject> = capturePaymentInternal(orderId, paymentMethod, amount, transactionRef, idempotencyKey, null)
+
+    fun capturePaymentWithActor(
+        orderId: String,
+        paymentMethod: String,
+        amount: BigDecimal,
+        transactionRef: String?,
+        idempotencyKey: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Single<JsonObject> = Single.defer {
+        capturePaymentInternal(
+            orderId,
+            paymentMethod,
+            amount,
+            transactionRef,
+            idempotencyKey,
+            normalizeCommandActor(actorSubject, humanActor, posOrderUse)
+        )
+    }
+
+    private fun capturePaymentInternal(
+        orderId: String,
+        paymentMethod: String,
+        amount: BigDecimal,
+        transactionRef: String?,
+        idempotencyKey: String,
+        actor: PosCommandActor?
     ): Single<JsonObject> {
         val normalizedPaymentMethod = paymentMethod.uppercase()
         val normalizedTransactionRef = transactionRef?.trim()?.takeIf { it.isNotBlank() }
@@ -508,11 +715,20 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
 
         return inTransaction { connection ->
-            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
-                .flatMap { state ->
-                    state.responsePayload?.let { storedResponse ->
-                        Single.just(storedResponse)
-                    } ?: connection.preparedQuery(orderQuery)
+            loadPosCommandState(
+                connection,
+                orderId,
+                commandName,
+                idempotencyKeyValue,
+                requestFingerprint,
+                actor
+            ).flatMap { commandState ->
+                val state = commandState.idempotency
+                val requestFingerprint = commandState.requestFingerprint
+                val posContext = commandState.context
+                state.responsePayload?.let { storedResponse ->
+                    Single.just(storedResponse)
+                } ?: connection.preparedQuery(orderQuery)
                         .rxExecute(Tuple.of(orderId))
                         .flatMap { orderResult ->
                             if (orderResult.size() == 0) {
@@ -524,37 +740,70 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
                                 if (status != "CONFIRMED" && status != "FULFILLED") {
                                     Single.error(Exception("Payment can only be captured for CONFIRMED or FULFILLED orders"))
                                 } else {
-                                    connection.preparedQuery(paymentInsertQuery)
-                                        .rxExecute(
-                                            Tuple.of(
-                                                UUID.randomUUID().toString(),
-                                                orderId,
-                                                normalizedPaymentMethod,
-                                                amount,
-                                                normalizedTransactionRef
-                                            )
-                                        )
-                                        .flatMap { paymentInsertResult ->
-                                            connection.preparedQuery(capturedTotalQuery)
-                                                .rxExecute(Tuple.of(orderId))
-                                                .flatMap { capturedResult ->
-                                                    val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
-                                                    val response = JsonObject()
-                                                        .put("payment", mapPaymentRow(paymentInsertResult.first()))
-                                                        .put("totalAmount", totalAmount)
-                                                        .put("totalCaptured", totalCaptured)
-                                                        .put("balance", totalAmount.subtract(totalCaptured))
-                                                    storeCommandIdempotency(
-                                                        connection,
-                                                        orderId,
-                                                        commandName,
-                                                        idempotencyKeyValue,
-                                                        requestFingerprint,
-                                                        201,
-                                                        response
-                                                    )
+                                    val captureGuard = if (posContext.attributed && normalizedPaymentMethod == "CASH") {
+                                        connection.preparedQuery(capturedTotalQuery)
+                                            .rxExecute(Tuple.of(orderId))
+                                            .flatMap { capturedResult ->
+                                                val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                                if (totalCaptured.add(amount) > totalAmount) {
+                                                    Single.error<Unit>(PosOrderConflict("Attributed CASH payment exceeds the remaining order balance"))
+                                                } else {
+                                                    Single.just(Unit)
                                                 }
-                                        }
+                                            }
+                                    } else {
+                                        Single.just(Unit)
+                                    }
+
+                                    captureGuard.flatMap {
+                                        val paymentId = UUID.randomUUID().toString()
+                                        connection.preparedQuery(paymentInsertQuery)
+                                            .rxExecute(
+                                                Tuple.tuple()
+                                                    .addString(paymentId)
+                                                    .addString(orderId)
+                                                    .addString(normalizedPaymentMethod)
+                                                    .addValue(amount)
+                                                    .addString(normalizedTransactionRef)
+                                            )
+                                            .flatMap { paymentInsertResult ->
+                                                val paymentContextWrite = if (posContext.attributed) {
+                                                    val context = posContext
+                                                    connection.preparedQuery(
+                                                        """
+                                                        INSERT INTO pos_payment_context (payment_id, shift_id, capture_operator_id, created_at)
+                                                        VALUES ($1, $2, $3, NOW())
+                                                        """.trimIndent()
+                                                    ).rxExecute(
+                                                        Tuple.of(paymentId, context.shiftId, context.actorSubject)
+                                                    ).ignoreElement()
+                                                } else {
+                                                    Completable.complete()
+                                                }
+
+                                                paymentContextWrite.andThen(
+                                                    connection.preparedQuery(capturedTotalQuery)
+                                                        .rxExecute(Tuple.of(orderId))
+                                                        .flatMap { capturedResult ->
+                                                            val totalCaptured = capturedResult.first().getBigDecimal("total_captured")
+                                                            val response = JsonObject()
+                                                                .put("payment", mapPaymentRow(paymentInsertResult.first()))
+                                                                .put("totalAmount", totalAmount)
+                                                                .put("totalCaptured", totalCaptured)
+                                                                .put("balance", totalAmount.subtract(totalCaptured))
+                                                            storeCommandIdempotency(
+                                                                connection,
+                                                                orderId,
+                                                                commandName,
+                                                                idempotencyKeyValue,
+                                                                requestFingerprint,
+                                                                201,
+                                                                response
+                                                            )
+                                                        }
+                                                )
+                                            }
+                                    }
                                 }
                             }
                         }
@@ -722,7 +971,31 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
-    fun cancelSalesOrder(orderId: String, reason: String?, idempotencyKey: String): Single<JsonObject> {
+    fun cancelSalesOrder(orderId: String, reason: String?, idempotencyKey: String): Single<JsonObject> =
+        cancelSalesOrderInternal(orderId, reason, idempotencyKey, null)
+
+    fun cancelSalesOrderWithActor(
+        orderId: String,
+        reason: String?,
+        idempotencyKey: String,
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): Single<JsonObject> = Single.defer {
+        cancelSalesOrderInternal(
+            orderId,
+            reason,
+            idempotencyKey,
+            normalizeCommandActor(actorSubject, humanActor, posOrderUse)
+        )
+    }
+
+    private fun cancelSalesOrderInternal(
+        orderId: String,
+        reason: String?,
+        idempotencyKey: String,
+        actor: PosCommandActor?
+    ): Single<JsonObject> {
         val reasonValue = reason?.trim()?.takeIf { it.isNotBlank() }
         val idempotencyKeyValue = idempotencyKey.trim()
         val commandName = "cancelSalesOrder"
@@ -758,11 +1031,19 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
 
         return inTransaction { connection ->
-            loadCommandIdempotency(connection, orderId, commandName, idempotencyKeyValue, requestFingerprint)
-                .flatMap { state ->
-                    state.responsePayload?.let { storedResponse ->
-                        Single.just(storedResponse)
-                    } ?: connection.preparedQuery(orderQuery)
+            loadPosCommandState(
+                connection,
+                orderId,
+                commandName,
+                idempotencyKeyValue,
+                requestFingerprint,
+                actor
+            ).flatMap { commandState ->
+                val state = commandState.idempotency
+                val requestFingerprint = commandState.requestFingerprint
+                state.responsePayload?.let { storedResponse ->
+                    Single.just(storedResponse)
+                } ?: connection.preparedQuery(orderQuery)
                         .rxExecute(Tuple.of(orderId))
                         .flatMap { orderResult ->
                             if (orderResult.size() == 0) {
@@ -843,7 +1124,68 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
         }
     }
 
-    private fun mapSalesOrderRow(row: Row): JsonObject {
+    private fun lockPosDraftContext(
+        connection: SqlConnection,
+        shiftId: String,
+        locationId: String,
+        currency: String,
+        actorSubject: String
+    ): Single<PosDraftContext> {
+        val terminalQuery = """
+            SELECT t.terminal_id, t.location_id, t.is_active
+            FROM pos_terminal t
+            JOIN pos_shift s ON s.terminal_id = t.terminal_id
+            WHERE s.shift_id = $1
+            FOR UPDATE OF t
+        """.trimIndent()
+        val shiftQuery = """
+            SELECT shift_id, status, operator_id, currency
+            FROM pos_shift
+            WHERE shift_id = $1
+            FOR UPDATE
+        """.trimIndent()
+
+        return connection.preparedQuery(terminalQuery)
+            .rxExecute(Tuple.of(shiftId))
+            .flatMap { terminalResult ->
+                if (terminalResult.size() == 0) {
+                    Single.error<PosDraftContext>(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    val terminalRow = terminalResult.first()
+                    when {
+                        terminalRow.getString("location_id") != locationId ->
+                            Single.error(Exception(ErrorCodes.fromStatus(404)))
+                        !terminalRow.getBoolean("is_active") ->
+                            Single.error(PosOrderConflict("POS terminal is inactive"))
+                        else -> connection.preparedQuery(shiftQuery)
+                            .rxExecute(Tuple.of(shiftId))
+                            .flatMap { shiftResult ->
+                                if (shiftResult.size() == 0) {
+                                    Single.error<PosDraftContext>(Exception(ErrorCodes.fromStatus(404)))
+                                } else {
+                                    val shiftRow = shiftResult.first()
+                                    when {
+                                        shiftRow.getString("operator_id") != actorSubject ->
+                                            Single.error(PosOrderScopeViolation("POS shift owner mismatch"))
+                                        shiftRow.getString("status") != "OPEN" ->
+                                            Single.error(PosOrderConflict("POS shift is not open"))
+                                        shiftRow.getString("currency") != currency ->
+                                            Single.error(PosOrderConflict("POS shift currency does not match order currency"))
+                                        else -> Single.just(
+                                            PosDraftContext(
+                                                shiftId = shiftRow.getString("shift_id"),
+                                                draftOperatorId = actorSubject
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                    }
+                }
+            }
+    }
+
+    private fun mapSalesOrderRow(row: Row, posContext: JsonObject? = null): JsonObject {
         return JsonObject()
             .put("salesOrderId", row.getString("sales_order_id"))
             .put("orderNumber", row.getString("order_number"))
@@ -857,6 +1199,17 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             .put("notes", row.getString("notes"))
             .put("createdAt", row.getLocalDateTime("created_at")?.toString())
             .put("updatedAt", row.getLocalDateTime("updated_at")?.toString())
+            .put("posContext", posContext)
+    }
+
+    private fun mapSalesOrderWithContext(row: Row): JsonObject {
+        val shiftId = row.getString("pos_shift_id")
+        val posContext = shiftId?.let {
+            JsonObject()
+                .put("shiftId", it)
+                .put("draftOperatorId", row.getString("pos_draft_operator_id"))
+        }
+        return mapSalesOrderRow(row, posContext)
     }
 
     private fun mapSalesOrderLineRow(row: Row): JsonObject {
@@ -944,6 +1297,176 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
     private data class CommandIdempotencyState(
         val responsePayload: JsonObject?
     )
+
+    private data class PosCommandActor(
+        val subject: String,
+        val human: Boolean,
+        val posOrderUse: Boolean
+    )
+
+    private data class PosOrderCommandContext(
+        val shiftId: String,
+        val actorSubject: String,
+        val shiftStatus: String,
+        val attributed: Boolean
+    )
+
+    private data class PosCommandState(
+        val idempotency: CommandIdempotencyState,
+        val context: PosOrderCommandContext,
+        val requestFingerprint: String
+    )
+
+    private fun normalizeCommandActor(
+        actorSubject: String,
+        humanActor: Boolean,
+        posOrderUse: Boolean
+    ): PosCommandActor {
+        val normalized = actorSubject.trim()
+        if (normalized.isBlank()) {
+            throw PosOrderValidation("actorSubject is required")
+        }
+        if (normalized.length > 255) {
+            throw PosOrderValidation("actorSubject must be at most 255 characters")
+        }
+        return PosCommandActor(normalized, humanActor, posOrderUse)
+    }
+
+    private fun loadPosCommandState(
+        connection: SqlConnection,
+        orderId: String,
+        commandName: String,
+        idempotencyKey: String,
+        requestFingerprint: String,
+        actor: PosCommandActor?
+    ): Single<PosCommandState> = lockPosOrderCommandContext(connection, orderId, actor)
+        .flatMap { context ->
+            val effectiveRequestFingerprint = contextualRequestFingerprint(requestFingerprint, context)
+            loadCommandIdempotency(
+                connection,
+                orderId,
+                commandName,
+                idempotencyKey,
+                effectiveRequestFingerprint
+            ).flatMap { idempotency ->
+                if (context.attributed && context.shiftStatus != "OPEN" && idempotency.responsePayload == null) {
+                    Single.error<PosCommandState>(PosOrderConflict("POS shift is not open"))
+                } else {
+                    Single.just(PosCommandState(idempotency, context, effectiveRequestFingerprint))
+                }
+            }
+        }
+
+    private fun contextualRequestFingerprint(
+        requestFingerprint: String,
+        context: PosOrderCommandContext
+    ): String = if (context.attributed) {
+        listOf(requestFingerprint, context.shiftId, context.actorSubject).joinToString("|")
+    } else {
+        requestFingerprint
+    }
+
+    private fun ensurePosCommandOpen(context: PosOrderCommandContext): Single<PosOrderCommandContext> =
+        if (!context.attributed || context.shiftStatus == "OPEN") {
+            Single.just(context)
+        } else {
+            Single.error(PosOrderConflict("POS shift is not open"))
+        }
+
+    private fun lockPosOrderCommandContext(
+        connection: SqlConnection,
+        orderId: String,
+        actor: PosCommandActor?
+    ): Single<PosOrderCommandContext> {
+        val contextQuery = """
+            SELECT shift_id, draft_operator_id
+            FROM pos_order_context
+            WHERE sales_order_id = $1
+        """.trimIndent()
+        val terminalQuery = """
+            SELECT t.terminal_id, t.location_id, t.is_active
+            FROM pos_terminal t
+            JOIN pos_shift s ON s.terminal_id = t.terminal_id
+            WHERE s.shift_id = $1
+            FOR UPDATE OF t
+        """.trimIndent()
+        val shiftQuery = """
+            SELECT shift_id, status, operator_id, currency
+            FROM pos_shift
+            WHERE shift_id = $1
+            FOR UPDATE
+        """.trimIndent()
+        val orderQuery = """
+            SELECT sales_order_id, location_id, currency
+            FROM sales_order
+            WHERE sales_order_id = $1
+            FOR UPDATE
+        """.trimIndent()
+
+        return connection.preparedQuery(contextQuery)
+            .rxExecute(Tuple.of(orderId))
+            .flatMap { contextResult ->
+                if (contextResult.size() == 0) {
+                    Single.just(PosOrderCommandContext("", "", "NONE", false))
+                } else if (actor == null) {
+                    Single.error<PosOrderCommandContext>(PosOrderScopeViolation("POS actor context is required"))
+                } else if (!actor.human) {
+                    Single.error<PosOrderCommandContext>(PosOrderScopeViolation("POS commands require a human shift owner"))
+                } else if (!actor.posOrderUse) {
+                    Single.error<PosOrderCommandContext>(PosOrderScopeViolation("POS commands require pos.order.use"))
+                } else {
+                    val contextRow = contextResult.first()
+                    val shiftId = contextRow.getString("shift_id")
+                    connection.preparedQuery(terminalQuery)
+                        .rxExecute(Tuple.of(shiftId))
+                        .flatMap { terminalResult ->
+                            if (terminalResult.size() == 0) {
+                                Single.error<PosOrderCommandContext>(Exception(ErrorCodes.fromStatus(404)))
+                            } else {
+                                val terminalRow = terminalResult.first()
+                                connection.preparedQuery(shiftQuery)
+                                    .rxExecute(Tuple.of(shiftId))
+                                    .flatMap { shiftResult ->
+                                        if (shiftResult.size() == 0) {
+                                            Single.error<PosOrderCommandContext>(Exception(ErrorCodes.fromStatus(404)))
+                                        } else {
+                                            val shiftRow = shiftResult.first()
+                                            when {
+                                                shiftRow.getString("operator_id") != actor.subject ->
+                                                    Single.error(PosOrderScopeViolation("POS shift owner mismatch"))
+                                                contextRow.getString("draft_operator_id") != shiftRow.getString("operator_id") ->
+                                                    Single.error(PosOrderConflict("POS order actor context is inconsistent"))
+                                                else -> connection.preparedQuery(orderQuery)
+                                                    .rxExecute(Tuple.of(orderId))
+                                                    .flatMap { orderResult ->
+                                                        if (orderResult.size() == 0) {
+                                                            Single.error<PosOrderCommandContext>(Exception(ErrorCodes.fromStatus(404)))
+                                                        } else {
+                                                            val orderRow = orderResult.first()
+                                                            when {
+                                                                terminalRow.getString("location_id") != orderRow.getString("location_id") ->
+                                                                    Single.error(PosOrderConflict("POS order location does not match terminal"))
+                                                                shiftRow.getString("currency") != orderRow.getString("currency") ->
+                                                                    Single.error(PosOrderConflict("POS order currency does not match shift"))
+                                                                else -> Single.just(
+                                                                    PosOrderCommandContext(
+                                                                        shiftId = shiftId,
+                                                                        actorSubject = actor.subject,
+                                                                        shiftStatus = shiftRow.getString("status"),
+                                                                        attributed = true
+                                                                    )
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                            }
+                                        }
+                                    }
+                            }
+                        }
+                }
+            }
+    }
 
     private fun loadCommandIdempotency(
         connection: SqlConnection,
@@ -1059,6 +1582,24 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             }
     }
 
+    private data class PosDraftContext(
+        val shiftId: String,
+        val draftOperatorId: String
+    )
+
+    private fun generateOrderNumber(connection: SqlConnection): Single<String> {
+        val sequenceQuery = "SELECT nextval('sales_order_number_seq') AS sequence_value"
+        return connection.preparedQuery(sequenceQuery)
+            .rxExecute(Tuple.tuple())
+            .map { result ->
+                val sequenceValue = result.first().getLong("sequence_value")
+                    ?: throw IllegalStateException("sales_order_number_seq did not return a value")
+                val epoch = LocalDateTime.now().toString().replace(":", "").replace("-", "").replace(".", "")
+                val suffix = sequenceValue.toString().padStart(6, '0')
+                "SO-$epoch-$suffix"
+            }
+    }
+
     private fun generateOrderNumber(): Single<String> {
         val sequenceQuery = "SELECT nextval('sales_order_number_seq') AS sequence_value"
         return pool.preparedQuery(sequenceQuery)
@@ -1072,3 +1613,9 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             }
     }
 }
+
+class PosOrderScopeViolation(message: String) : IllegalArgumentException(message)
+
+class PosOrderValidation(message: String) : IllegalArgumentException(message)
+
+class PosOrderConflict(message: String) : IllegalStateException(message)

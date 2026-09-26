@@ -46,14 +46,14 @@ class OrderScopeRepository(pool: Pool) : BaseRepository(pool, OrderScopeReposito
         val rawOrder = parts.getOrNull(1)?.trim()?.uppercase() ?: "DESC"
 
         val sortField = when (rawField.lowercase()) {
-            "ordernumber", "order_number" -> "order_number"
-            "orderdate", "order_date" -> "order_date"
-            "saleschannel", "sales_channel" -> "sales_channel"
-            "status" -> "status"
-            "totalamount", "total_amount" -> "total_amount"
-            "createdat", "created_at" -> "created_at"
-            "updatedat", "updated_at" -> "updated_at"
-            else -> "order_date"
+            "ordernumber", "order_number" -> "sales_order.order_number"
+            "orderdate", "order_date" -> "sales_order.order_date"
+            "saleschannel", "sales_channel" -> "sales_order.sales_channel"
+            "status" -> "sales_order.status"
+            "totalamount", "total_amount" -> "sales_order.total_amount"
+            "createdat", "created_at" -> "sales_order.created_at"
+            "updatedat", "updated_at" -> "sales_order.updated_at"
+            else -> "sales_order.order_date"
         }
         val sortOrder = if (rawOrder == "ASC" || rawOrder == "DESC") rawOrder else "DESC"
 
@@ -80,8 +80,15 @@ class OrderScopeRepository(pool: Pool) : BaseRepository(pool, OrderScopeReposito
 
         val countQuery = "SELECT COUNT(*) AS total FROM sales_order $whereClause"
         val dataQuery = """
-            SELECT sales_order_id, order_number, order_date, sales_channel, customer_id, location_id, status, total_amount, currency, notes, created_at, updated_at
+            SELECT sales_order.sales_order_id, sales_order.order_number, sales_order.order_date,
+                sales_order.sales_channel, sales_order.customer_id, sales_order.location_id,
+                sales_order.status, sales_order.total_amount, sales_order.currency, sales_order.notes,
+                sales_order.created_at, sales_order.updated_at,
+                pos_order_context.shift_id AS pos_shift_id,
+                pos_order_context.draft_operator_id AS pos_draft_operator_id
             FROM sales_order
+            LEFT JOIN pos_order_context
+                ON pos_order_context.sales_order_id = sales_order.sales_order_id
             $whereClause
             ORDER BY $sortField $sortOrder
             LIMIT $size OFFSET $offset
@@ -111,6 +118,11 @@ class OrderScopeRepository(pool: Pool) : BaseRepository(pool, OrderScopeReposito
     }
 
     private fun mapSalesOrderRow(row: Row): JsonObject {
+        val posContext = row.getString("pos_shift_id")?.let { shiftId ->
+            JsonObject()
+                .put("shiftId", shiftId)
+                .put("draftOperatorId", row.getString("pos_draft_operator_id"))
+        }
         return JsonObject()
             .put("salesOrderId", row.getString("sales_order_id"))
             .put("orderNumber", row.getString("order_number"))
@@ -124,6 +136,7 @@ class OrderScopeRepository(pool: Pool) : BaseRepository(pool, OrderScopeReposito
             .put("notes", row.getString("notes"))
             .put("createdAt", row.getLocalDateTime("created_at")?.toString())
             .put("updatedAt", row.getLocalDateTime("updated_at")?.toString())
+            .put("posContext", posContext)
     }
 }
 
