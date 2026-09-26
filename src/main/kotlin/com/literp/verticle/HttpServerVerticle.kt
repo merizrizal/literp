@@ -409,10 +409,20 @@ class HttpServerVerticle(
             .addHandler(posOperationsHandler::closePosShift)
         routerBuilder.getRoute("getPosReceiptByNumber")
             .addHandler(securityHandler.authorizeOperation("getPosReceiptByNumber"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::getPosReceiptByNumber)
         routerBuilder.getRoute("listPosReceiptsBySalesOrder")
             .addHandler(securityHandler.authorizeOperation("listPosReceiptsBySalesOrder"))
+            .addHandler(posScopeHandler::authorize)
             .addHandler(posOperationsHandler::listPosReceiptsBySalesOrder)
+        routerBuilder.getRoute("generatePosReceipt")
+            .addHandler(securityHandler.authorizeOperation("generatePosReceipt"))
+            .addHandler(posScopeHandler::authorize)
+            .addHandler(posOperationsHandler::generatePosReceipt)
+        routerBuilder.getRoute("createPosReceiptRefund")
+            .addHandler(securityHandler.authorizeOperation("createPosReceiptRefund"))
+            .addHandler(posScopeHandler::authorize)
+            .addHandler(posOperationsHandler::createPosReceiptRefund)
     }
 
     private fun getIndex(context: RoutingContext) {

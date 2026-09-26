@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Literp POS Operations API",
-    "description": "Location-scoped POS terminal and shift operations, plus receipt lookup.\nThe eight terminal and shift operations are implemented. The two receipt\nlookup operations remain authenticated placeholders that return 501.\nReceipt generation and refunds are not exposed by this contract.\n",
+    "description": "Location-scoped POS terminal, shift, and receipt operations.\nThe eight terminal and shift operations and both receipt lookup operations\nare implemented; receipt generation and refunds remain authenticated\nplaceholders that return 501.\n",
     "version": "0.0.1"
   },
   "servers": [
@@ -484,7 +484,7 @@
           "POS Receipts"
         ],
         "summary": "Get a POS receipt by number",
-        "description": "Retrieve a receipt by its bounded receipt number within the receipt's\norder location scope. Receipt lookup is a future-availability\nplaceholder; this contract does not generate receipts or expose refunds.\n",
+        "description": "Retrieve a persisted receipt and its derived adjustment summary by\nbounded receipt number. Missing and out-of-scope receipts return the\nsame 404 response after the order location is checked.\n",
         "operationId": "getPosReceiptByNumber",
         "responses": {
           "200": {
@@ -509,9 +509,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -529,7 +526,7 @@
           "POS Receipts"
         ],
         "summary": "List POS receipts for a sales order",
-        "description": "List receipts scoped by the persisted sales-order location, ordered by\nreceipt date and then receipt ID. Receipt lookup is a future-availability\nplaceholder; this contract does not generate receipts or expose refunds.\n",
+        "description": "List persisted receipts and their derived adjustment summaries within\nthe sales-order location scope, ordered by receipt date and then receipt\nID. Missing and out-of-scope orders return the same 404 response.\n",
         "operationId": "listPosReceiptsBySalesOrder",
         "parameters": [
           {
@@ -577,6 +574,118 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "POS Receipts"
+        ],
+        "summary": "Generate a POS receipt for a fulfilled sales order",
+        "description": "Issue one immutable receipt for a fulfilled, attributed POS order.\nThis is an internal record, not a fiscal/tax document; no tax is\ncalculated. This authenticated operation currently returns 501 and\ndoes not create a receipt or claim an idempotency key.\n",
+        "operationId": "generatePosReceipt",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "POS receipt issued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosReceiptResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "501": {
+            "$ref": "#/components/responses/NotImplemented"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/pos/receipts/{receiptId}/refunds": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ReceiptId"
+        }
+      ],
+      "post": {
+        "tags": [
+          "POS Receipts"
+        ],
+        "summary": "Create a refund adjustment for a POS receipt",
+        "description": "Record an audited, payment-specific refund against a receipt. Refunds\nare local ledger records and do not contact an external payment\nprovider. This authenticated operation currently returns 501.\n",
+        "operationId": "createPosReceiptRefund",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePosReceiptRefundRequest"
+              },
+              "example": {
+                "paymentId": "550e8400-e29b-41d4-a716-446655440001",
+                "amount": 10.0,
+                "shiftId": "550e8400-e29b-41d4-a716-446655440002",
+                "reason": "Customer requested refund"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "POS receipt refund recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosReceiptRefundResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
           "501": {
             "$ref": "#/components/responses/NotImplemented"
           },
@@ -609,6 +718,16 @@
           "format": "uuid"
         }
       },
+      "ReceiptId": {
+        "name": "receiptId",
+        "in": "path",
+        "required": true,
+        "description": "POS receipt identifier.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
       "ReceiptNumber": {
         "name": "receiptNumber",
         "in": "path",
@@ -634,7 +753,7 @@
         "name": "Idempotency-Key",
         "in": "header",
         "required": true,
-        "description": "Bounded key used to safely retry terminal creation, shift opening, or shift closing.",
+        "description": "Bounded key used to safely retry terminal, shift, receipt issuance, or refund commands.",
         "schema": {
           "type": "string",
           "minLength": 1,
@@ -909,12 +1028,17 @@
           "receiptId",
           "salesOrderId",
           "shiftId",
+          "currency",
           "receiptNumber",
           "receiptDate",
           "totalItems",
           "subtotal",
           "taxAmount",
           "totalAmount",
+          "refundedAmount",
+          "netAmount",
+          "adjustmentStatus",
+          "adjustments",
           "receiptData",
           "createdAt"
         ],
@@ -935,6 +1059,12 @@
             "nullable": true,
             "description": "Shift associated with receipt creation when known; null for historical receipts without trusted shift attribution."
           },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "nullable": true,
+            "description": "Order currency for API-issued receipts; null for historical receipts without stored currency."
+          },
           "receiptNumber": {
             "type": "string",
             "minLength": 1,
@@ -947,9 +1077,11 @@
             "description": "Timestamp assigned to the receipt."
           },
           "totalItems": {
-            "type": "integer",
+            "type": "number",
             "minimum": 0,
-            "description": "Total number of items represented by the receipt."
+            "maximum": 999999999.999,
+            "multipleOf": 0.001,
+            "description": "Sum of item quantities represented by the receipt."
           },
           "subtotal": {
             "type": "number",
@@ -961,13 +1093,43 @@
             "type": "number",
             "minimum": 0,
             "maximum": 999999999999.99,
-            "multipleOf": 0.01
+            "multipleOf": 0.01,
+            "description": "API-issued receipts currently record zero because tax calculation is not supported."
           },
           "totalAmount": {
             "type": "number",
             "minimum": 0,
             "maximum": 999999999999.99,
             "multipleOf": 0.01
+          },
+          "refundedAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "description": "Sum of append-only refund adjustments."
+          },
+          "netAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01,
+            "description": "Original total amount less refunded amount."
+          },
+          "adjustmentStatus": {
+            "type": "string",
+            "enum": [
+              "ISSUED",
+              "PARTIALLY_REFUNDED",
+              "REFUNDED"
+            ]
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PosReceiptRefund"
+            },
+            "description": "Refund adjustments ordered by creation time and refund ID."
           },
           "receiptData": {
             "type": "object",
@@ -1008,6 +1170,160 @@
           },
           "pagination": {
             "$ref": "#/components/schemas/PaginationInfo"
+          }
+        }
+      },
+      "CreatePosReceiptRefundRequest": {
+        "type": "object",
+        "required": [
+          "paymentId",
+          "amount",
+          "shiftId",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Captured payment being refunded."
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "shiftId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Open refund shift owned by the authenticated human operator."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S",
+            "description": "Required nonblank audit reason for the refund."
+          }
+        }
+      },
+      "PosReceiptRefund": {
+        "type": "object",
+        "required": [
+          "refundId",
+          "receiptId",
+          "paymentId",
+          "refundShiftId",
+          "actorSubject",
+          "reason",
+          "amount",
+          "currency",
+          "createdAt"
+        ],
+        "properties": {
+          "refundId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "receiptId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "paymentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "refundShiftId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "actorSubject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Verified human subject that recorded the refund."
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S"
+          },
+          "amount": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PosReceiptAdjustmentSummary": {
+        "type": "object",
+        "required": [
+          "refundedAmount",
+          "netAmount",
+          "adjustmentStatus",
+          "adjustments"
+        ],
+        "properties": {
+          "refundedAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "netAmount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999999999999.99,
+            "multipleOf": 0.01
+          },
+          "adjustmentStatus": {
+            "type": "string",
+            "enum": [
+              "ISSUED",
+              "PARTIALLY_REFUNDED",
+              "REFUNDED"
+            ]
+          },
+          "adjustments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PosReceiptRefund"
+            },
+            "description": "Refund adjustments ordered by creation time and refund ID."
+          }
+        }
+      },
+      "PosReceiptRefundResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": [
+              "refund",
+              "receiptAdjustment"
+            ],
+            "properties": {
+              "refund": {
+                "$ref": "#/components/schemas/PosReceiptRefund"
+              },
+              "receiptAdjustment": {
+                "$ref": "#/components/schemas/PosReceiptAdjustmentSummary"
+              }
+            }
           }
         }
       },

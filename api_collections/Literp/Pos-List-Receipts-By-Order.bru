@@ -13,7 +13,7 @@ get {
 docs {
   operationId: listPosReceiptsBySalesOrder
   request: GET /api/v1/pos/orders/{salesOrderId}/receipts
-  status: Authenticated placeholder (501 NOT_IMPLEMENTED); receipt lookup, generation, and refunds are not implemented yet.
+  status: Implemented; authenticated, location-scoped, and paginated; returns 200 or hidden 404.
 }
 
 settings {

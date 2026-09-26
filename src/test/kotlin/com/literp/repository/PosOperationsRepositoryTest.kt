@@ -113,6 +113,76 @@ class PosOperationsRepositoryTest {
     }
 
     @Test
+    fun receiptReadsAreLocationScopedAndPaginatedWithAdjustmentSummary() {
+        val suffix = suffix()
+        val locationA = createLocation("PRA-$suffix")
+        var locationB: String? = null
+        val orderIds = mutableListOf<String>()
+        val receiptIds = mutableListOf<String>()
+
+        try {
+            locationB = createLocation("PRB-$suffix")
+            val orderA = createReceiptOrder(locationA, "A-$suffix").also(orderIds::add)
+            val orderB = createReceiptOrder(requireNotNull(locationB), "B-$suffix").also(orderIds::add)
+            val firstReceiptNumber = "RCPT-LOOKUP-$suffix-A"
+            val secondReceiptNumber = "RCPT-LOOKUP-$suffix-B"
+            val foreignReceiptNumber = "RCPT-LOOKUP-$suffix-C"
+            val firstReceiptId = createReceipt(orderA, firstReceiptNumber, -10, receiptData = true).also(receiptIds::add)
+            val secondReceiptId = createReceipt(orderA, secondReceiptNumber, 10).also(receiptIds::add)
+            val foreignReceiptId = createReceipt(orderB, foreignReceiptNumber, 0).also(receiptIds::add)
+
+            val receipt = repository.getPosReceiptByNumber(firstReceiptNumber, setOf(locationA)).blockingGet()
+            assertEquals(firstReceiptId, receipt.getString("receiptId"))
+            assertEquals(orderA, receipt.getString("salesOrderId"))
+            assertEquals(null, receipt.getString("shiftId"))
+            assertEquals(null, receipt.getString("currency"))
+            assertEquals(BigDecimal("1.250"), decimalValue(receipt, "totalItems"))
+            assertEquals(BigDecimal("0.00"), decimalValue(receipt, "refundedAmount"))
+            assertEquals(BigDecimal("12.50"), decimalValue(receipt, "netAmount"))
+            assertEquals("ISSUED", receipt.getString("adjustmentStatus"))
+            assertTrue(receipt.getJsonArray("adjustments").isEmpty)
+            assertEquals("lookup-test", receipt.getJsonObject("receiptData").getString("source"))
+
+            assertNotFound {
+                repository.getPosReceiptByNumber(foreignReceiptNumber, setOf(locationA)).blockingGet()
+            }
+
+            val firstPage = repository.listPosReceiptsBySalesOrder(
+                salesOrderId = orderA,
+                page = 0,
+                size = 1,
+                authorizedLocationIds = setOf(locationA)
+            ).blockingGet()
+            assertPagination(firstPage, page = 0, size = 1, totalElements = 2, totalPages = 2)
+            assertEquals(listOf(firstReceiptNumber), receiptNumbers(firstPage))
+
+            val secondPage = repository.listPosReceiptsBySalesOrder(
+                salesOrderId = orderA,
+                page = 1,
+                size = 1,
+                authorizedLocationIds = setOf(locationA)
+            ).blockingGet()
+            assertPagination(secondPage, page = 1, size = 1, totalElements = 2, totalPages = 2)
+            assertEquals(listOf(secondReceiptNumber), receiptNumbers(secondPage))
+            assertEquals(null, secondPage.getJsonArray("data").getJsonObject(0).getValue("receiptData"))
+
+            assertNotFound {
+                repository.listPosReceiptsBySalesOrder(
+                    salesOrderId = orderB,
+                    page = 0,
+                    size = 10,
+                    authorizedLocationIds = setOf(locationA)
+                ).blockingGet()
+            }
+        } finally {
+            receiptIds.forEach(::deleteReceipt)
+            orderIds.forEach(::deleteSalesOrder)
+            deleteLocation(locationA)
+            locationB?.let(::deleteLocation)
+        }
+    }
+
+    @Test
     fun terminalAdministrationCreatesReplaysUpdatesAndDeactivatesSafely() {
         val suffix = suffix()
         val locationId = createLocation("PTM-$suffix")
@@ -531,6 +601,62 @@ class PosOperationsRepositoryTest {
             repository.getPosTerminal("terminal-1", emptySet())
         }
     }
+
+    private fun createReceiptOrder(locationId: String, suffix: String): String {
+        val salesOrderId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO sales_order (
+                sales_order_id, order_number, order_date, sales_channel, location_id,
+                status, total_amount, currency, notes
+            )
+            VALUES ($1, $2, NOW(), 'POS', $3, 'FULFILLED', 12.50, 'USD', 'receipt lookup test')
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.of(salesOrderId, "SO-RECEIPT-$suffix", locationId)
+        ).blockingGet()
+        return salesOrderId
+    }
+
+    private fun createReceipt(
+        salesOrderId: String,
+        receiptNumber: String,
+        secondsFromNow: Int,
+        receiptData: Boolean = false
+    ): String {
+        val receiptId = UUID.randomUUID().toString()
+        pool.preparedQuery(
+            """
+            INSERT INTO receipt (
+                receipt_id, sales_order_id, receipt_number, receipt_date, total_items,
+                subtotal, tax_amount, total_amount, receipt_data, currency, is_api_issued
+            )
+            VALUES (
+                $1, $2, $3, NOW() + ($4 * INTERVAL '1 second'), 1.250, 12.50, 0.00, 12.50,
+                CASE WHEN $5 THEN '{"source":"lookup-test"}'::json ELSE NULL END, NULL, false
+            )
+            """.trimIndent()
+        ).rxExecute(
+            Tuple.of(receiptId, salesOrderId, receiptNumber, secondsFromNow, receiptData)
+        ).blockingGet()
+        return receiptId
+    }
+
+    private fun deleteReceipt(receiptId: String) {
+        pool.preparedQuery("DELETE FROM receipt WHERE receipt_id = $1")
+            .rxExecute(Tuple.of(receiptId))
+            .blockingGet()
+    }
+
+    private fun deleteSalesOrder(salesOrderId: String) {
+        pool.preparedQuery("DELETE FROM sales_order WHERE sales_order_id = $1")
+            .rxExecute(Tuple.of(salesOrderId))
+            .blockingGet()
+    }
+
+    private fun receiptNumbers(response: JsonObject): List<String> = response.getJsonArray("data")
+        .filterIsInstance<JsonObject>()
+        .map { it.getString("receiptNumber") }
 
     private fun createLocation(code: String): String = locationRepository
         .createLocation(code, "POS terminal test $code", "WAREHOUSE", true, JsonObject())

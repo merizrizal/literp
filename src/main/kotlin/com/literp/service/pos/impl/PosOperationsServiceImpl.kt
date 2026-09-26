@@ -35,6 +35,26 @@ class PosOperationsServiceImpl(
         authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
     ).toVertxFuture()
 
+    override fun getPosReceiptByNumber(
+        receiptNumber: String,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.getPosReceiptByNumber(
+        receiptNumber = receiptNumber,
+        authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
+    override fun listPosReceiptsBySalesOrder(
+        salesOrderId: String,
+        page: Int,
+        size: Int,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.listPosReceiptsBySalesOrder(
+        salesOrderId = salesOrderId,
+        page = page,
+        size = size,
+        authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
     override fun createPosTerminal(
         locationId: String,
         terminalCode: String,

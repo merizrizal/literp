@@ -283,6 +283,16 @@ private val EXPLICIT_POLICY_RULES: Map<String, PolicyRule> = linkedMapOf(
         capability = "pos.receipt.read",
         resourceScope = ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION
     ),
+    "generatePosReceipt" to PolicyRule(
+        capability = "pos.receipt.write",
+        resourceScope = ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION,
+        principalEligibility = PrincipalEligibility.HUMAN
+    ),
+    "createPosReceiptRefund" to PolicyRule(
+        capability = "pos.refund.create",
+        resourceScope = ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION,
+        principalEligibility = PrincipalEligibility.HUMAN
+    ),
     UtilityOperationIds.ROOT to PolicyRule(
         capability = null,
         principalEligibility = PrincipalEligibility.PUBLIC

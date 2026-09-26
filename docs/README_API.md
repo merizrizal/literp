@@ -67,7 +67,7 @@ This directory documents the current implementation on this branch.
 ## Current Implementation Snapshot
 
 - Kotlin `2.4.20`
-- Vert.x `5.1.8`
+- Vert.x `5.2.0`
 - Java `25`
 - 39 implemented API endpoints across 6 API domains
 - 2 authenticated POS receipt lookup placeholders (`501 NOT_IMPLEMENTED`)

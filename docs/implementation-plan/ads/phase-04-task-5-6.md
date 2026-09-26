@@ -80,7 +80,7 @@ Alternatives to evaluate and record: domain-first packages for catalog/location/
 
 #### Observed evidence
 
-- Repository `HEAD` is `c4ad200 build(deps): upgrade Kotlin and Vert.x versions`; the working tree was clean before this ADS was created. `build.gradle.kts` confirms Kotlin `2.4.20`, Vert.x `5.1.8`, and Java 25. Do not repeat that upgrade.
+- Repository `HEAD` is `c4ad200 build(deps): upgrade Kotlin and Vert.x versions`; the working tree was clean before this ADS was created. `build.gradle.kts` confirms Kotlin `2.4.20`, Vert.x `5.2.0`, and Java 25. Do not repeat that upgrade.
 - `04-quality-contracts-observability.md`, sections 04.5/04.6, leaves both gates unchecked. It explicitly permits retaining the current layout and requires README/plan updates. Its final Definition of Done also remains unchecked; optional Bruno linting in 04.3 is still open.
 - `00-implementation-overview.md`, the phase-discipline/security paragraph, says to prove the workflow before IAM. `05-pos-manufacturing-expansion.md`, Entry Gate, already requires package and asset layout decisions but does not yet assign auth an owner task.
 - `HttpServerVerticle.kt`, `loadApiContracts` and the three `register*Handlers` methods, loads three YAML bundles from `api_collections/open_api_spec` and registers 31 business operation IDs: 15 catalog, 6 location, 10 order/stock. It also registers five utility routes: `/`, `/metrics`, `/health/live`, `/health/ready`, `/health/db`.

@@ -64,7 +64,7 @@ Introduce only the minimal signatures needed by the current behavior slice. Unwi
 | `SecurityPolicy.kt`, principal and operation map | Bounded verified subject, exact capabilities, human/service distinction; new POS eligibility/scopes cannot be assumed |
 | `OrderScopeHandler.kt`, scope dispatch/list behavior | Existing scope checks and hidden order IDs must remain intact; empty grants deny, lists must scope counts |
 | `BaseHandler.kt`, success/error/query helpers | Existing envelope, request ID and pagination conventions; generic error mapper uses message heuristics, so POS failures need deliberate safe mappings |
-| `build.gradle.kts` | Java 25, Kotlin 2.4.20, Vert.x 5.1.8, JUnit, RxJava and PostgreSQL client already available; no configured formatter task |
+| `build.gradle.kts` | Java 25, Kotlin 2.4.20, Vert.x 5.2.0, JUnit, RxJava and PostgreSQL client already available; no configured formatter task |
 | `TestDatabase.kt` availability check; CI workflow test/migration steps; `verify_migrations.py` | DB tests may skip when unavailable; migration checker expects one head and seed evidence, not all POS invariants |
 | Authentication/structure documents cited in 05.1 | No relocation, token issuance, untrusted exposure or automatic closure of external security gates |
 

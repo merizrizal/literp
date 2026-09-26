@@ -47,7 +47,7 @@ Token claims must be mapped by provider administrators and not writable through 
 - `OrderProcessService.fulfillSalesOrder(String salesOrderId, String createdBy, String notes, String idempotencyKey): Future<JsonObject>` forwards caller attribution today.
 - `ErrorCodes.fromStatus(statusCode: Int): String` currently has no 401/403 cases.
 
-**Function Signature Contract (Conceptual):** All following names and new paths are proposed, not existing symbols. Confirm Vert.x 5.1.8 API signatures before coding.
+**Function Signature Contract (Conceptual):** All following names and new paths are proposed, not existing symbols. Confirm Vert.x 5.2.0 API signatures before coding.
 
 | Proposed symbol | Input → output | Initial safe stub |
 |---|---|---|
@@ -71,7 +71,7 @@ New cross-cutting files are proposed under `src/main/kotlin/com/literp/security/
 | `docs/implementation-plan/05-pos-manufacturing-expansion.md`, Entry Gate and 05.0 | Requires approved ADS, all current operations protected, negative/positive validation, and preserved lifecycle/idempotency contracts before expansion. |
 | `docs/knowledge/SECURITY_SEQUENCING.md`, First Protected Surface and Utility-Route Policy | Authoritative 31-operation capability matrix and five utility policies; provider and scope implementation were intentionally unresolved. |
 | `docs/knowledge/PROJECT_STRUCTURE_DECISION.md`, Accepted Structure and API Asset Policy | Preserve layer-based source layout and current OpenAPI/Bruno roots. |
-| `build.gradle.kts:1–69` | Kotlin 2.4.20, Java 25, Vert.x 5.1.8, RxJava 3, JUnit 5; no explicit JWT dependency or formatter plugin in inspected build. |
+| `build.gradle.kts:1–69` | Kotlin 2.4.20, Java 25, Vert.x 5.2.0, RxJava 3, JUnit 5; no explicit JWT dependency or formatter plugin in inspected build. |
 | `src/main/kotlin/com/literp/config/Config.kt:16–88` | Environment-first resolution with local `cfg.properties` fallback; missing required values fail construction. |
 | `src/main/kotlin/com/literp/verticle/HttpServerVerticle.kt:75–174,182–225` | Runtime OpenAPI loading, three subrouters, 31 explicit `getRoute` registrations, no auth gate in that flow. |
 | Same file, `getIndex`, `getLiveness`, `getDatabaseHealth`, `handleFailure`, `putResponse` | Five utility endpoints; error envelope and request-ID response path already exist. Preserve operational health DOWN/503 semantics for authorized callers. |

@@ -2,6 +2,7 @@ package com.literp.repository
 
 import com.literp.common.ErrorCodes
 import io.reactivex.rxjava3.core.Single
+import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.sqlclient.Pool
 import io.vertx.rxjava3.sqlclient.Row
@@ -568,6 +569,98 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
             }
     }
 
+    fun getPosReceiptByNumber(
+        receiptNumber: String,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> {
+        if (receiptNumber.length !in 1..50 || receiptNumber.isBlank()) {
+            throw PosOperationsValidation("receiptNumber must be between 1 and 50 characters")
+        }
+        validateScope(locationId = null, authorizedLocationIds = authorizedLocationIds)
+
+        val params = mutableListOf<Any?>(receiptNumber)
+        val locationPlaceholders = authorizedLocationIds.toList().sorted().mapIndexed { index, locationId ->
+            params.add(locationId)
+            "$${index + 2}"
+        }
+        val query = receiptRowsQuery(
+            whereClause = "r.receipt_number = $1 AND o.location_id IN (${locationPlaceholders.joinToString(", ")})"
+        )
+
+        return pool.preparedQuery(query)
+            .rxExecute(Tuple.from(params))
+            .flatMap { result ->
+                if (result.size() == 0) {
+                    Single.error<JsonObject>(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    Single.just(mapReceiptRow(result.first()))
+                }
+            }
+    }
+
+    fun listPosReceiptsBySalesOrder(
+        salesOrderId: String,
+        page: Int,
+        size: Int,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> {
+        val normalizedSalesOrderId = requiredUuid(salesOrderId, "salesOrderId")
+        if (page < 0) {
+            throw PosOperationsValidation("page must be greater than or equal to 0")
+        }
+        if (size !in 1..100) {
+            throw PosOperationsValidation("size must be between 1 and 100")
+        }
+        validateScope(locationId = null, authorizedLocationIds = authorizedLocationIds)
+
+        val params = mutableListOf<Any?>(normalizedSalesOrderId)
+        val locationPlaceholders = authorizedLocationIds.toList().sorted().mapIndexed { index, locationId ->
+            params.add(locationId)
+            "$${index + 2}"
+        }
+        val whereClause = "o.sales_order_id = $1 AND o.location_id IN (${locationPlaceholders.joinToString(", ")})"
+        val countQuery = """
+            SELECT COUNT(r.receipt_id) AS total
+            FROM sales_order AS o
+            LEFT JOIN receipt AS r ON r.sales_order_id = o.sales_order_id
+            WHERE $whereClause
+            GROUP BY o.sales_order_id
+        """.trimIndent()
+
+        return pool.preparedQuery(countQuery)
+            .rxExecute(Tuple.from(params))
+            .flatMap { countResult ->
+                if (countResult.size() == 0) {
+                    Single.error<JsonObject>(Exception(ErrorCodes.fromStatus(404)))
+                } else {
+                    val total = countResult.first().getLong("total")
+                    val dataParams = params.toMutableList().apply {
+                        add(size)
+                        add(page.toLong() * size)
+                    }
+                    val dataQuery = receiptRowsQuery(
+                        whereClause = whereClause,
+                        orderByClause = "ORDER BY r.receipt_date ASC, r.receipt_id ASC",
+                        paginationClause = "LIMIT $${params.size + 1} OFFSET $${params.size + 2}"
+                    )
+                    pool.preparedQuery(dataQuery)
+                        .rxExecute(Tuple.from(dataParams))
+                        .map { dataResult ->
+                            JsonObject()
+                                .put("data", dataResult.map(::mapReceiptRow))
+                                .put(
+                                    "pagination",
+                                    JsonObject()
+                                        .put("page", page)
+                                        .put("size", size)
+                                        .put("totalElements", total)
+                                        .put("totalPages", if (total == 0L) 0L else (total + size - 1) / size)
+                                )
+                        }
+                }
+            }
+    }
+
     private fun selectScopedTerminalForUpdate(
         connection: SqlConnection,
         terminalId: String,
@@ -638,6 +731,19 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
         } else {
             Single.just(result.first())
         }
+    }
+
+    private fun requiredUuid(value: String, name: String): String {
+        val normalized = value.trim()
+        val parsed = try {
+            UUID.fromString(normalized)
+        } catch (_: IllegalArgumentException) {
+            throw PosOperationsValidation("$name must be a valid UUID")
+        }
+        if (normalized.length != 36 || parsed.toString() != normalized.lowercase()) {
+            throw PosOperationsValidation("$name must be a valid UUID")
+        }
+        return parsed.toString()
     }
 
     private fun requiredValue(value: String, name: String, maximumLength: Int): String {
@@ -828,6 +934,83 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
                 }
             }
     }
+
+    private fun receiptRowsQuery(
+        whereClause: String,
+        orderByClause: String = "",
+        paginationClause: String = ""
+    ): String {
+        val suffix = listOf(orderByClause, paginationClause)
+            .filter { it.isNotBlank() }
+            .joinToString("\n")
+        return """
+            SELECT
+                r.receipt_id,
+                r.sales_order_id,
+                r.shift_id,
+                r.currency,
+                r.receipt_number,
+                r.receipt_date,
+                r.total_items,
+                r.subtotal,
+                r.tax_amount,
+                r.total_amount,
+                r.receipt_data,
+                r.created_at,
+                refund_summary.refunded_amount,
+                GREATEST(r.total_amount - refund_summary.refunded_amount, 0)::numeric(14, 2) AS net_amount,
+                CASE
+                    WHEN refund_summary.refunded_amount = 0 THEN 'ISSUED'
+                    WHEN refund_summary.refunded_amount >= r.total_amount THEN 'REFUNDED'
+                    ELSE 'PARTIALLY_REFUNDED'
+                END AS adjustment_status,
+                refund_summary.adjustments
+            FROM receipt AS r
+            JOIN sales_order AS o ON o.sales_order_id = r.sales_order_id
+            LEFT JOIN LATERAL (
+                SELECT
+                    COALESCE(SUM(adjustment.amount), 0)::numeric(14, 2) AS refunded_amount,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'refundId', adjustment.refund_id,
+                                'receiptId', adjustment.receipt_id,
+                                'paymentId', adjustment.payment_id,
+                                'refundShiftId', adjustment.refund_shift_id,
+                                'actorSubject', adjustment.actor_subject,
+                                'reason', adjustment.reason,
+                                'amount', adjustment.amount,
+                                'currency', adjustment.currency,
+                                'createdAt', adjustment.created_at
+                            ) ORDER BY adjustment.created_at, adjustment.refund_id
+                        ),
+                        '[]'::json
+                    ) AS adjustments
+                FROM pos_receipt_refund AS adjustment
+                WHERE adjustment.receipt_id = r.receipt_id
+            ) AS refund_summary ON TRUE
+            WHERE $whereClause
+            $suffix
+        """.trimIndent()
+    }
+
+    private fun mapReceiptRow(row: Row): JsonObject = JsonObject()
+        .put("receiptId", row.getString("receipt_id"))
+        .put("salesOrderId", row.getString("sales_order_id"))
+        .put("shiftId", row.getString("shift_id"))
+        .put("currency", row.getString("currency"))
+        .put("receiptNumber", row.getString("receipt_number"))
+        .put("receiptDate", row.getLocalDateTime("receipt_date")?.toString())
+        .put("totalItems", row.getBigDecimal("total_items"))
+        .put("subtotal", row.getBigDecimal("subtotal"))
+        .put("taxAmount", row.getBigDecimal("tax_amount"))
+        .put("totalAmount", row.getBigDecimal("total_amount"))
+        .put("refundedAmount", row.getBigDecimal("refunded_amount"))
+        .put("netAmount", row.getBigDecimal("net_amount"))
+        .put("adjustmentStatus", row.getString("adjustment_status"))
+        .put("adjustments", row.getJsonArray("adjustments") ?: JsonArray())
+        .put("receiptData", row.getJsonObject("receipt_data"))
+        .put("createdAt", row.getLocalDateTime("created_at")?.toString())
 
     private fun mapShiftRow(row: Row): JsonObject = JsonObject()
         .put("shiftId", row.getString("shift_id"))

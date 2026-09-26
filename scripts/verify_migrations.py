@@ -109,6 +109,62 @@ POS_PAYMENT_CONTEXT_FOREIGN_KEYS: Final[frozenset[str]] = frozenset(
 )
 
 
+POS_RECEIPT_FOUNDATION_COLUMNS: Final[frozenset[str]] = frozenset(
+    {"currency", "issued_by", "is_api_issued", "total_items"}
+)
+POS_RECEIPT_FOUNDATION_CONSTRAINTS: Final[frozenset[str]] = frozenset(
+    {
+        "ck_receipt_total_items_bounds",
+        "ck_receipt_currency_format",
+        "ck_receipt_api_issued_metadata",
+    }
+)
+POS_RECEIPT_API_ISSUED_INDEX: Final[str] = "uq_receipt_api_issued_order"
+POS_RECEIPT_NUMBER_SEQUENCE: Final[str] = "pos_receipt_number_seq"
+
+POS_RECEIPT_REFUND_COLUMNS: Final[frozenset[str]] = frozenset(
+    {
+        "refund_id",
+        "receipt_id",
+        "payment_id",
+        "refund_shift_id",
+        "actor_subject",
+        "reason",
+        "amount",
+        "currency",
+        "created_at",
+    }
+)
+POS_RECEIPT_REFUND_PRIMARY_KEY: Final[str] = "pk_pos_receipt_refund"
+POS_RECEIPT_REFUND_CONSTRAINTS: Final[frozenset[str]] = frozenset(
+    {
+        "ck_pos_receipt_refund_amount_bounds",
+        "ck_pos_receipt_refund_currency_format",
+        "ck_pos_receipt_refund_reason_nonblank",
+    }
+)
+POS_RECEIPT_REFUND_FOREIGN_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "fk_pos_receipt_refund_receipt",
+        "fk_pos_receipt_refund_payment",
+        "fk_pos_receipt_refund_shift",
+    }
+)
+POS_RECEIPT_REFUND_INDEXES: Final[frozenset[str]] = frozenset(
+    {
+        "idx_pos_receipt_refund_receipt_created",
+        "idx_pos_receipt_refund_payment_created",
+        "idx_pos_receipt_refund_shift_created",
+    }
+)
+POS_RECEIPT_REFUND_TRIGGERS: Final[frozenset[str]] = frozenset(
+    {
+        "trg_pos_receipt_refund_immutable",
+        "trg_pos_receipt_refund_no_truncate",
+    }
+)
+
+
 class MigrationVerificationError(Exception):
     pass
 
@@ -412,9 +468,218 @@ def verify_pos_payment_context(cursor) -> None:
             )
 
 
+def verify_pos_receipt_refund_foundation(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT column_name, data_type, is_nullable, numeric_precision, numeric_scale,
+               column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'receipt'
+        """
+    )
+    receipt_columns = {row[0]: row[1:] for row in cursor.fetchall()}
+    missing_receipt_columns = POS_RECEIPT_FOUNDATION_COLUMNS - receipt_columns.keys()
+    if missing_receipt_columns:
+        raise MigrationVerificationError(
+            "receipt is missing issuance columns: "
+            + ", ".join(sorted(missing_receipt_columns))
+        )
+
+    total_items = receipt_columns["total_items"]
+    if total_items[0] != "numeric" or total_items[2:4] != (12, 3):
+        raise MigrationVerificationError(
+            "Expected receipt.total_items to be numeric(12,3)"
+        )
+    if receipt_columns["currency"][1] != "YES":
+        raise MigrationVerificationError(
+            "Expected historical receipt.currency to remain nullable"
+        )
+    if receipt_columns["issued_by"][1] != "YES":
+        raise MigrationVerificationError(
+            "Expected historical receipt.issued_by to remain nullable"
+        )
+    api_issued = receipt_columns["is_api_issued"]
+    if api_issued[0] != "boolean" or api_issued[1] != "NO":
+        raise MigrationVerificationError(
+            "Expected receipt.is_api_issued to be a non-null boolean"
+        )
+    if api_issued[4] is None or "false" not in api_issued[4].lower():
+        raise MigrationVerificationError(
+            "Expected receipt.is_api_issued to default to false for legacy rows"
+        )
+
+    for constraint_name in POS_RECEIPT_FOUNDATION_CONSTRAINTS:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM pg_constraint constraint_entry
+            JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+            JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+            WHERE schema_entry.nspname = 'public'
+              AND table_entry.relname = 'receipt'
+              AND constraint_entry.conname = %s
+              AND constraint_entry.contype = 'c'
+            """,
+            (constraint_name,),
+        )
+        if cursor.fetchone() is None:
+            raise MigrationVerificationError(
+                f"Missing receipt foundation check constraint: {constraint_name}"
+            )
+
+    cursor.execute(
+        """
+        SELECT indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND tablename = 'receipt'
+          AND indexname = %s
+        """,
+        (POS_RECEIPT_API_ISSUED_INDEX,),
+    )
+    api_issued_index = cursor.fetchone()
+    if (
+        api_issued_index is None
+        or "UNIQUE INDEX" not in api_issued_index[0].upper()
+        or "SALES_ORDER_ID" not in api_issued_index[0].upper()
+        or "IS_API_ISSUED" not in api_issued_index[0].upper()
+        or "WHERE" not in api_issued_index[0].upper()
+    ):
+        raise MigrationVerificationError(
+            f"Missing API-issued receipt uniqueness index: {POS_RECEIPT_API_ISSUED_INDEX}"
+        )
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_class relation_entry
+        JOIN pg_namespace schema_entry ON schema_entry.oid = relation_entry.relnamespace
+        WHERE schema_entry.nspname = 'public'
+          AND relation_entry.relname = %s
+          AND relation_entry.relkind = 'S'
+        """,
+        (POS_RECEIPT_NUMBER_SEQUENCE,),
+    )
+    if cursor.fetchone() is None:
+        raise MigrationVerificationError(
+            f"Missing receipt number sequence: {POS_RECEIPT_NUMBER_SEQUENCE}"
+        )
+
+    cursor.execute(
+        """
+        SELECT column_name, data_type, numeric_precision, numeric_scale
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'pos_receipt_refund'
+        """
+    )
+    refund_columns = {row[0]: row[1:] for row in cursor.fetchall()}
+    missing_refund_columns = POS_RECEIPT_REFUND_COLUMNS - refund_columns.keys()
+    if missing_refund_columns:
+        raise MigrationVerificationError(
+            "pos_receipt_refund is missing columns: "
+            + ", ".join(sorted(missing_refund_columns))
+        )
+    if refund_columns["amount"] != ("numeric", 14, 2):
+        raise MigrationVerificationError(
+            "Expected pos_receipt_refund.amount to be numeric(14,2)"
+        )
+
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_constraint constraint_entry
+        JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+        JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+        WHERE schema_entry.nspname = 'public'
+          AND table_entry.relname = 'pos_receipt_refund'
+          AND constraint_entry.conname = %s
+          AND constraint_entry.contype = 'p'
+        """,
+        (POS_RECEIPT_REFUND_PRIMARY_KEY,),
+    )
+    if cursor.fetchone() is None:
+        raise MigrationVerificationError(
+            f"Missing refund-ledger primary key: {POS_RECEIPT_REFUND_PRIMARY_KEY}"
+        )
+
+    for constraint_name in POS_RECEIPT_REFUND_CONSTRAINTS:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM pg_constraint constraint_entry
+            JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+            JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+            WHERE schema_entry.nspname = 'public'
+              AND table_entry.relname = 'pos_receipt_refund'
+              AND constraint_entry.conname = %s
+              AND constraint_entry.contype = 'c'
+            """,
+            (constraint_name,),
+        )
+        if cursor.fetchone() is None:
+            raise MigrationVerificationError(
+                f"Missing refund-ledger check constraint: {constraint_name}"
+            )
+
+    for foreign_key_name in POS_RECEIPT_REFUND_FOREIGN_KEYS:
+        cursor.execute(
+            """
+            SELECT confdeltype
+            FROM pg_constraint constraint_entry
+            JOIN pg_class table_entry ON table_entry.oid = constraint_entry.conrelid
+            JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+            WHERE schema_entry.nspname = 'public'
+              AND table_entry.relname = 'pos_receipt_refund'
+              AND constraint_entry.conname = %s
+              AND constraint_entry.contype = 'f'
+            """,
+            (foreign_key_name,),
+        )
+        foreign_key = cursor.fetchone()
+        if foreign_key is None or foreign_key[0] != "r":
+            raise MigrationVerificationError(
+                f"Missing restrictive refund-ledger foreign key: {foreign_key_name}"
+            )
+
+    for index_name in POS_RECEIPT_REFUND_INDEXES:
+        cursor.execute(
+            """
+            SELECT 1
+            FROM pg_indexes
+            WHERE schemaname = 'public'
+              AND tablename = 'pos_receipt_refund'
+              AND indexname = %s
+            """,
+            (index_name,),
+        )
+        if cursor.fetchone() is None:
+            raise MigrationVerificationError(
+                f"Missing refund-ledger lookup index: {index_name}"
+            )
+
+    cursor.execute(
+        """
+        SELECT trigger_entry.tgname
+        FROM pg_trigger trigger_entry
+        JOIN pg_class table_entry ON table_entry.oid = trigger_entry.tgrelid
+        JOIN pg_namespace schema_entry ON schema_entry.oid = table_entry.relnamespace
+        WHERE schema_entry.nspname = 'public'
+          AND table_entry.relname = 'pos_receipt_refund'
+          AND NOT trigger_entry.tgisinternal
+        """
+    )
+    actual_triggers = {row[0] for row in cursor.fetchall()}
+    missing_triggers = POS_RECEIPT_REFUND_TRIGGERS - actual_triggers
+    if missing_triggers:
+        raise MigrationVerificationError(
+            "pos_receipt_refund is missing append-only triggers: "
+            + ", ".join(sorted(missing_triggers))
+        )
+
+
 def verify_database(db_url: str, expected_head: str) -> None:
     print(
-        "Verifying Alembic head, deterministic seed data, POS ledger schema, shift invariants, order context, and payment context..."
+        "Verifying Alembic head, seed data, POS ledger/schema invariants, and receipt/refund foundation..."
     )
     with psycopg.connect(db_url) as connection, connection.cursor() as cursor:
         cursor.execute("SELECT version_num FROM alembic_version")
@@ -444,6 +709,7 @@ def verify_database(db_url: str, expected_head: str) -> None:
         verify_pos_shift_invariants(cursor)
         verify_pos_order_context(cursor)
         verify_pos_payment_context(cursor)
+        verify_pos_receipt_refund_foundation(cursor)
 
     print(f"Alembic head verified: {expected_head}")
     for table_name, minimum_count in SEED_MINIMUMS.items():
