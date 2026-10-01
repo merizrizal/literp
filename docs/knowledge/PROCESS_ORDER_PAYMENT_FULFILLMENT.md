@@ -148,4 +148,6 @@ Abort order prior to physical completion.
 - Multi-step state changes should be treated as atomic business transactions.
 - Reservation and movement records are critical for auditability.
 - Fulfillment records `OUT` movements with `from_location_id` set to the source location and `to_location_id` left null.
-- Receipt generation and refund orchestration are separate extensions of this process.
+- Receipt generation and refund orchestration are separate extensions of this process. Task 05.3 currently implements receipt reads; issuance/refund writes remain authenticated 501 placeholders.
+- The proposed 05.3 refund applies to fulfilled, receipted POS sales, changes neither inventory nor fulfilled order state, and does not implement refund-before-cancel for a paid unfulfilled order. That recovery flow and partial fulfillment need separate design ownership.
+- Availability checks do not prove cross-order stock serialization. Before manufacturing posting, all supported stock/reservation writers must join the approved protocol proposed in [05.6](../implementation-plan/ads/phase-05-task-6.md#shared-inventory-serialization-prerequisite).

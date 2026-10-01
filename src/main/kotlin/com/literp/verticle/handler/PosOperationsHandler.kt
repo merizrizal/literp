@@ -1,5 +1,7 @@
 package com.literp.verticle.handler
 
+import com.literp.repository.PosOperationsScopeViolation
+import com.literp.repository.PosOperationsValidation
 import com.literp.security.AuthenticatedPrincipal
 import com.literp.service.pos.PosOperationsService
 import io.vertx.core.json.JsonArray
@@ -7,6 +9,7 @@ import io.vertx.core.json.JsonObject
 import io.vertx.openapi.validation.ValidatedRequest
 import io.vertx.rxjava3.ext.web.RoutingContext
 import io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder
+import java.util.UUID
 
 class PosOperationsHandler(
     private val posOperationsService: PosOperationsService
@@ -278,11 +281,91 @@ class PosOperationsHandler(
     }
 
     fun getPosReceiptByNumber(context: RoutingContext) {
-        respondNotImplemented(context)
+        val receiptNumber = context.pathParam("receiptNumber")
+        if (receiptNumber.isNullOrBlank() || receiptNumber.length > 50) {
+            putErrorResponse(context, 400, "receiptNumber must be between 1 and 50 characters")
+            return
+        }
+        val authorizedLocationIds = authorizedLocationIds(context) ?: return
+
+        posOperationsService.getPosReceiptByNumber(
+            receiptNumber,
+            JsonArray(authorizedLocationIds.toList())
+        ).onSuccess { result ->
+            putSuccessResponse(context, 200, result)
+        }.onFailure { error ->
+            putReceiptReadErrorResponse(
+                context = context,
+                error = error,
+                internalErrorMessage = "Failed to get POS receipt",
+                notFoundMessage = "POS receipt not found"
+            )
+        }
     }
 
     fun listPosReceiptsBySalesOrder(context: RoutingContext) {
+        val salesOrderId = context.pathParam("salesOrderId")?.trim()
+        val normalizedSalesOrderId = salesOrderId
+            ?.takeIf(String::isNotBlank)
+            ?.let { value -> runCatching { UUID.fromString(value).toString() }.getOrNull() }
+            ?.takeIf { it == salesOrderId.lowercase() }
+        if (normalizedSalesOrderId == null) {
+            putErrorResponse(context, 400, "salesOrderId must be a valid UUID")
+            return
+        }
+
+        val pageValue = context.queryParam("page").firstOrNull()?.trim()
+        val page = if (pageValue == null) 0 else pageValue.toIntOrNull()
+        if (page == null || page < 0) {
+            putErrorResponse(context, 400, "page must be a nonnegative integer")
+            return
+        }
+        val sizeValue = context.queryParam("size").firstOrNull()?.trim()
+        val size = if (sizeValue == null) 20 else sizeValue.toIntOrNull()
+        if (size == null || size !in 1..100) {
+            putErrorResponse(context, 400, "size must be an integer between 1 and 100")
+            return
+        }
+        val authorizedLocationIds = authorizedLocationIds(context) ?: return
+
+        posOperationsService.listPosReceiptsBySalesOrder(
+            normalizedSalesOrderId,
+            page,
+            size,
+            JsonArray(authorizedLocationIds.toList())
+        ).onSuccess { result ->
+            putSuccessEnvelopeResponse(context, 200, result)
+        }.onFailure { error ->
+            putReceiptReadErrorResponse(
+                context = context,
+                error = error,
+                internalErrorMessage = "Failed to list POS receipts",
+                notFoundMessage = "POS sales order not found"
+            )
+        }
+    }
+
+    fun generatePosReceipt(context: RoutingContext) {
         respondNotImplemented(context)
+    }
+
+    fun createPosReceiptRefund(context: RoutingContext) {
+        respondNotImplemented(context)
+    }
+
+    private fun putReceiptReadErrorResponse(
+        context: RoutingContext,
+        error: Throwable,
+        internalErrorMessage: String,
+        notFoundMessage: String
+    ) {
+        when {
+            error is PosOperationsScopeViolation ->
+                putErrorResponse(context, 403, "Forbidden", SecurityFailureCodes.FORBIDDEN)
+            error is PosOperationsValidation -> putErrorResponse(context, 400, error.message)
+            isNotFoundError(error.message) -> putErrorResponse(context, 404, notFoundMessage)
+            else -> putErrorResponse(context, 500, internalErrorMessage, error)
+        }
     }
 
     private fun requestBody(context: RoutingContext): JsonObject? {

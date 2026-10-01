@@ -6,7 +6,7 @@
 
 **Goal:** Decide security ownership, the first protected endpoint surface, and the package/API asset layout for Phase 05; publish those decisions and evidence-based Phase 04 closure without implementing authentication or moving source files in this ADS task.
 
-**Status:** Proposed design for review. Decisions below are recommendations, not accepted policy or implemented controls. Creating this ADS does not complete either gate.
+**Status:** Historical gate design; 04.5 and 04.6 were subsequently accepted and published. [SECURITY_SEQUENCING.md](../../knowledge/SECURITY_SEQUENCING.md) and [PROJECT_STRUCTURE_DECISION.md](../../knowledge/PROJECT_STRUCTURE_DECISION.md) are the canonical accepted decisions; their recorded approvals supersede the original recommendation language below. Phase 04 as a whole remains open for CI governance and repository tracing. Task 05.0 is now implemented for development under its deferred-deployment exception. Original missing-file/count/auth observations are historical, not instructions to recreate decisions. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
 
 ---
 
@@ -80,7 +80,7 @@ Alternatives to evaluate and record: domain-first packages for catalog/location/
 
 #### Observed evidence
 
-- Repository `HEAD` is `c4ad200 build(deps): upgrade Kotlin and Vert.x versions`; the working tree was clean before this ADS was created. `build.gradle.kts` confirms Kotlin `2.4.20`, Vert.x `5.1.8`, and Java 25. Do not repeat that upgrade.
+- Repository `HEAD` is `c4ad200 build(deps): upgrade Kotlin and Vert.x versions`; the working tree was clean before this ADS was created. `build.gradle.kts` confirms Kotlin `2.4.20`, Vert.x `5.2.0`, and Java 25. Do not repeat that upgrade.
 - `04-quality-contracts-observability.md`, sections 04.5/04.6, leaves both gates unchecked. It explicitly permits retaining the current layout and requires README/plan updates. Its final Definition of Done also remains unchecked; optional Bruno linting in 04.3 is still open.
 - `00-implementation-overview.md`, the phase-discipline/security paragraph, says to prove the workflow before IAM. `05-pos-manufacturing-expansion.md`, Entry Gate, already requires package and asset layout decisions but does not yet assign auth an owner task.
 - `HttpServerVerticle.kt`, `loadApiContracts` and the three `register*Handlers` methods, loads three YAML bundles from `api_collections/open_api_spec` and registers 31 business operation IDs: 15 catalog, 6 location, 10 order/stock. It also registers five utility routes: `/`, `/metrics`, `/health/live`, `/health/ready`, `/health/db`.

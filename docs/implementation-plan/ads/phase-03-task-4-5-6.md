@@ -6,6 +6,12 @@
 
 ---
 
+### Current-status and alignment note
+
+This is a historical design baseline. The [Phase 03 plan](../03-order-inventory-flow.md) records implementation of nullable OUT destinations and lifecycle verification; the original schema/signature observations below are not the current migration head. Do not repeat the normalization migration or reinterpret historical manufacturing movements. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
+
+Task 05.3's proposed receipt refunds cover fulfilled POS sales, not cancellation/payment reversal for unfulfilled paid orders. That recovery flow and partial fulfillment have no scheduled implementation ADS here. Receipt refunds must not silently restock or change fulfilled sales state.
+
 ### I. Overview and Contract
 
 This ADS covers the remaining Phase 03 work:

@@ -10,7 +10,7 @@
 
 **Source revision:** `c4ad200 build(deps): upgrade Kotlin and Vert.x versions`.
 
-**Gate status:** This accepted decision is not authentication implementation and does not by itself complete task 04.5. The roadmap ownership and gate checkboxes remain pending the separate publication/closure chunks.
+**Gate status:** Task 04.5 was subsequently published and recorded complete in the [Phase 04 plan](../implementation-plan/04-quality-contracts-observability.md). Task 05.0 is implemented for development under the [authentication baseline's deferred-deployment exception](AUTHENTICATION_BASELINE.md); this decision alone is not runtime or deployment evidence. The original source-revision evidence below is historical.
 
 ## Accepted Security Decision
 
@@ -72,12 +72,12 @@ All paths in this table are relative to `/api/v1`. Capability names are approved
 
 The separate authentication implementation ADS must select an existing identity provider and define issuer/audience validation, credential lifecycle, organization/location/resource scope, actor derivation, deployment topology, and audit/logging behavior. Caller-supplied values such as `createdBy`, customer IDs, and location IDs are not authenticated identity.
 
-## Decision Evidence
+## Decision Evidence at the Source Revision
 
 - The three OpenAPI YAML contracts define 31 `operationId` values, and `HttpServerVerticle` registers the same 31 OpenAPI routes.
 - `HttpServerVerticle` separately exposes five utility routes: `/`, `/metrics`, `/health/live`, `/health/ready`, and `/health/db`.
 - The inspected Kotlin/Java sources contain no authentication or authorization middleware. Catalog and location OpenAPI contracts contain bearer JWT schemes explicitly marked as future implementation.
-- The Phase 05 owner task/link will be added by the roadmap publication chunk; its absence does not change this accepted security decision.
+- The original publication follow-up is complete: [05.0](../implementation-plan/05-pos-manufacturing-expansion.md#050-authentication-and-authorization-baseline) owns authentication. The 31-operation matrix above remains the initial protected surface; new POS/manufacturing operations require their own explicit policies and parity checks, not implicit permission inheritance.
 
 ## Follow-Up Acceptance Criteria
 

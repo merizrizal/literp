@@ -70,12 +70,19 @@ class SecurityPolicyTest {
             "getCurrentPosShift" to ("pos.shift.read" to ResourceScopeRequirement.POS_TERMINAL_LOCATION),
             "closePosShift" to ("pos.shift.close" to ResourceScopeRequirement.POS_SHIFT_TERMINAL_LOCATION),
             "getPosReceiptByNumber" to ("pos.receipt.read" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION),
-            "listPosReceiptsBySalesOrder" to ("pos.receipt.read" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION)
+            "listPosReceiptsBySalesOrder" to ("pos.receipt.read" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION),
+            "generatePosReceipt" to ("pos.receipt.write" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION),
+            "createPosReceiptRefund" to ("pos.refund.create" to ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION)
         )
 
-        assertEquals(41, expected.size)
+        assertEquals(43, expected.size)
         assertEquals(expected.keys, ExplicitSecurityPolicy.businessOperationIds)
-        val humanOnlyOperations = setOf("openPosShift", "closePosShift")
+        val humanOnlyOperations = setOf(
+            "openPosShift",
+            "closePosShift",
+            "generatePosReceipt",
+            "createPosReceiptRefund"
+        )
 
         expected.forEach { (operationId, expectedRule) ->
             val decision = ExplicitSecurityPolicy("organization-1").require(
@@ -102,7 +109,12 @@ class SecurityPolicyTest {
     fun humanOnlyPosOperationsRejectServicePrincipals() {
         val policy = ExplicitSecurityPolicy("organization-1")
         val servicePrincipal = principal.copy(
-            capabilities = setOf("pos.shift.open", "pos.shift.close"),
+            capabilities = setOf(
+                "pos.shift.open",
+                "pos.shift.close",
+                "pos.receipt.write",
+                "pos.refund.create"
+            ),
             principalKind = PrincipalKind.SERVICE,
             operator = false
         )
@@ -115,6 +127,16 @@ class SecurityPolicyTest {
         assertDenied(
             policy.require(servicePrincipal, "closePosShift"),
             "closePosShift",
+            AuthorizationDenyReason.PRINCIPAL_NOT_ELIGIBLE
+        )
+        assertDenied(
+            policy.require(servicePrincipal, "generatePosReceipt"),
+            "generatePosReceipt",
+            AuthorizationDenyReason.PRINCIPAL_NOT_ELIGIBLE
+        )
+        assertDenied(
+            policy.require(servicePrincipal, "createPosReceiptRefund"),
+            "createPosReceiptRefund",
             AuthorizationDenyReason.PRINCIPAL_NOT_ELIGIBLE
         )
     }

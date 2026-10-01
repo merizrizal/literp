@@ -50,7 +50,8 @@ class PosScopeHandler : BaseHandler(PosScopeHandler::class.java) {
             ResourceScopeRequirement.POS_AUTHORIZED_LOCATION_SET ->
                 authorizeTerminalList(context, principal.locationIds)
             ResourceScopeRequirement.POS_TERMINAL_LOCATION,
-            ResourceScopeRequirement.POS_SHIFT_TERMINAL_LOCATION ->
+            ResourceScopeRequirement.POS_SHIFT_TERMINAL_LOCATION,
+            ResourceScopeRequirement.POS_RECEIPT_ORDER_LOCATION ->
                 authorizeTerminalResource(context, principal.locationIds)
             else -> respondForbidden(context)
         }

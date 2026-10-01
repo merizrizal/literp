@@ -9,8 +9,8 @@ and receipt lookup.
 - **pos-operations.json** - The synchronized JSON representation
 - **pos-operations-README.md** - Contract and publication notes
 
-The YAML and JSON documents describe the same ten operations. The JSON asset is
-kept synchronized with the YAML source and the application version.
+The YAML and JSON documents describe the same twelve operations. The JSON asset
+is kept synchronized with the YAML source and the application version.
 
 ## API status
 
@@ -19,9 +19,9 @@ resource-server boundary. Terminal access and POS attribution are location-scope
 shift opening and closing require an authenticated human, and only the shift owner
 may close it. POS orders use the existing Order Process endpoints.
 
-The two receipt lookup operations remain authenticated safe placeholders and
-eligible requests return `501 NOT_IMPLEMENTED`. Receipt generation and refunds
-are not exposed by this contract.
+The two receipt lookup operations are implemented, authenticated, and
+location-scoped. Receipt generation and refunds remain authenticated
+`501 NOT_IMPLEMENTED` placeholders for their later implementation slices.
 
 Historical shifts without trusted currency and payment attribution are not
 silently backfilled or reconciled; they require an explicit remediation process.
@@ -46,13 +46,15 @@ conversion are not modeled.
 | POST | `/pos/terminals/{terminalId}/shifts` | `openPosShift` | Implemented; human-owned and idempotent |
 | GET | `/pos/terminals/{terminalId}/current-shift` | `getCurrentPosShift` | Implemented; location-scoped |
 | POST | `/pos/shifts/{shiftId}/close` | `closePosShift` | Implemented; owner-only reconciliation and idempotent |
-| GET | `/pos/receipts/by-number/{receiptNumber}` | `getPosReceiptByNumber` | Authenticated placeholder |
-| GET | `/pos/orders/{salesOrderId}/receipts` | `listPosReceiptsBySalesOrder` | Authenticated placeholder |
+| GET | `/pos/receipts/by-number/{receiptNumber}` | `getPosReceiptByNumber` | Implemented; location-scoped |
+| GET | `/pos/orders/{salesOrderId}/receipts` | `listPosReceiptsBySalesOrder` | Implemented; location-scoped and paginated |
+| POST | `/pos/orders/{salesOrderId}/receipts` | `generatePosReceipt` | Authenticated 501 placeholder |
+| POST | `/pos/receipts/{receiptId}/refunds` | `createPosReceiptRefund` | Authenticated 501 placeholder |
 
 All paths are relative to `/api/v1`. Terminal administration, shift lifecycle,
-and trusted order attribution are implemented. The two receipt lookup operations
-remain placeholders; receipt generation, refunds, and additional receipt/refund
-routes are outside this contract.
+trusted order attribution, and both receipt lookups are implemented. Receipt
+generation and refunds remain authenticated placeholders; additional
+receipt/refund routes are outside this contract.
 
 ## Contract boundaries
 
@@ -77,8 +79,9 @@ routes are outside this contract.
 ## Response and error contract
 
 Successful resource responses use `{ "data": ... }`; list responses use
-`{ "data": [...], "pagination": ... }`. The two receipt placeholders return
-`501 NOT_IMPLEMENTED` in the standard error envelope, for example:
+`{ "data": [...], "pagination": ... }`. The receipt generation and refund
+write placeholders return `501 NOT_IMPLEMENTED` in the standard error envelope,
+for example:
 
 ```json
 {
@@ -107,11 +110,13 @@ The reproducible requests are under `../Literp`:
 - `Pos-Close-Shift.bru`
 - `Pos-Get-Receipt-By-Number.bru`
 - `Pos-List-Receipts-By-Order.bru`
+- `Pos-Generate-Receipt.bru`
+- `Pos-Create-Receipt-Refund.bru`
 
 All requests use `auth: inherit`, contain no credential literal, and document
-their HTTP method/path and OpenAPI `operationId`. Only the two receipt lookup
-requests document the `501 NOT_IMPLEMENTED` placeholder status. The sample
-identifiers, amounts, and idempotency keys in `environments/Local.bru` are
+their HTTP method/path and OpenAPI `operationId`. Only the receipt generation
+and refund requests document the `501 NOT_IMPLEMENTED` placeholder status. The
+sample identifiers, amounts, and idempotency keys in `environments/Local.bru` are
 nonsecret only. Provide an approved local bearer token through the existing
 development setup; do not commit or copy credentials into POS request files. No
 request has a post-response script that could treat a placeholder as a successful
@@ -134,18 +139,18 @@ python scripts/verify_openapi_assets.py
 ```
 
 The verifier checks that all OpenAPI YAML/JSON pairs exist, match the Gradle
-application version, and are canonically equal. The contract test checks the ten
-Bruno requests, authentication and path traceability, and that `501` appears only
-for receipt lookups. The authenticated HTTP test covers the terminal-to-order-to-
-shift-close lifecycle, reconciliation, actor linkage, and fulfillment after close.
+application version, and are canonically equal. The contract test checks the
+12 Bruno requests, authentication and path traceability, and that `501` appears
+only for receipt/refund write placeholders. The authenticated HTTP test covers
+the terminal-to-order-to-shift-close lifecycle, reconciliation, actor linkage,
+and fulfillment after close.
 
 ## Security and acceptance status
 
 Every POS operation requires the `bearerAuth` requirement. Implemented terminal
-operations and POS-attributed order commands enforce location scope; receipt
-lookup must enforce the same rule when those placeholders are implemented. Shift
-opening and closing require a human principal, and closing is owner-only. Read
-capability does not imply write capability.
+operations, POS-attributed order commands, and receipt lookups enforce location
+scope. Shift opening and closing require a human principal, and closing is
+owner-only. Read capability does not imply write capability.
 
 This publication does not constitute provider, deployment, JWKS, network,
 audit-ownership, or external authenticated acceptance. Those security and

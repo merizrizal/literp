@@ -157,10 +157,12 @@ class AuthenticationHttpIntegrationTest {
             Request("GET", "/api/v1/pos/terminals/${UUID.randomUUID()}/current-shift"),
             Request("POST", "/api/v1/pos/shifts/${UUID.randomUUID()}/close"),
             Request("GET", "/api/v1/pos/receipts/by-number/receipt-1"),
-            Request("GET", "/api/v1/pos/orders/${UUID.randomUUID()}/receipts")
+            Request("GET", "/api/v1/pos/orders/${UUID.randomUUID()}/receipts"),
+            Request("POST", "/api/v1/pos/orders/${UUID.randomUUID()}/receipts"),
+            Request("POST", "/api/v1/pos/receipts/${UUID.randomUUID()}/refunds")
         )
 
-        assertEquals(41, routeRequests.size)
+        assertEquals(43, routeRequests.size)
         routeRequests.forEach { request ->
             val response = http.request(request.method, request.path)
             assertEquals(401, response.status, "Expected anonymous ${request.method} ${request.path} to be rejected")
@@ -170,10 +172,12 @@ class AuthenticationHttpIntegrationTest {
     }
 
     @Test
-    fun authenticatedPosReadsEnforceScopesAndReceiptLookupsRemainPlaceholders() {
+    fun authenticatedPosReadsEnforceScopesAndWritesRemainPlaceholders() {
         val terminalId = UUID.randomUUID().toString()
         val shiftId = UUID.randomUUID().toString()
         val salesOrderId = UUID.randomUUID().toString()
+        val receiptId = UUID.randomUUID().toString()
+        val paymentId = UUID.randomUUID().toString()
         val grantedReadHeaders = securityFixture.authorization(
             capabilities = setOf("pos.terminal.read"),
             locationIds = setOf(securityFixture.locationId),
@@ -215,16 +219,60 @@ class AuthenticationHttpIntegrationTest {
         assertEquals(403, emptyGrantList.status)
         HttpTestSupport.assertErrorEnvelope(requireNotNull(emptyGrantList.json), 403, ErrorCodes.FORBIDDEN)
 
+        val receiptReadHeaders = securityFixture.authorization(
+            capabilities = setOf("pos.receipt.read"),
+            locationIds = setOf(securityFixture.locationId),
+            operator = false,
+            principalKind = "service"
+        )
+        val missingReceipt = http.request(
+            "GET",
+            "/api/v1/pos/receipts/by-number/receipt-1",
+            headers = receiptReadHeaders
+        )
+        assertEquals(404, missingReceipt.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(missingReceipt.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+        val missingOrderReceipts = http.request(
+            "GET",
+            "/api/v1/pos/orders/$salesOrderId/receipts",
+            headers = receiptReadHeaders
+        )
+        assertEquals(404, missingOrderReceipts.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(missingOrderReceipts.json), 404, ErrorCodes.RESOURCE_NOT_FOUND)
+
+        val noGrantReceiptRead = http.request(
+            "GET",
+            "/api/v1/pos/orders/$salesOrderId/receipts",
+            headers = securityFixture.authorization(
+                capabilities = setOf("pos.receipt.read"),
+                locationIds = emptySet(),
+                operator = false,
+                principalKind = "service"
+            )
+        )
+        assertEquals(403, noGrantReceiptRead.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(noGrantReceiptRead.json), 403, ErrorCodes.FORBIDDEN)
+
         val requests = listOf(
             PosPlaceholderRequest(
-                "GET",
-                "/api/v1/pos/receipts/by-number/receipt-1",
-                "pos.receipt.read"
+                method = "POST",
+                path = "/api/v1/pos/orders/$salesOrderId/receipts",
+                capability = "pos.receipt.write",
+                headers = mapOf("Idempotency-Key" to "issue-receipt-$salesOrderId"),
+                principalKind = "human"
             ),
             PosPlaceholderRequest(
-                "GET",
-                "/api/v1/pos/orders/$salesOrderId/receipts",
-                "pos.receipt.read"
+                method = "POST",
+                path = "/api/v1/pos/receipts/$receiptId/refunds",
+                capability = "pos.refund.create",
+                body = JsonObject()
+                    .put("paymentId", paymentId)
+                    .put("amount", BigDecimal("5.00"))
+                    .put("shiftId", shiftId)
+                    .put("reason", "Customer requested refund"),
+                headers = mapOf("Idempotency-Key" to "refund-receipt-$receiptId"),
+                principalKind = "human"
             )
         )
 
@@ -236,6 +284,7 @@ class AuthenticationHttpIntegrationTest {
                 request.body,
                 headers = securityFixture.authorization(
                     capabilities = setOf(request.capability),
+                    locationIds = setOf(securityFixture.locationId),
                     operator = false,
                     principalKind = request.principalKind
                 ) + request.headers + ("X-Request-ID" to requestId)
@@ -245,6 +294,18 @@ class AuthenticationHttpIntegrationTest {
             HttpTestSupport.assertErrorEnvelope(requireNotNull(result.json), 501, "NOT_IMPLEMENTED")
             assertEquals(requestId, result.header("X-Request-ID"))
         }
+
+        val noGrantReceipt = http.request(
+            "POST",
+            "/api/v1/pos/orders/$salesOrderId/receipts",
+            headers = securityFixture.authorization(
+                capabilities = setOf("pos.receipt.write"),
+                locationIds = emptySet(),
+                principalKind = "human"
+            ) + ("Idempotency-Key" to "no-grant-$salesOrderId")
+        )
+        assertEquals(403, noGrantReceipt.status)
+        HttpTestSupport.assertErrorEnvelope(requireNotNull(noGrantReceipt.json), 403, ErrorCodes.FORBIDDEN)
 
         val serviceOpen = http.request(
             "POST",

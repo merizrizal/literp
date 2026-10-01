@@ -2,7 +2,7 @@
 
 **Source:** [Phase 05, task 05.2](../05-pos-manufacturing-expansion.md#052-pos-terminal-and-shift-api), following [05.1 POS Operations Contract](phase-05-task-1.md).
 
-**Status:** Proposed; design only. Requires approval of the decisions below and explicit confirmation that development may advance beyond 05.1. No deployment authorization.
+**Status:** Locally implemented and accepted per [Task 05.2 evidence](../05-pos-manufacturing-expansion.md#052-pos-terminal-and-shift-api); external smoke/provider/deployment acceptance remains pending. Proposal language, signatures and missing-field observations below retain the original drafting baseline, not current absence of terminal/shift behavior. Do not repeat completed chunks or infer deployment authorization. Subsequent receipt reads belong to 05.3; see the [coverage review](../ADS_COVERAGE_REVIEW.md).
 
 **Evidence revision:** `e0b7fc5`, branch `phase-05-task-0`; clean and synchronized with the locally recorded upstream before ADS drafting. No fetch was performed.
 
@@ -64,7 +64,7 @@ Introduce only the minimal signatures needed by the current behavior slice. Unwi
 | `SecurityPolicy.kt`, principal and operation map | Bounded verified subject, exact capabilities, human/service distinction; new POS eligibility/scopes cannot be assumed |
 | `OrderScopeHandler.kt`, scope dispatch/list behavior | Existing scope checks and hidden order IDs must remain intact; empty grants deny, lists must scope counts |
 | `BaseHandler.kt`, success/error/query helpers | Existing envelope, request ID and pagination conventions; generic error mapper uses message heuristics, so POS failures need deliberate safe mappings |
-| `build.gradle.kts` | Java 25, Kotlin 2.4.20, Vert.x 5.1.8, JUnit, RxJava and PostgreSQL client already available; no configured formatter task |
+| `build.gradle.kts` | Java 25, Kotlin 2.4.20, Vert.x 5.2.0, JUnit, RxJava and PostgreSQL client already available; no configured formatter task |
 | `TestDatabase.kt` availability check; CI workflow test/migration steps; `verify_migrations.py` | DB tests may skip when unavailable; migration checker expects one head and seed evidence, not all POS invariants |
 | Authentication/structure documents cited in 05.1 | No relocation, token issuance, untrusted exposure or automatic closure of external security gates |
 

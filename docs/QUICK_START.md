@@ -1,7 +1,7 @@
 # Quick Start
 
 This guide matches the current branch state:
-- 31 authenticated business API endpoints
+- 43 authenticated business operations: 41 implemented, two receipt/refund write placeholders
 - 5 utility endpoints: two public probes and three restricted operational routes
 - schema + seed data via Alembic
 - Bruno collection in `api_collections/Literp` with bearer inheritance
@@ -129,7 +129,7 @@ Useful collection variables are already defined in [`collection.bru`](../api_col
 The collection includes:
 - public probes (`/`, `/health/live`) with `auth: none`
 - restricted operational endpoints (`/metrics`, `/health/ready`, `/health/db`)
-- all 31 authenticated business API endpoints
+- all 43 authenticated business API operations, with receipt-generation/refund writes explicitly marked as placeholders
 - request bodies aligned to the actual handlers
 
 Protected requests inherit the bearer token configured at collection level.
@@ -177,8 +177,9 @@ DB_URL=postgresql://root:pgdevpassword@localhost:55432/literp_test alembic upgra
 | Product | 5 |
 | Product Variant | 5 |
 | Location | 6 |
-| Order Process | 8 |
-| Total | 29 |
+| Order Process (including stock queries) | 10 |
+| POS Operations | 12 (10 implemented, 2 write placeholders) |
+| Total | 43 registered (41 implemented) |
 
 ## Current Behavior Notes
 

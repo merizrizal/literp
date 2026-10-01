@@ -6,6 +6,10 @@
 
 ---
 
+### Current-status and alignment note
+
+Historical design baseline; health/metrics, response request IDs and asset verification were subsequently delivered. The [closure evidence](../../knowledge/PHASE_04_COMPLETION_EVIDENCE.md) supersedes the original missing-file/version observations below. Repository request correlation and external CI required-check enforcement remain open. Workflow failure does not itself prove merge blocking. The accepted [authentication baseline](../../knowledge/AUTHENTICATION_BASELINE.md) now protects operational endpoints; no anonymous operational release is permitted by this earlier ADS. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
+
 ### I. Overview and Contract
 
 This ADS covers:
@@ -133,7 +137,7 @@ Do not finalize imports until Chunk 0 confirms implementation shape.
 
 | Stage | Failure Mode | Agent/System Action | Next State/Error Report |
 |---|---|---|---|
-| CI build | Gradle build fails | CI blocks merge | Failed Build job |
+| CI build | Gradle build fails | Fail Build job; merge blocking additionally requires verified external required-check policy | Failed job; governance criterion stays open until evidenced |
 | CI test | DB-backed tests skipped unexpectedly | Prefer CI PostgreSQL service for integration baseline | Failed or incomplete Test Baseline |
 | OpenAPI validation | YAML is invalid | Verification script exits non-zero | CI reports invalid OpenAPI |
 | OpenAPI sync | JSON differs from YAML | Script prints affected file and regeneration instruction | CI reports artifact drift |

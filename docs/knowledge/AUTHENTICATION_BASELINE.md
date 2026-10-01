@@ -67,7 +67,7 @@ cookies, or query parameters as identity.
 
 ## Authorization surface
 
-All 41 registered business operation IDs require bearer authentication and an explicit
+All 43 registered business operation IDs require bearer authentication and an explicit
 capability. Location-scoped order and stock operations additionally use the
 verified location grants. An order's persisted location is checked before
 nested order reads, command dispatch, idempotency lookup, or mutation. Missing
@@ -261,6 +261,8 @@ credentials, internal addresses, firewall rules, or other sensitive deployment
 details.
 
 ## Acceptance ledger
+
+These are recorded results from their original acceptance slices, not fresh tests run during documentation review. The 41-operation/92-test entries describe the 05.2 baseline; current source has 43 registered operations, including implemented receipt reads and two authenticated write placeholders. No external acceptance is closed by that source inventory.
 
 | Evidence | Status | Notes |
 |---|---|---|

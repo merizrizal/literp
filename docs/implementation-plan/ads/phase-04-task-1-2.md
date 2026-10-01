@@ -6,6 +6,10 @@
 
 ---
 
+### Current-status and alignment note
+
+Historical design baseline; [Phase 04 evidence](../../knowledge/PHASE_04_COMPLETION_EVIDENCE.md) records the delivered local test/contract work. Original endpoint counts, signatures and envelope-gap observations below must not be treated as current runtime facts. Current expansion inventory is in the [coverage review](../ADS_COVERAGE_REVIEW.md); new operations need production-router authentication/scope and contract parity tests, not just source-text registration checks. A skipped database test is not acceptance. Remaining Phase 04 CI governance and repository traceability criteria stay open.
+
 ### I. Overview and Contract
 
 This ADS covers Phase 04 tasks only:
@@ -118,7 +122,7 @@ Assumptions to confirm during Chunk 0:
 
 Existing dependencies and integration points:
 
-- Kotlin `2.4.20`, Java `25`, Gradle wrapper, JUnit Jupiter, Vert.x `5.1.8`, RxJava3, PostgreSQL client.
+- Kotlin `2.4.20`, Java `25`, Gradle wrapper, JUnit Jupiter, Vert.x `5.2.0`, RxJava3, PostgreSQL client.
 - OpenAPI router support through `io.vertx.rxjava3.openapi.contract.OpenAPIContract` and `io.vertx.rxjava3.ext.web.openapi.router.RouterBuilder`.
 - HTTP test client pattern using `java.net.http.HttpClient`, `HttpRequest`, and `HttpResponse`.
 - PostgreSQL test pool through `src/test/kotlin/com/literp/test/TestDatabase.kt`.

@@ -1,0 +1,26 @@
+meta {
+  name: Pos-Generate-Receipt
+  type: http
+  seq: 47
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/orders/{{salesOrderId}}/receipts
+  body: none
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{posGenerateReceiptIdempotencyKey}}
+}
+
+docs {
+  operationId: generatePosReceipt
+  request: POST /api/v1/pos/orders/{salesOrderId}/receipts
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); fulfilled POS receipt issuance is not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

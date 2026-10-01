@@ -11,6 +11,10 @@ This phase covers Unit of Measure, Product, Product Variant, and Location
 endpoints, including request validation, response contracts, delete semantics,
 OpenAPI parity, Bruno examples, and automated verification.
 
+## ADS Coverage
+
+No dedicated Phase 02 ADS exists in this repository. The completed task contracts and implementation notes below are the available design/acceptance record; see the [coverage review](ADS_COVERAGE_REVIEW.md). Future behavior changes need their own scoped design rather than invented retrospective approval. In particular, 05.6 proposes historical UOM/type guards beyond the writable catalog contract accepted here.
+
 ## Current Completed Work
 
 ### Unit of Measure

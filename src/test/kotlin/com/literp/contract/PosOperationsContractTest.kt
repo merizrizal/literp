@@ -3,6 +3,7 @@ package com.literp.contract
 import com.literp.service.pos.PosOperationsService
 import com.literp.test.HttpTestSupport
 import com.literp.test.HttpTestSupport.Companion.assertErrorEnvelope
+import com.literp.verticle.handler.POS_AUTHORIZED_LOCATION_IDS_CONTEXT_KEY
 import com.literp.verticle.handler.PosOperationsHandler
 import io.vertx.core.Future
 import io.vertx.core.Vertx
@@ -50,7 +51,7 @@ class PosOperationsContractTest {
     }
 
     @Test
-    fun remainingPosPlaceholdersReturnNotImplementedWithoutSuccessData() {
+    fun remainingPosWritePlaceholdersReturnNotImplementedWithoutSuccessData() {
         placeholderRequests().forEach { request ->
             val requestId = "request-${request.operationId}"
             val result = http.request(
@@ -68,6 +69,45 @@ class PosOperationsContractTest {
     }
 
     @Test
+    fun receiptLookupHandlersReturnSuccessEnvelopesAndValidateRequests() {
+        val receipt = http.request("GET", "/api/v1/pos/receipts/by-number/RCPT-CONTRACT-0001")
+        assertEquals(200, receipt.status)
+        assertEquals(
+            "RCPT-CONTRACT-0001",
+            requireNotNull(receipt.json).getJsonObject("data").getString("receiptNumber")
+        )
+
+        val orderId = "01234567-89ab-cdef-0123-456789abcdef"
+        val receipts = http.request("GET", "/api/v1/pos/orders/$orderId/receipts?page=2&size=3")
+        assertEquals(200, receipts.status)
+        HttpTestSupport.assertListEnvelope(requireNotNull(receipts.json))
+        val pagination = requireNotNull(receipts.json).getJsonObject("pagination")
+        assertEquals(2, pagination.getInteger("page"))
+        assertEquals(3, pagination.getInteger("size"))
+
+        val invalidOrderId = http.request("GET", "/api/v1/pos/orders/not-a-uuid/receipts")
+        assertEquals(400, invalidOrderId.status)
+        assertEquals(400, requireNotNull(invalidOrderId.json).getInteger("status"))
+
+        val tooLongReceiptNumber = http.request("GET", "/api/v1/pos/receipts/by-number/${"R".repeat(51)}")
+        assertEquals(400, tooLongReceiptNumber.status)
+    }
+
+    @Test
+    fun receiptLookupFailuresDoNotExposeDatabaseDetails() {
+        placeholderReadService.receiptLookupFailure = IllegalStateException("sensitive SQL failure")
+        try {
+            val result = http.request("GET", "/api/v1/pos/receipts/by-number/RCPT-CONTRACT-0001")
+            assertEquals(500, result.status)
+            val error = requireNotNull(result.json).getString("error")
+            assertEquals("Failed to get POS receipt", error)
+            assertFalse(error.contains("sensitive SQL failure"))
+        } finally {
+            placeholderReadService.receiptLookupFailure = null
+        }
+    }
+
+    @Test
     fun everyPosOperationHasOneDocumentedBrunoRequest() {
         val collectionDir = Path.of("api_collections/Literp")
         val requests = brunoRequests()
@@ -77,7 +117,7 @@ class PosOperationsContractTest {
         }
 
         assertEquals(expectedFiles, actualFiles, "POS Bruno request inventory must match the contract")
-        assertEquals(10, actualFiles.size, "Every POS operation must have one Bruno request")
+        assertEquals(12, actualFiles.size, "Every POS operation must have one Bruno request")
 
         val placeholderOperationIds = placeholderRequests().map { it.operationId }.toSet()
         val openApiPaths = requireNotNull(
@@ -137,6 +177,8 @@ class PosOperationsContractTest {
     }
 
     private val placeholderReadService = object : PosOperationsService {
+        var receiptLookupFailure: Throwable? = null
+
         override fun listPosTerminals(
             page: Int,
             size: Int,
@@ -150,6 +192,38 @@ class PosOperationsContractTest {
             terminalId: String,
             authorizedLocationIds: JsonArray
         ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal reads are not exercised by this placeholder test")
+
+        override fun getPosReceiptByNumber(
+            receiptNumber: String,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> {
+            val failure = receiptLookupFailure
+            return if (failure == null) {
+                Future.succeededFuture(
+                    JsonObject().put("receiptId", "contract-receipt").put("receiptNumber", receiptNumber)
+                )
+            } else {
+                Future.failedFuture(failure)
+            }
+        }
+
+        override fun listPosReceiptsBySalesOrder(
+            salesOrderId: String,
+            page: Int,
+            size: Int,
+            authorizedLocationIds: JsonArray
+        ): Future<io.vertx.core.json.JsonObject> = Future.succeededFuture(
+            JsonObject()
+                .put("data", JsonArray())
+                .put(
+                    "pagination",
+                    JsonObject()
+                        .put("page", page)
+                        .put("size", size)
+                        .put("totalElements", 0)
+                        .put("totalPages", 0)
+                )
+        )
 
         override fun createPosTerminal(
             locationId: String,
@@ -207,13 +281,25 @@ class PosOperationsContractTest {
         post("/api/v1/pos/terminals/:terminalId/shifts").handler(handler::openPosShift)
         get("/api/v1/pos/terminals/:terminalId/current-shift").handler(handler::getCurrentPosShift)
         post("/api/v1/pos/shifts/:shiftId/close").handler(handler::closePosShift)
-        get("/api/v1/pos/receipts/by-number/:receiptNumber").handler(handler::getPosReceiptByNumber)
-        get("/api/v1/pos/orders/:salesOrderId/receipts").handler(handler::listPosReceiptsBySalesOrder)
+        get("/api/v1/pos/receipts/by-number/:receiptNumber")
+            .handler { context ->
+                context.put(POS_AUTHORIZED_LOCATION_IDS_CONTEXT_KEY, setOf("contract-location"))
+                context.next()
+            }
+            .handler(handler::getPosReceiptByNumber)
+        get("/api/v1/pos/orders/:salesOrderId/receipts")
+            .handler { context ->
+                context.put(POS_AUTHORIZED_LOCATION_IDS_CONTEXT_KEY, setOf("contract-location"))
+                context.next()
+            }
+            .handler(handler::listPosReceiptsBySalesOrder)
+        post("/api/v1/pos/orders/:salesOrderId/receipts").handler(handler::generatePosReceipt)
+        post("/api/v1/pos/receipts/:receiptId/refunds").handler(handler::createPosReceiptRefund)
     }
 
     private fun placeholderRequests(): List<PlaceholderRequest> = listOf(
-        PlaceholderRequest("getPosReceiptByNumber", "GET", "/api/v1/pos/receipts/by-number/receipt-1"),
-        PlaceholderRequest("listPosReceiptsBySalesOrder", "GET", "/api/v1/pos/orders/order-1/receipts")
+        PlaceholderRequest("generatePosReceipt", "POST", "/api/v1/pos/orders/order-1/receipts"),
+        PlaceholderRequest("createPosReceiptRefund", "POST", "/api/v1/pos/receipts/receipt-1/refunds")
     )
 
     private fun brunoRequests(): List<BrunoRequest> = listOf(
@@ -226,7 +312,9 @@ class PosOperationsContractTest {
         BrunoRequest("Pos-Current-Shift.bru", "getCurrentPosShift", "GET", "/api/v1/pos/terminals/{{terminalId}}/current-shift", "/api/v1/pos/terminals/{terminalId}/current-shift"),
         BrunoRequest("Pos-Close-Shift.bru", "closePosShift", "POST", "/api/v1/pos/shifts/{{shiftId}}/close", "/api/v1/pos/shifts/{shiftId}/close"),
         BrunoRequest("Pos-Get-Receipt-By-Number.bru", "getPosReceiptByNumber", "GET", "/api/v1/pos/receipts/by-number/{{receiptNumber}}", "/api/v1/pos/receipts/by-number/{receiptNumber}"),
-        BrunoRequest("Pos-List-Receipts-By-Order.bru", "listPosReceiptsBySalesOrder", "GET", "/api/v1/pos/orders/{{salesOrderId}}/receipts", "/api/v1/pos/orders/{salesOrderId}/receipts")
+        BrunoRequest("Pos-List-Receipts-By-Order.bru", "listPosReceiptsBySalesOrder", "GET", "/api/v1/pos/orders/{{salesOrderId}}/receipts", "/api/v1/pos/orders/{salesOrderId}/receipts"),
+        BrunoRequest("Pos-Generate-Receipt.bru", "generatePosReceipt", "POST", "/api/v1/pos/orders/{{salesOrderId}}/receipts", "/api/v1/pos/orders/{salesOrderId}/receipts"),
+        BrunoRequest("Pos-Create-Receipt-Refund.bru", "createPosReceiptRefund", "POST", "/api/v1/pos/receipts/{{receiptId}}/refunds", "/api/v1/pos/receipts/{receiptId}/refunds")
     )
 
     private data class BrunoRequest(

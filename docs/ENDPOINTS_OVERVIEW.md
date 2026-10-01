@@ -74,20 +74,26 @@ API base:
 - `GET /pos/terminals/{terminalId}/current-shift`
 - `POST /pos/shifts/{shiftId}/close`
 
-### POS Receipt Lookup (authenticated placeholders)
+### POS Receipt Lookup (implemented scoped reads)
 
 - `GET /pos/receipts/by-number/{receiptNumber}`
 - `GET /pos/orders/{salesOrderId}/receipts`
 
-These receipt lookups remain `501 NOT_IMPLEMENTED`; receipt generation and
-refunds are not implemented.
+### POS Receipt and Refund Writes (authenticated placeholders)
+
+- `POST /pos/orders/{salesOrderId}/receipts`
+- `POST /pos/receipts/{receiptId}/refunds`
+
+Only these writes remain `501 NOT_IMPLEMENTED`. Receipt reads enforce persisted
+order-location scope; write-contract publication and refund storage do not mean
+issuance or refund behavior is available.
 
 ## Totals
 
 | Area | Count |
 |---|---:|
 | Utility endpoints | 5 |
-| API endpoints | 41 (39 implemented; 2 receipt placeholders) |
+| API endpoints | 43 (41 implemented; 2 receipt/refund write placeholders) |
 | API domains | 6 |
 
 ## Architecture Path

@@ -2,7 +2,7 @@
 
 **Source:** [Phase 05, task 05.1](../05-pos-manufacturing-expansion.md#051-pos-operations-contract).
 
-**Status:** Locally accepted and implemented as authenticated `501 NOT_IMPLEMENTED` placeholders. Task 05.2/05.3 behavior and external acceptance remain pending.
+**Status:** Contract-publication slice locally accepted. Its original ten authenticated placeholders were subsequently replaced by 05.2 terminal/shift behavior and 05.3 scoped receipt reads. Only the two additional 05.3 write operations remain 501. External acceptance remains pending; see the [phase plan](../05-pos-manufacturing-expansion.md) and [coverage review](../ADS_COVERAGE_REVIEW.md). The proposal/evidence/chunk descriptions below retain the original 05.1 design baseline, not current availability.
 
 **Evidence revision:** `e0b7fc5`, branch `phase-05-task-0`; working tree clean and aligned with the locally recorded upstream before drafting. Remote freshness was not checked by fetching.
 

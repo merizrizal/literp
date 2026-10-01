@@ -1,0 +1,35 @@
+meta {
+  name: Pos-Create-Receipt-Refund
+  type: http
+  seq: 48
+}
+
+post {
+  url: http://{{host}}:{{port}}/api/v1/pos/receipts/{{receiptId}}/refunds
+  body: json
+  auth: inherit
+}
+
+headers {
+  Idempotency-Key: {{posReceiptRefundIdempotencyKey}}
+}
+
+body:json {
+  {
+    "paymentId": "550e8400-e29b-41d4-a716-446655440001",
+    "amount": 10.00,
+    "shiftId": "550e8400-e29b-41d4-a716-446655440002",
+    "reason": "Customer requested refund"
+  }
+}
+
+docs {
+  operationId: createPosReceiptRefund
+  request: POST /api/v1/pos/receipts/{receiptId}/refunds
+  status: Authenticated placeholder (501 NOT_IMPLEMENTED); receipt refunds are not implemented yet.
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

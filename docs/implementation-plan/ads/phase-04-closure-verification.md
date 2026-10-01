@@ -6,6 +6,8 @@
 
 **Status:** Local closure slices completed through final validation; Phase 04 remains open for CI required-check enforcement and request-correlated repository logging.
 
+**Evidence scope:** Counts, test results and environment paths below are historical Phase 04 evidence, not a fresh run or permission to reuse a database. Current Phase 05 inventory and ADS gaps are in the [coverage review](../ADS_COVERAGE_REVIEW.md). Reconfirm the approved Python environment and disposable database before any future verification; preserve original results rather than rewriting them as current.
+
 ---
 
 ### I. Overview and Contract
