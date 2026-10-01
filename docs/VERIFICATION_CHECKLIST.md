@@ -81,12 +81,16 @@ Use this checklist to validate the current implementation, docs, and testing ass
 - [x] `GET /api/v1/pos/terminals/{terminalId}/current-shift`
 - [x] `POST /api/v1/pos/shifts/{shiftId}/close`
 
-### POS Receipt Placeholders
+### POS Receipt Reads and Write Placeholders
 
-- [x] `GET /api/v1/pos/receipts/by-number/{receiptNumber}` returns authenticated `501 NOT_IMPLEMENTED`
-- [x] `GET /api/v1/pos/orders/{salesOrderId}/receipts` returns authenticated `501 NOT_IMPLEMENTED`
+Source/contract inventory below reflects Task 05.3 Chunks 1–3, not a fresh runtime smoke:
 
-Total API operations to verify: `41` (`39` implemented; `2` receipt placeholders)
+- [x] `GET /api/v1/pos/receipts/by-number/{receiptNumber}` implements scoped lookup
+- [x] `GET /api/v1/pos/orders/{salesOrderId}/receipts` implements scoped pagination
+- [x] `POST /api/v1/pos/orders/{salesOrderId}/receipts` remains authenticated `501 NOT_IMPLEMENTED`
+- [x] `POST /api/v1/pos/receipts/{receiptId}/refunds` remains authenticated `501 NOT_IMPLEMENTED`
+
+Total API operations to verify: `43` (`41` implemented; `2` write placeholders)
 
 ## Data and Lifecycle Rules
 
@@ -144,7 +148,7 @@ Total API operations to verify: `41` (`39` implemented; `2` receipt placeholders
 - [ ] `MasterDataHttpIntegrationTest` covers all master-data endpoints
 - [ ] `MasterDataHttpIntegrationTest` covers master-data error and validation behavior
 - [x] `AuthenticationHttpIntegrationTest` covers authenticated terminal-to-order-to-close and post-close fulfillment
-- [x] `PosOperationsContractTest` keeps 501 responses limited to the receipt placeholders
+- [x] `PosOperationsContractTest` defines 501 expectations only for receipt generation and refund writes
 
 ## Seed Data Verification
 
@@ -162,7 +166,7 @@ Total API operations to verify: `41` (`39` implemented; `2` receipt placeholders
 - [x] OpenAPI specs exist under `api_collections/open_api_spec`
 - [ ] Bruno collection exists under `api_collections/Literp`
 - [ ] Bruno collection includes utility endpoints
-- [x] Bruno collection includes all 41 registered API operations
+- [x] Bruno collection assets cover all 43 registered API operations (source/contract inventory, not runtime smoke)
 - [ ] Authenticated Bruno runtime smoke with an approved non-production token (pending)
 - [ ] Bruno collection variables are defined in `collection.bru`
 
@@ -172,7 +176,7 @@ Total API operations to verify: `41` (`39` implemented; `2` receipt placeholders
 - [ ] `docs/QUICK_START.md` matches current startup flow
 - [x] `docs/API_IMPLEMENTATION.md` reflects actual handler behavior
 - [x] `docs/API_TESTING_GUIDE.md` includes order-process testing
-- [x] `docs/ENDPOINTS_OVERVIEW.md` lists 41 registered operations (39 implemented; 2 receipt placeholders)
+- [x] `docs/ENDPOINTS_OVERVIEW.md` lists 43 registered operations (41 implemented; 2 write placeholders)
 - [ ] `docs/CI_VERIFICATION.md` documents required CI checks
 - [ ] `docs/LOCAL_RESET.md` separates non-destructive and destructive reset paths
 - [ ] `docs/IMPLEMENTATION_SUMMARY.md` reflects seed data and Bruno assets
@@ -181,7 +185,10 @@ Total API operations to verify: `41` (`39` implemented; `2` receipt placeholders
 
 ## Known Gaps to Keep in Mind
 
-- [ ] order-process list responses still need envelope normalization
-- [ ] order-process OpenAPI parity still needs review after response-envelope normalization
-- [ ] some multi-step order flows still need broader transaction coverage
-- [ ] fulfillment still uses the non-null destination workaround for inventory movement
+- [ ] Verify shared stock/reservation concurrency safeguards before manufacturing posting
+- [ ] Finish receipt issuance/refund behavior and integrated acceptance
+- [ ] Resolve manufacturing policy, catalog unit stability, BOM graph serialization, and historical cutover
+- [ ] Complete repository request correlation and externally verified CI required checks
+- [ ] Obtain provider/deployment and authenticated external smoke evidence
+
+The old envelope/transaction/non-null OUT caveats were superseded by Phase 03/04 work. See the [coverage review](implementation-plan/ADS_COVERAGE_REVIEW.md); this checklist is not proof that a new test run passed.

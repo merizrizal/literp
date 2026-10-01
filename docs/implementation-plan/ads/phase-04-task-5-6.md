@@ -6,7 +6,7 @@
 
 **Goal:** Decide security ownership, the first protected endpoint surface, and the package/API asset layout for Phase 05; publish those decisions and evidence-based Phase 04 closure without implementing authentication or moving source files in this ADS task.
 
-**Status:** Proposed design for review. Decisions below are recommendations, not accepted policy or implemented controls. Creating this ADS does not complete either gate.
+**Status:** Historical gate design; 04.5 and 04.6 were subsequently accepted and published. [SECURITY_SEQUENCING.md](../../knowledge/SECURITY_SEQUENCING.md) and [PROJECT_STRUCTURE_DECISION.md](../../knowledge/PROJECT_STRUCTURE_DECISION.md) are the canonical accepted decisions; their recorded approvals supersede the original recommendation language below. Phase 04 as a whole remains open for CI governance and repository tracing. Task 05.0 is now implemented for development under its deferred-deployment exception. Original missing-file/count/auth observations are historical, not instructions to recreate decisions. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
 
 ---
 

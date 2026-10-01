@@ -10,12 +10,14 @@ This branch moves the project from a lightweight skeleton into a documented, tes
 - repository layer for UOM, products, variants, locations, and order process
 - handler layer with shared response and error utilities
 - Vert.x service proxy interfaces and Kotlin implementations
-- OpenAPI RouterBuilder setup for 3 contracts
-- utility endpoints for index and database health
+- OpenAPI RouterBuilder setup for 4 contracts
+- five utility routes: index, liveness, readiness, database health, and metrics
+- application-side bearer authentication, deny-by-default capabilities and location scope
 
 ### API surface
 
-- 29 implemented REST endpoints across 5 domains
+- 43 registered business operations across 6 domains: 41 implemented and two authenticated receipt/refund write placeholders
+- POS terminal/shift operations, trusted order/payment attribution, cash reconciliation, and scoped receipt reads
 - sales order lifecycle:
   - create draft
   - add lines
@@ -39,7 +41,7 @@ This branch moves the project from a lightweight skeleton into a documented, tes
 - OpenAPI YAML and JSON contracts
 - OpenAPI README files
 - Bruno collection synchronized with the implemented handlers
-- automated master-data repository and HTTP integration tests
+- automated master-data, order-flow, POS, authentication and contract tests
 
 ### Documentation
 
@@ -96,8 +98,9 @@ Fulfillment creates inventory movement
 - the master-data OpenAPI contracts are aligned with the implemented catalog and location handlers
 - the Bruno collection has been aligned to the handlers
 - master-data responses are normalized to top-level `data` and `pagination`
-- order-process list responses still need envelope normalization
-- confirm, fulfill, and cancel are not yet wrapped in explicit database transactions
+- order-process lists use top-level `data` and `pagination`
+- multi-step order commands use explicit transactions and durable command idempotency
+- per-command atomicity is not proof of no overspend across concurrent stock/reservation writers
 
 ## What This Branch Is Good For
 
@@ -112,5 +115,8 @@ Fulfillment creates inventory movement
 - receipt generation from API workflow
 - refund endpoint flow
 - partial fulfillment endpoint
-- consistent response envelope normalization
-- complete parity between order-process OpenAPI-documented fields and handler behavior
+- manufacturing APIs and their shared stock/catalog safety prerequisites
+- request-correlated repository logging and external CI required-check enforcement
+- provider/deployment/external smoke acceptance
+
+See the [plan/ADS coverage review](implementation-plan/ADS_COVERAGE_REVIEW.md). Historical test results remain scoped to their recorded acceptance revision; this summary does not claim a fresh validation run.

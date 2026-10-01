@@ -10,7 +10,7 @@
 
 **Source revision:** `c4ad200 build(deps): upgrade Kotlin and Vert.x versions`.
 
-**Gate status:** This accepted layout decision does not move source files or API assets. The README and Phase 05 plan publication remain pending later chunks.
+**Gate status:** Task 04.6 and layout publication are recorded complete in the [Phase 04 plan](../implementation-plan/04-quality-contracts-observability.md); the [Phase 05 plan](../implementation-plan/05-pos-manufacturing-expansion.md#accepted-layout-guidance) carries the accepted placement rules. No source or API asset move was approved. The original evidence below describes the source revision; POS proxies and a fourth bundle were subsequently added under the retained layout.
 
 ## Accepted Structure Decision
 
@@ -39,7 +39,7 @@ Future OpenAPI contracts remain in `api_collections/open_api_spec` as matching Y
 
 Adding an OpenAPI bundle later requires deliberate updates to the runtime loader, `scripts/verify_openapi_assets.py`, `OpenApiOperationIdRegistrationTest`, relevant Bruno assets, documentation, and CI evidence. This is feature work in its own approved slice, not an asset-layout migration.
 
-## Decision Evidence
+## Decision Evidence at the Source Revision
 
 - Existing Kotlin code is organized by `verticle/handler`, `repository`, and service implementation layers; Java proxy contracts are currently grouped in `service/master` and `service/order`.
 - The existing master/order `package-info.java` files declare distinct Vert.x `@ModuleGen` group packages, and service proxies are generated from those contracts.

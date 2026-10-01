@@ -53,6 +53,12 @@ availability behavior.
 - [x] API testing guide includes end-to-end curl workflow
 - [x] API testing guide documents idempotent order commands and stock availability checks
 
+## ADS Coverage and Integrity Follow-Up
+
+Tasks 03.1–03.3 are covered by [command hardening](ads/phase-03-task-1-2-3.md); 03.4–03.6 by [movement semantics and verification](ads/phase-03-task-4-5-6.md). These are historical design baselines; the checked items below record delivered Phase 03 scope.
+
+**Open cross-domain safety gap:** availability checks and atomic commands do not by themselves serialize competing orders/reservations. The shared product-lock protocol proposed in [05.6](ads/phase-05-task-6.md#shared-inventory-serialization-prerequisite) is not implemented evidence. Preserve the no-oversell policy, but do not claim it is proven under concurrent stock writers. Resolve and test that gap before manufacturing posting; earlier stock-safety hardening may be authorized independently.
+
 ## Ordered Tasks
 
 ### 03.1 Transactional Order Commands
@@ -105,7 +111,8 @@ Tasks:
 Done when:
 
 - [x] Clients can inspect current and available stock by product and location
-- [x] Confirmation cannot reserve more stock than policy allows
+- [x] Confirmation checks available stock before each reservation
+- [ ] Prove the no-oversell policy across concurrent stock/reservation writers; tracked by the shared-safety follow-up above
 - [x] Reservation policy is documented and tested
 
 ### 03.4 Fulfillment Movement Semantics
@@ -140,7 +147,8 @@ Done when:
 
 - [x] Receipt, refund, partial fulfillment, and partial payment decisions are documented and linked to their owning phase or guardrail
 - [x] Any flow kept in Phase 03 has implementation tasks and tests
-- [x] Any deferred flow is linked to the later phase that owns it
+- [x] Receipt/refund work is linked to 05.3
+- [ ] Assign a later task/ADS for partial fulfillment if required; it is explicitly deferred but has no scheduled owner
 
 ### 03.6 Order Flow Verification
 
@@ -166,7 +174,7 @@ Done when:
 - Reservations represent earmarked stock, not physical movement.
 - Fulfillment remains the authoritative stock deduction event.
 - Payment capture does not automatically imply fulfillment.
-- Cancellation after captured payment requires refund orchestration first.
+- Cancellation with captured payments remains blocked. Task 05.3's proposed receipt refunds apply to fulfilled POS sales and do not enable cancellation or payment reversal for a CONFIRMED unfulfilled order; that recovery workflow needs separate design.
 
 ## Definition of Done
 

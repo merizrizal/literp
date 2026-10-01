@@ -49,7 +49,10 @@ This directory documents the current implementation on this branch.
 ### Implementation plan
 
 - [implementation-plan/00-implementation-overview.md](implementation-plan/00-implementation-overview.md)
-  Phased plan synced to the current branch, with completed work checked.
+  Phased plan with recorded completion and remaining acceptance boundaries.
+
+- [implementation-plan/ADS_COVERAGE_REVIEW.md](implementation-plan/ADS_COVERAGE_REVIEW.md)
+  Task-to-ADS coverage, product/knowledge alignment, missing designs, and unresolved decisions.
 
 ### Domain notes
 
@@ -69,8 +72,8 @@ This directory documents the current implementation on this branch.
 - Kotlin `2.4.20`
 - Vert.x `5.2.0`
 - Java `25`
-- 39 implemented API endpoints across 6 API domains
-- 2 authenticated POS receipt lookup placeholders (`501 NOT_IMPLEMENTED`)
+- 41 implemented API endpoints across 6 API domains, including scoped receipt lookups
+- 2 authenticated POS receipt-generation/refund write placeholders (`501 NOT_IMPLEMENTED`), for 43 registered operations
 - 5 utility endpoints (two public probes and three restricted operational routes)
 - deterministic seed data through Alembic
 - synchronized authenticated Bruno collection and OpenAPI contracts

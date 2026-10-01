@@ -2,7 +2,7 @@
 
 **Source:** [Phase 05, task 05.2](../05-pos-manufacturing-expansion.md#052-pos-terminal-and-shift-api), following [05.1 POS Operations Contract](phase-05-task-1.md).
 
-**Status:** Proposed; design only. Requires approval of the decisions below and explicit confirmation that development may advance beyond 05.1. No deployment authorization.
+**Status:** Locally implemented and accepted per [Task 05.2 evidence](../05-pos-manufacturing-expansion.md#052-pos-terminal-and-shift-api); external smoke/provider/deployment acceptance remains pending. Proposal language, signatures and missing-field observations below retain the original drafting baseline, not current absence of terminal/shift behavior. Do not repeat completed chunks or infer deployment authorization. Subsequent receipt reads belong to 05.3; see the [coverage review](../ADS_COVERAGE_REVIEW.md).
 
 **Evidence revision:** `e0b7fc5`, branch `phase-05-task-0`; clean and synchronized with the locally recorded upstream before ADS drafting. No fetch was performed.
 

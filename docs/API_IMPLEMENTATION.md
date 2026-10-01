@@ -133,10 +133,14 @@ It also exposes five utility routes outside `/api/v1`:
 - `GET /pos/terminals/{terminalId}/current-shift`
 - `POST /pos/shifts/{shiftId}/close`
 
-Receipt lookup routes are registered as authenticated `501 NOT_IMPLEMENTED`
-placeholders; receipt generation and refunds are not implemented.
+### POS Receipt Reads and Write Placeholders
 
-Implemented API operations: `39` (`41` registered, including two receipt placeholders).
+- `GET /pos/receipts/by-number/{receiptNumber}` — implemented, scoped through the receipt's sales-order location.
+- `GET /pos/orders/{salesOrderId}/receipts` — implemented, bounded scoped list; legacy receipts remain readable.
+- `POST /pos/orders/{salesOrderId}/receipts` — authenticated `501 NOT_IMPLEMENTED`.
+- `POST /pos/receipts/{receiptId}/refunds` — authenticated `501 NOT_IMPLEMENTED`.
+
+Implemented API operations: `41` (`43` registered, including two write placeholders). Receipt/refund persistence is present, but neither write workflow is enabled.
 
 ## Database and Seed Data
 
@@ -393,7 +397,7 @@ and order-process response shapes are still documented separately below.
 
 ### List endpoints
 
-Master-data list endpoints return:
+Master-data, scoped order, terminal and receipt list endpoints return:
 
 ```json
 {
@@ -453,10 +457,13 @@ Order-process commands return a single envelope:
 - `201` successful create or payment capture
 - `204` successful delete
 - `400` validation error
-- `404` not found
+- `401` invalid or missing bearer credential
+- `403` denied capability, organization, scope or principal eligibility
+- `404` not found (including hidden scoped resources)
 - `409` conflict or invalid state transition
 - `500` internal failure
-- `503` database health failure
+- `501` registered receipt-generation/refund behavior not implemented
+- `503` dependency timeout or database health failure
 
 ## Delete Strategy
 
@@ -481,9 +488,9 @@ Important distinction:
 
 ## Known Limitations
 
-- confirm, fulfill, and cancel are multi-step flows without explicit database transactions
-- order-process list responses are still double wrapped under `data`
+- confirm, fulfill, and cancel are transactional, but shared stock-writer concurrency protection remains a proposed cross-domain follow-up
+- order-process lists use top-level `data` and `pagination`; response normalization is no longer an open gap
 - order fulfillment writes `from_location_id` as the source location and leaves `to_location_id` null for sales `OUT` movements
-- receipt persistence exists in schema and seed data, but receipt generation and lookup are owned by Phase 05 (`05.3 Receipt And Refund API`)
+- receipt persistence and scoped lookup are implemented in Phase 05.3; receipt generation remains an authenticated 501 placeholder
 - refunds are owned by Phase 05 (`05.3 Receipt And Refund API`)
 - partial fulfillment remains deferred until a later phase

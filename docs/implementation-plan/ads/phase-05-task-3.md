@@ -2,7 +2,9 @@
 
 **Source:** [Phase 05, task 05.3](../05-pos-manufacturing-expansion.md#053-receipt-and-refund-api), following [05.2 POS Terminal And Shift API](phase-05-task-2.md).
 
-**Status:** Proposed; design only. Task 05.3 behavior is not implemented by this document. The receipt/refund contract decisions below require approval before implementation. No deployment authorization.
+**Status:** Partially implemented: Chunks 1–3 supplied write contracts/stubs, receipt/refund persistence and both scoped receipt reads at `1ed2617`. Receipt issuance and refund writes remain authenticated `501 NOT_IMPLEMENTED`. This documentation review does not approve remaining financial decisions or deployment. Original proposal/evidence text below is retained as drafting history where superseded by these completed slices; confirm current code before continuation.
+
+**Continuation boundary:** Do not recreate migration `c7a8e2f4d6b1_pos_receipt_refund_foundation.py`, duplicate registered operations, or rerun completed chunks. Reconcile remaining decisions, then authorize the next unfinished chunk separately. See [coverage and requirements review](../ADS_COVERAGE_REVIEW.md).
 
 **Evidence revision:** `f3c7e15`, branch `phase-05-task-3`, tracking `origin/phase-05-task-3`; working tree was clean before ADS creation. No fetch was performed.
 
@@ -18,14 +20,16 @@ Task 05.3 extends the existing POS adapter rather than creating a second order l
 
 | Method/path | operationId | Capability | Resource boundary | Current state |
 |---|---|---|---|---|
-| GET `/api/v1/pos/receipts/by-number/{receiptNumber}` | `getPosReceiptByNumber` | `pos.receipt.read` | Receipt → sales-order location | Authenticated `501` placeholder |
-| GET `/api/v1/pos/orders/{salesOrderId}/receipts` | `listPosReceiptsBySalesOrder` | `pos.receipt.read` | Persisted sales-order location | Authenticated `501` placeholder |
+| GET `/api/v1/pos/receipts/by-number/{receiptNumber}` | `getPosReceiptByNumber` | `pos.receipt.read` | Receipt → sales-order location | Implemented scoped read |
+| GET `/api/v1/pos/orders/{salesOrderId}/receipts` | `listPosReceiptsBySalesOrder` | `pos.receipt.read` | Persisted sales-order location | Implemented scoped read |
 
 The existing `PosReceipt` contract exposes the persisted receipt columns, permits a nullable historical `shiftId` and `receiptData`, bounds receipt numbers to 50 characters, and specifies paginated deterministic order lookup. These names and paths are concrete. Implementation must remove `501` only from operations that have working scoped behavior.
 
-#### Proposed write operations requiring approval
+#### Registered write contracts; behavior still pending
 
-| Method/path | operationId (proposed) | Capability (proposed) | Resource boundary |
+The following paths, operation IDs and capabilities were published in Chunk 1. Remaining behavior/financial decisions require confirmation before replacing their 501 responses.
+
+| Method/path | Registered operationId | Registered capability | Resource boundary |
 |---|---|---|---|
 | POST `/api/v1/pos/orders/{salesOrderId}/receipts` | `generatePosReceipt` | `pos.receipt.write` | Persisted order location |
 | POST `/api/v1/pos/receipts/{receiptId}/refunds` | `createPosReceiptRefund` | `pos.refund.create` | Receipt → order location; refund shift → terminal location |
@@ -45,7 +49,7 @@ The existing `PosReceipt` contract exposes the persisted receipt columns, permit
 
 **Function Signature Contract (Concrete):**
 
-- `PosOperationsHandler.getPosReceiptByNumber(RoutingContext)` and `listPosReceiptsBySalesOrder(RoutingContext)` exist and currently call `respondNotImplemented`.
+- `PosOperationsHandler.getPosReceiptByNumber(RoutingContext)` and `listPosReceiptsBySalesOrder(RoutingContext)` now delegate through `PosOperationsService` to scoped repository SQL. Only `generatePosReceipt` and `createPosReceiptRefund` call `respondNotImplemented`.
 - `PosOperationsRepository.closePosShift(shiftId, closingBalance, idempotencyKey, actorSubject, organizationId, authorizedLocationIds): Single<JsonObject>` locks terminal then shift and snapshots expected cash.
 - `PosOperationsService` is a Vert.x Java proxy returning `Future<JsonObject>`; `PosOperationsServiceImpl` adapts repository `Single<JsonObject>` values.
 - `OrderProcessRepository.fulfillSalesOrder(orderId, createdBy, notes, idempotencyKey): Single<JsonObject>` requires `CONFIRMED`, fully captured value and fulfillable lines, then writes order/inventory state atomically.
@@ -93,6 +97,8 @@ Temporary write-operation stubs must return explicit `501 NOT_IMPLEMENTED` throu
 - Approve one API-issued receipt per order, sequence format, zero-tax behavior, fractional `totalItems`, immutable snapshot fields and legacy-row handling.
 - Approve payment-level partial refunds, open refund-shift ownership, local-only noncash semantics, cash availability guard, and no automatic inventory reversal.
 - Confirm whether refund reason is mandatory and whether any supervisor override is required; none is designed by default.
+- Resolve payment overcapture versus receipt adjustment semantics: existing noncash payments can exceed the order total, while the proposal caps refunds per payment. Decide whether receipt `refundedAmount`/`netAmount` includes excess-tender refunds and how status is derived; do not silently clamp a negative net or label an over-refund as a normal sale reversal. Add split/overcaptured payment tests before enabling refunds.
+- This design does not handle refund-before-cancel for a paid but unfulfilled order because receipt eligibility requires FULFILLED. Document that recovery gap rather than promising that 05.3 unblocks all paid-order cancellation.
 - Confirm the exact current Alembic head, proxy codegen behavior, all `PosOperationsService` test doubles, and an approved disposable database/Python environment before migration execution.
 
 ### III. Required Technical Dependencies and Imports
@@ -199,7 +205,7 @@ Use Java 25 and an explicitly approved disposable PostgreSQL database. Before ex
 
 The implementation must proceed through `chunked-implementation`. Do not implement the full feature in one pass.
 
-All new paths, operation IDs, capabilities, tables and method names are proposed until Chunk 0 approval. Each behavior chunk includes its direct tests and ends compile-safe. Multi-file exceptions are called out where Vert.x proxy codegen, OpenAPI registration and route-policy parity make an atomic slice necessary.
+Chunks 1–3 are recorded implemented; their former proposed paths/contracts must be reconciled with current code, not recreated. Remaining behavior symbols and decisions require explicit approval. Each behavior chunk includes its direct tests and ends compile-safe. Multi-file exceptions are called out where Vert.x proxy codegen, OpenAPI registration and route-policy parity make an atomic slice necessary.
 
 #### Chunk 0: Discovery and Integration Confirmation
 - **Goal:** Confirm task authorization and settle the receipt/refund business contract before edits.
@@ -266,7 +272,9 @@ All new paths, operation IDs, capabilities, tables and method names are proposed
 
 ### IX. Handoff to `chunked-implementation`
 
-Recommended agent prompt:
+**Historical prompts:** Chunks 1–3 are now implemented. Use these only as the original design record; continuation must inspect the current boundary and obtain authorization for the next unfinished chunk, not execute Chunk 1 again.
+
+Original agent prompt:
 
 ```text
 Use the chunked-implementation skill.
@@ -295,4 +303,4 @@ After editing, run targeted validation and show git diff. Report risks/skips and
 
 This design makes receipt issuance a snapshot of the existing fulfilled POS order and makes refunds append-only adjustments instead of destructive receipt/order rewrites. It closes the 05.2 reconciliation gap by attributing cash outflow to the shift performing the refund while preserving already-closed snapshots.
 
-Approve the proposed endpoint, item/tax/currency, refund-shift, payment-state, provider and inventory boundaries; then execute Chunk 0. Implementation must stop after Task 05.3 acceptance. Task 05.4 BOM work and any deployment/external-provider acceptance require separate authorization.
+Reconfirm the recorded Chunks 1–3 boundary and settle remaining issuance/refund financial decisions before authorizing the next unfinished chunk. Do not use the original Chunk 1 handoff above to replay completed work. Implementation must stop after Task 05.3 acceptance. Task 05.4 BOM work and any deployment/external-provider acceptance require separate authorization.

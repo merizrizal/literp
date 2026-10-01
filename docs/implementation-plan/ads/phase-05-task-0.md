@@ -4,7 +4,7 @@
 
 **Status:** Maintainer-approved for Phase 05 development under the deferred-deployment exception recorded in `AUTHENTICATION_BASELINE.md`. This does not approve untrusted deployment, production release, or internet exposure.
 
-**Evidence revision:** `6acd45b`; inspected during ADS preparation. Reconfirm at Chunk 0.
+**Evidence revision:** `6acd45b`; inspected during ADS preparation. Historical implementation observations below describe that baseline, not current absence of security controls. The [authentication baseline](../../knowledge/AUTHENTICATION_BASELINE.md) owns the implemented token/configuration contract and pending provider/deployment evidence; the [coverage review](../ADS_COVERAGE_REVIEW.md) records current expansion inventory. Reconfirm code before further changes; do not rerun completed chunks.
 
 **Goal:** Protect all 31 current business operations with authenticated identity, explicit capabilities, and resource scope; restrict three operational routes while preserving two public exceptions and existing business contracts. The maintainer-approved deferred-deployment exception permits 05.1 development before genuine provider and deployment acceptance, but does not authorize untrusted deployment.
 
@@ -12,7 +12,9 @@
 
 ### I. Overview and Contract
 
-#### Proposed baseline decisions requiring approval
+#### Baseline design decisions and deployment confirmations
+
+Application-side implementation/acceptance is recorded in the authentication baseline. Provider- and deployment-specific confirmations below remain required; original proposal language does not reopen recorded application acceptance or grant deployment permission.
 
 1. **Identity provider:** Select the existing product **Keycloak**, using a dedicated realm and a `literp-api` audience. No provider installation was found in the inspected repository. This selects a provider product, not an already-provisioned organizational deployment. The maintainer must confirm the actual realm, issuer URL, provider operator, and onboarding process before implementation.
 2. **Resource server only:** Literp accepts signed OAuth access tokens in `Authorization: Bearer …`. It does not implement login, token issuance, refresh, registration, password administration, or a general IAM database. Human clients use provider-managed authorization code with PKCE; trusted service clients use provider-managed client credentials. No password grant.

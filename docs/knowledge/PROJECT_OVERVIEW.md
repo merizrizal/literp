@@ -2,6 +2,8 @@
 
 ## Literp - Lightweight ERP core with POS as a channel (POS-First, Manufacturing-Ready)
 
+> **Document role:** Product vision and requirements narrative, not a claim that every capability is implemented. No separate PRD is tracked. See the [implementation-plan/ADS review](../implementation-plan/ADS_COVERAGE_REVIEW.md) for delivered scope, design coverage, and unassigned future requirements. Offline synchronization, fiscal invoicing, transfers and exclusive manufacturing allocation are not established by the current backend slice.
+
 ### 1. Purpose
 
 This project aims to build a **generalized, extensible sales and inventory platform** that supports **Point of Sale (POS)** operations today while being **natively capable of supporting manufacturing workflows** in the future—without architectural rewrites.

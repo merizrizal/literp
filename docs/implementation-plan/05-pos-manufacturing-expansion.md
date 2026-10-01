@@ -49,6 +49,12 @@ When concrete POS or manufacturing behavior is added, it follows the existing Ko
 - [x] seed data includes manufacturing-related inventory movements
 - [x] simulated seed data includes 14 days of production and sales activity
 
+## Design Coverage and Sequencing
+
+Every task 05.0–05.6 has a dedicated ADS; see the [coverage review](ADS_COVERAGE_REVIEW.md) for links and requirement gaps. ADS presence does not mean approval or implementation. Continue 05.3 → 05.4 → 05.5 → 05.6 in order unless independently authorized. The manufacturing designs must agree on legacy policy, recipe/unit stability, graph/stock lock order, and policy-aware run posting before implementation.
+
+The added manufacturing prerequisites and acceptance criteria below describe the aligned proposal, not new policy approval. If atomic complete-and-post or exclusive MTO allocation is chosen instead, revise both the plan and dependent ADSs before enabling behavior.
+
 ## Ordered Tasks
 
 ### 05.0 Authentication And Authorization Baseline
@@ -138,8 +144,10 @@ Done when:
   No provider, deployment, timed-JWKS, audit-ownership, or external acceptance
   is claimed.
 
-Receipt lookup operations remain authenticated `501 NOT_IMPLEMENTED`
-placeholders. Receipt generation, refunds, and Task 05.3 remain out of scope.
+At the 05.2 acceptance boundary, receipt lookups were placeholders. Task 05.3
+has since implemented both scoped reads; receipt generation and refund writes
+remain authenticated `501 NOT_IMPLEMENTED`. The test counts above are historical
+05.2 acceptance evidence, not current-suite results.
 
 ### 05.3 Receipt And Refund API
 
@@ -148,8 +156,8 @@ Estimate: 4-7 engineer-days
 Tasks:
 
 - [ ] Add receipt generation from fulfilled POS order
-- [ ] Add receipt lookup by receipt number
-- [ ] Add receipt lookup by sales order
+- [x] Add receipt lookup by receipt number
+- [x] Add receipt lookup by sales order
 - [ ] Add refund endpoint and receipt adjustment behavior
 - [ ] Add POS integration tests
 - [ ] Complete Bruno requests for POS operations
@@ -157,8 +165,10 @@ Tasks:
 Done when:
 
 - [ ] Fulfilled POS orders can produce receipts
-- [ ] Receipts can be retrieved by receipt number and sales order
+- [x] Receipts can be retrieved by receipt number and sales order
 - [ ] Refund behavior is explicit, auditable, and tested
+
+**Current implementation boundary:** [05.3 ADS](ads/phase-05-task-3.md) Chunks 1–3 have contracts, additive receipt/refund persistence, and scoped receipt reads at `1ed2617`. Only `generatePosReceipt` and `createPosReceiptRefund` remain 501. Existing read/contract tests do not complete issuance/refund integration acceptance. No new tests or database checks were run by the documentation review.
 
 ### 05.4 BOM API
 
@@ -171,6 +181,7 @@ Tasks:
 - [ ] Add BOM line management endpoints
 - [ ] Add Bruno requests for BOM operations
 - [ ] Add BOM integration tests
+- [ ] Approve a serializable graph-mutation/lock protocol and stable base-UOM interpretation shared with catalog and execution before relying on immutable recipes
 
 Done when:
 
@@ -188,6 +199,7 @@ Tasks:
 - [ ] Add work order plan/start/complete/cancel endpoints
 - [ ] Add production run start/complete endpoints
 - [ ] Track yield and scrap behavior
+- [ ] Preserve execution-only completion until 05.6 explicitly enables stock policy; distinguish completed results from posted inventory and retain legacy read-only rules
 - [ ] Add Bruno requests for work order and production run operations
 
 Done when:
@@ -207,12 +219,19 @@ Tasks:
 - [ ] Add made-to-stock workflow
 - [ ] Add made-to-order workflow only after the basic production loop is stable
 - [ ] Add manufacturing integration tests
+- [ ] Approve explicit per-run posting versus atomic complete-and-post, backflush/rounding, location and shortage policies
+- [ ] Implement and validate shared stock/reservation serialization and catalog unit/type guards across all relevant writers before enabling posting
+- [ ] Enforce policy-aware closure and immutable posting audit/material projection without replaying historical movements
+- [ ] Approve historical cutover/rollout and demand-linked versus exclusively allocated MTO scope
 
 Done when:
 
 - [ ] Manufacturing consumes components through the inventory movement ledger
 - [ ] Manufacturing produces finished goods through the inventory movement ledger
 - [ ] POS, sales, and manufacturing stock effects are visible in the same stock rollups
+- [ ] Competing stock/reservation writers cannot overspend unreserved stock under the approved shared protocol
+- [ ] Policy-enabled work orders close only after every completed run is posted; historical/execution-only orders are not automatically adopted
+- [ ] Both MTS and the explicitly approved MTO scope have acceptance evidence; deferred MTO means this task remains incomplete
 
 ## Assumptions
 
@@ -220,7 +239,9 @@ Done when:
 - Manufacturing produces inventory through the same movement ledger used by sales fulfillment.
 - Work orders should not require changes to sales order semantics.
 - Accounting integration is outside this phase.
-- Phase 05 should not begin large new API additions until the project structure gate is resolved.
+- The project structure gate is resolved; retain its accepted layout through Phase 05.
+- Production-only locations, calculated consumption, separate posting, and shared-stock MTO are proposed restrictions, not settled product requirements; see the [05.6 ADS](ads/phase-05-task-6.md).
+- Offline synchronization, exclusive demand allocation, fiscal documents, partial fulfillment and production-to-store transfer APIs are not delivered by this phase; assign separate requirements/design ownership if needed.
 
 ## Definition of Done
 

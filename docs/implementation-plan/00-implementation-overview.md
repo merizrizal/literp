@@ -3,9 +3,12 @@
 This directory translates the Literp architecture and current branch state into
 implementation work.
 
-The plan is synced to the code and documentation that already exist in this
-repository. Checked tasks mean the behavior or artifact is already present in
-the current branch. Unchecked tasks are the remaining implementation path.
+Checked tasks record implemented artifacts or accepted evidence in the owning
+phase; they are not evidence of a fresh validation run or deployment approval.
+See [ADS coverage and requirements review](ADS_COVERAGE_REVIEW.md) for every
+task's design coverage, source authority, missing ADSs, and unresolved gaps.
+No standalone PRD is tracked; the product requirements narrative is
+[PROJECT_OVERVIEW.md](../knowledge/PROJECT_OVERVIEW.md).
 
 ## 00.1 Current Baseline
 
@@ -15,21 +18,22 @@ processing, payment capture, fulfillment, and movement-based inventory writes.
 
 Current completed runtime scope:
 
-- [x] 2 utility endpoints: root and database health
-- [x] 29 REST API endpoints across 5 domains
+- [x] 5 utility endpoints: root, liveness, readiness, database health, and metrics
+- [x] 43 registered business operations across 6 API domains: 41 implemented and 2 authenticated receipt/refund write placeholders
 - [x] PostgreSQL schema for catalog, inventory, sales, POS, and manufacturing
 - [x] deterministic Alembic seed data
-- [x] OpenAPI contracts for product catalog, locations, and order process
+- [x] OpenAPI contracts for product catalog, locations, order process, and POS operations
+- [x] Application-side authentication, scoped POS terminals/shifts, and receipt lookups
 - [x] Bruno collection aligned to the implemented handlers
 - [x] developer documentation for setup, testing, endpoints, and implementation
 
 Current important gaps:
 
-- [ ] some multi-step order commands still need broader transaction coverage
-- [ ] order-process list responses still need envelope normalization
-- [ ] OpenAPI, Bruno, docs, and handlers need automated drift checks as the API expands
-- [ ] receipt, refund, partial fulfillment, POS operations, and manufacturing APIs are not exposed yet
-- [ ] automated test coverage is focused on foundation and master-data behavior; order flow still needs broader tests
+- [ ] receipt generation and refund writes remain authenticated `501 NOT_IMPLEMENTED`
+- [ ] manufacturing APIs are proposed, not implemented; partial fulfillment remains deferred
+- [ ] shared stock-writer serialization and catalog unit/type stability need the cross-domain safeguards proposed in 05.6
+- [ ] Phase 04 request-correlated repository logging and external CI required-check enforcement remain open
+- [ ] provider, deployment, authenticated external smoke, and related operational acceptance remain pending
 
 ## 00.2 Directory Name
 
@@ -65,18 +69,15 @@ deployment approval delays.
 | 00 | `00-implementation-overview.md` | Explain execution plan | Done for initial planning | Documentation only |
 | 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Complete | 0 remaining engineer-days |
 | 02 | `02-master-data-api.md` | Complete catalog and location API parity | Complete | 0 remaining engineer-days |
-| 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Queued until Phase 02 is done | 10-18 remaining engineer-days |
-| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Queued until earlier phase gates are done | 9-16 remaining engineer-days |
-| 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | Future phase | 18-35 future engineer-days |
+| 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Recorded complete; shared-writer concurrency caveat remains | Re-estimate follow-up separately |
+| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Gates complete; logging and CI governance criteria open | Re-estimate remaining criteria |
+| 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | 05.0–05.2 locally accepted; 05.3 partial; 05.4–05.6 design only | Re-estimate after design approval |
 
-Estimated remaining MVP hardening:
-
-```text
-19-34 engineer-days
-```
-
-The current branch already implements the functional MVP path. The remaining
-MVP work is mostly reliability, parity, tests, and operational hardening.
+The original 19–34 engineer-day MVP estimate predates completed Phase 03 and
+much of Phase 04; it is not a current remaining-work estimate. Re-estimate open
+criteria and manufacturing prerequisites rather than summing historical task
+estimates. The current branch implements the functional MVP path; operational
+acceptance and the explicitly listed integrity gaps remain separate.
 
 ## 00.5 Recommended Build Order
 
@@ -108,7 +109,7 @@ the platform proves its order-to-inventory workflow:
 Add product -> Create sales order -> Confirm and reserve -> Capture payment -> Fulfill -> Write inventory movement
 ```
 
-That workflow is the baseline for the accepted [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md). The proposed 05.0 authentication and authorization baseline must be designed and implemented before Phase 05 POS and manufacturing expansion starts. It protects the current business API surface; it is not broad IAM work.
+That workflow is the baseline for the accepted [security sequencing decision](../knowledge/SECURITY_SEQUENCING.md). The 05.0 authentication and authorization baseline is implemented and accepted for Phase 05 development under the documented deferred-deployment exception. It protects the business API surface; it is not broad IAM work or deployment approval.
 
 ## 00.6 Cross-Phase Principles
 
@@ -117,10 +118,10 @@ That workflow is the baseline for the accepted [security sequencing decision](..
 - [x] Keep sales intent separate from physical inventory changes
 - [x] Keep manufacturing as an extension of the same inventory model
 - [x] Keep APIs contract-first through OpenAPI operation IDs
-- [ ] Wrap multi-step business commands in explicit database transactions
-- [ ] Normalize response envelopes before broad client adoption
-- [ ] Add automated tests before expanding API surface materially
-- [ ] Keep OpenAPI, Bruno, docs, and handlers synchronized with each change
+- [x] Wrap existing multi-step order commands in explicit database transactions
+- [x] Normalize existing response envelopes
+- [x] Establish order-flow and API contract tests before expansion
+- [ ] Maintain OpenAPI, Bruno, docs, policies, and handler parity for every new slice
 - [x] Resolve the project structure decision before POS and manufacturing expand the codebase materially; retain the current layout through Phase 05
 
 ## 00.7 Recommended MVP Slice
@@ -145,8 +146,8 @@ Current state:
 - [x] Payment capture exists
 - [x] Fulfillment writes inventory movement rows
 - [x] Order detail fetch includes lines, reservations, and payments
-- [ ] The full slice is covered by automated integration tests
-- [ ] The full slice runs inside explicit database transactions where needed
+- [x] The full slice has recorded automated integration-test coverage in Phase 03
+- [x] Existing multi-step order commands use explicit transactions; this does not prove serialization across competing orders
 
 ## 00.8 Ordered Task Format
 
@@ -173,7 +174,7 @@ Done when:
 Rules:
 
 - task chunks are executed in order inside a phase
-- later phases stay queued until the active phase is complete
+- later phases stay queued until the active phase is complete, unless a documented maintainer-approved sequencing exception applies
 - estimates belong to the chunk, not every checklist item
 - `Done when` describes acceptance criteria, not implementation steps
 - completed subtasks should only be checked when the behavior exists and is verified
@@ -210,7 +211,11 @@ MVP completion checklist:
 - [x] The database schema supports the needed entities
 - [x] Seed data supports local demos and regression testing
 - [x] OpenAPI and Bruno assets exist
-- [ ] The happy path is covered by automated integration tests
-- [ ] State transition guardrails are covered by automated tests
-- [ ] Multi-step writes are atomic
-- [ ] API response shape is stable and documented as the client contract
+- [x] The happy path has recorded automated integration-test coverage
+- [x] State transition guardrails have recorded automated-test coverage
+- [x] Existing multi-step order writes are atomic
+- [x] Existing API response shape is documented and contract-tested
+
+These local delivery criteria do not close external deployment acceptance,
+Phase 04's remaining criteria, or the shared stock concurrency gap in the
+[coverage review](ADS_COVERAGE_REVIEW.md).

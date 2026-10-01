@@ -32,6 +32,10 @@ readiness for client integration.
 - [x] Handlers log generated handling IDs and request metadata
 - [x] Database health endpoint returns `UP` or `DOWN`
 
+## ADS Coverage
+
+Tasks [04.1–04.2](ads/phase-04-task-1-2.md), [04.3–04.4](ads/phase-04-task-3-4.md), and [04.5–04.6](ads/phase-04-task-5-6.md) have grouped ADSs. The supplemental [closure ADS](ads/phase-04-closure-verification.md) and [evidence record](../knowledge/PHASE_04_COMPLETION_EVIDENCE.md) retain revision-specific results. Counts and test results below describe Phase 04 acceptance, not the expanded Phase 05 inventory.
+
 ## Ordered Tasks
 
 ### 04.1 Test Foundation
@@ -94,7 +98,8 @@ Estimate: 2-3 engineer-days
 Tasks:
 
 - [x] Add structured logs or a clear log format for production use
-- [x] Propagate incoming `X-Request-ID` into all logs and responses
+- [x] Propagate incoming `X-Request-ID` into handler logs and responses
+- [ ] Propagate request correlation through repository work; end-to-end traceability remains open
 - [x] Add readiness and liveness semantics beyond database health if needed
 - [x] Add metrics for request count, latency, error count, and database failures
 
@@ -119,7 +124,7 @@ Done when:
 
 - [x] Security scope has the proposed 05.0 owner phase
 - [x] The accepted decision states all 31 current business operations and utility-route policy for the first protected surface
-- [x] Later expansion work is not blocked by an undefined auth strategy; implementation remains a pending 05.0 prerequisite
+- [x] Later expansion work has a defined auth strategy; 05.0 was subsequently implemented for development under its deferred-deployment exception
 
 ### 04.6 Project Structure Gate
 

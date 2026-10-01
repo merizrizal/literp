@@ -12,12 +12,18 @@ Based on the project's core principles:
 
 ---
 
+## Model and Schema Boundary
+
+This is a domain model, not a complete migration catalog. Initial entities remain below; later migrations add order command/event, POS attribution/reconciliation, and receipt/refund foundations. In particular, `c7a8e2f4d6b1_pos_receipt_refund_foundation.py` adds decimal receipt item totals and legacy-compatible issuance/refund metadata without enabling receipt/refund writes. Consult migrations for physical constraints and the [ADS coverage review](../implementation-plan/ADS_COVERAGE_REVIEW.md) for proposed versus implemented behavior.
+
+Manufacturing APIs remain proposed. A work-order/run COMPLETED state or historical `material_consumed` JSON is not proof of a managed stock posting. The aligned 05.5/05.6 proposal separates immutable execution results from explicit run-level posting, applies POSTED-before-close only to new stock-policy orders, and excludes legacy records from automatic adoption/replay.
+
 ## Core Entities
 
 ### 1. Product Catalog
 
 #### Product
-The base product entity. Supports SKU variants and multiple UOM.
+The base product entity has SKU variants and one referenced base UOM. Alternate-unit conversion is not implemented by this model.
 
 **Fields:**
 - `product_id` (UUID, PK)
@@ -26,7 +32,7 @@ The base product entity. Supports SKU variants and multiple UOM.
 - `product_type` (ENUM: STOCK | SERVICE) – determines if inventory applies
 - `base_uom` (FK → `unit_of_measure.uom_id`) – default unit for quantities
 - `active` (boolean, default=true)
-- `metadata` (JSONB, optional) – extensible attributes
+- `metadata` (JSON, optional) – extensible attributes
 - `created_at`, `updated_at`
 
 #### ProductVariant
@@ -37,7 +43,7 @@ Represents product variants (sizes, colors, etc.). Each variant has its own SKU.
 - `product_id` (FK → `product.product_id`, cascade delete)
 - `sku` (unique, indexed)
 - `name` (string)
-- `attributes` (JSONB) – variant-specific data (e.g., size, color)
+- `attributes` (JSON) – variant-specific data (e.g., size, color)
 - `active` (boolean)
 - `created_at`, `updated_at`
 
@@ -64,7 +70,7 @@ Multi-location warehouses, stores, or sites.
 - `name` (string)
 - `location_type` (ENUM: WAREHOUSE | STORE | PRODUCTION)
 - `is_active` (boolean)
-- `address` (JSONB, optional)
+- `address` (JSON, optional)
 - `created_at`, `updated_at`
 
 #### InventoryMovement (Immutable Ledger)
@@ -75,7 +81,7 @@ Immutable log of all stock movements. Stock levels are derived by summing moveme
 - `product_id` (FK → `product.product_id`) – relates to product or variant SKU
 - `sku` (string, indexed) – denormalized for performance
 - `movement_type` (ENUM: IN | OUT | TRANSFER | ADJUSTMENT)
-  - IN: goods arrival, work order completion
+  - IN: goods arrival, manufacturing output posting (not execution completion by itself)
   - OUT: sales fulfillment, consumption
   - TRANSFER: between locations
   - ADJUSTMENT: inventory correction
@@ -191,11 +197,11 @@ Receipt/Invoice records. Denormalized copy of order for offline storage.
 - `shift_id` (FK → `pos_shift.shift_id`, nullable)
 - `receipt_number` (string, unique) – sequential
 - `receipt_date` (timestamp)
-- `total_items` (int)
+- `total_items` (numeric(12,3)) – summed item quantity; widened from integer by receipt/refund foundation migration
 - `subtotal` (decimal)
 - `tax_amount` (decimal)
 - `total_amount` (decimal)
-- `receipt_data` (JSONB) – full JSON copy for offline use
+- `receipt_data` (JSON) – full JSON copy for offline use
 - `created_at`
 
 ---
@@ -252,7 +258,7 @@ Execution details of a work order (batch/lot tracking).
 - `work_order_id` (FK → `work_order.work_order_id`)
 - `run_date` (date)
 - `operator_id` (string, optional)
-- `material_consumed` (JSONB) – detailed component usage
+- `material_consumed` (JSON) – legacy usage data; proposed managed posting projection is calculated BOM backflush, not measured usage or standalone posting proof
 - `output_quantity` (decimal)
 - `scrap_quantity` (decimal)
 - `status` (ENUM: IN_PROGRESS | COMPLETED)
@@ -262,7 +268,7 @@ Execution details of a work order (batch/lot tracking).
 
 ## Foreign Key Relationships Summary
 
-This section provides a complete reference of all foreign key constraints in the system.
+This section summarizes the initial domain relationships, not all constraints added by later migrations. POS attribution, command/event, issuance and refund tables must be inspected in their owning migrations.
 
 ### Product Catalog
 | From | To | Cascade Delete |
@@ -334,46 +340,38 @@ This section provides a complete reference of all foreign key constraints in the
   - Work orders produce into a location
   - Transfers move between locations
 
-### JSONB for Extensibility
-- **Where:** Product/ProductVariant attributes, Receipt data, Production material consumed
-- **Why:** Allows schema evolution without table migrations
-- **Trade-off:** Loses strong typing, but gains flexibility for future channels
+### JSON for Extensibility
+- **Where:** Product metadata, ProductVariant attributes, location address, receipt data, and production material consumed use SQL JSON in the initial migration, not JSONB.
+- **Why:** Extensible payload shape; changing required semantics still requires versioning and validation.
+- **Trade-off:** Flexibility does not replace typed financial, identity or posting invariants. JSONB-specific queries/indexes require an explicitly approved storage change.
 
 ---
 
 ## Queries & Views (Derived)
 
 ### Current Stock Level (by product, location)
+
+The following reflects `OrderProcessRepository.getCurrentStock` at the review baseline; `$1` is product ID and `$2` location ID. Movements have source/destination columns, not a `location_id` column. Quantities follow the existing signed ADJUSTMENT convention; do not change adjustment or transfer semantics implicitly in manufacturing.
+
 ```sql
-SELECT
-  product_id,
-  sku,
-  location_id,
-  SUM(CASE WHEN movement_type IN ('IN', 'TRANSFER') AND to_location_id = location_id
-           THEN quantity ELSE 0 END) -
-  SUM(CASE WHEN movement_type IN ('OUT', 'TRANSFER') AND from_location_id = location_id
-           THEN quantity ELSE 0 END) as available_qty
+SELECT COALESCE(SUM(
+  CASE
+    WHEN movement_type IN ('IN', 'ADJUSTMENT') AND to_location_id = $2 THEN quantity
+    WHEN movement_type = 'TRANSFER' AND to_location_id = $2 THEN quantity
+    WHEN movement_type = 'TRANSFER' AND from_location_id = $2 THEN -quantity
+    WHEN movement_type = 'OUT' AND from_location_id = $2 THEN -quantity
+    ELSE 0
+  END
+), 0) AS current_qty
 FROM inventory_movement
-GROUP BY product_id, sku, location_id;
+WHERE product_id = $1 AND (to_location_id = $2 OR from_location_id = $2);
 ```
 
 ### Available Stock (reserved vs. unreserved)
-```sql
-SELECT
-  m.product_id,
-  m.sku,
-  m.location_id,
-  COALESCE(current_qty, 0) as current_qty,
-  COALESCE(reserved_qty, 0) as reserved_qty,
-  COALESCE(current_qty, 0) - COALESCE(reserved_qty, 0) as available_qty
-FROM (... current stock ...) m
-LEFT JOIN (
-  SELECT product_id, location_id, SUM(quantity) as reserved_qty
-  FROM inventory_reservation
-  WHERE status = 'RESERVED'
-  GROUP BY product_id, location_id
-) r ON m.product_id = r.product_id AND m.location_id = r.location_id;
-```
+
+`available_qty = current_qty - reserved_qty`, where `reserved_qty` is the coalesced sum of `inventory_reservation.quantity` for the same product/location with `status = 'RESERVED'`. `OrderProcessRepository.getAvailableStock` computes both aggregates in one statement. This formula is not a lock: concurrent check-and-write paths need a common serialization protocol, proposed in [05.6](../implementation-plan/ads/phase-05-task-6.md#shared-inventory-serialization-prerequisite).
+
+Product base-UOM/type updates are currently allowed by the catalog API. The proposed manufacturing invariants require approved unit snapshots/reference guards and compatible reference-writer locking; this model does not claim those guards already exist.
 
 ---
 

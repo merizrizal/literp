@@ -6,6 +6,10 @@
 
 ---
 
+### Current-status and alignment note
+
+Historical design baseline; [Phase 04 evidence](../../knowledge/PHASE_04_COMPLETION_EVIDENCE.md) records the delivered local test/contract work. Original endpoint counts, signatures and envelope-gap observations below must not be treated as current runtime facts. Current expansion inventory is in the [coverage review](../ADS_COVERAGE_REVIEW.md); new operations need production-router authentication/scope and contract parity tests, not just source-text registration checks. A skipped database test is not acceptance. Remaining Phase 04 CI governance and repository traceability criteria stay open.
+
 ### I. Overview and Contract
 
 This ADS covers Phase 04 tasks only:

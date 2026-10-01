@@ -13,7 +13,7 @@ runtime infrastructure.
 
 ## Phase Status
 
-Phase 01 is complete.
+Phase 01 is recorded complete. No dedicated Phase 01 ADS exists in this repository; the task contracts and implementation notes below are the available record. See the [coverage review](ADS_COVERAGE_REVIEW.md). This absence does not authorize replaying completed work or imply retrospective design approval.
 
 Phase 02 is explicitly unblocked as the next implementation gate. Do not jump to
 Phase 03, Phase 04, or Phase 05 implementation work until the relevant earlier

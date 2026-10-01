@@ -46,8 +46,8 @@ List/get operations are included because users cannot safely update, activate, o
 8. **Line payload:** add requires `componentProductId`, positive `quantityPerUnit` with at most three decimals, `scrapPercentage` from 0 through 100 with at most two decimals, and positive `sequence`. Update replaces quantity/scrap/sequence; component identity is immutable. Remove is repeatable after the parent BOM is authorized.
 9. **Component snapshot:** `componentSku` is derived from the referenced product and stored by the server; clients cannot submit or override it. Component products must exist, be active and `STOCK` when a line is added/updated and again when the BOM activates.
 10. **Line uniqueness:** a component product occurs once per BOM and each sequence occurs once per BOM. Reordering multiple lines is not a bulk operation in this task; clients use temporary free sequence values or serial updates. A future bulk-reorder contract may improve that workflow.
-11. **Unit semantics:** `quantityPerUnit` is measured in the component product's base UOM per one base-UOM unit of the finished product. No UOM conversion table exists, so Task 05.4 stores no alternate units and performs no conversion.
-12. **Nested BOMs:** STOCK components may themselves have an active BOM. Activation rejects direct self-reference and any indirect cycle across the candidate plus currently active BOM graph. Nested expansion/consumption remains Task 05.5/05.6 behavior.
+11. **Unit semantics:** `quantityPerUnit` is measured in the component product's base UOM per one base-UOM unit of the finished product. No UOM conversion table exists. Catalog currently allows base-UOM/type edits; immutable BOM rows alone do not freeze quantity meaning. Before activation is accepted, approve either compatible catalog reference guards or immutable definition-level unit snapshots with explicit drift rejection. Align with 05.5 execution snapshots and 05.6 catalog guards; do not defer a required recipe-stability guarantee until after execution depends on it.
+12. **Nested BOMs:** STOCK components may themselves have an active BOM. Activation rejects direct self-reference and indirect cycles under an approved graph-mutation protocol. Task 05.5 snapshots direct lines; Task 05.6 consumes stocked subassemblies as direct components. Recursive explosion, raw-descendant consumption and automatic child work orders are deferred to a separate design, not promised by either task.
 13. **Activation readiness:** a draft must have at least one valid line. Activation revalidates product activity/type, component activity/type, uniqueness, numeric bounds, SKU consistency and acyclic graph under transaction locks.
 14. **Idempotency/audit:** create and add-line require bounded `Idempotency-Key`; lifecycle commands are transactionally repeatable and also record their key when supplied. Proposed actor columns and append-only lifecycle events preserve who created, changed, activated or deprecated a definition. No client actor override is accepted.
 15. **No hard delete:** BOM deletion is intentionally absent. Draft line deletion is allowed because the parent is not executable; BOM history referenced by work orders is retained.
@@ -93,7 +93,7 @@ Before repository/service behavior exists, every proposed handler method returns
 - BOMs are shared across locations within the configured organization. Location grants do not constrain read/write access.
 - Human and service principals may manage BOMs when they have exact capabilities. If interactive human-only governance is required, approve it before contract publication.
 - Activating a new version deprecates the old active version atomically rather than requiring a two-call gap.
-- Existing planned/in-progress work orders remain pinned and executable under Task 05.5 rules even if their BOM is later deprecated; deprecation prevents selection for new work, not historical execution.
+- API-managed work orders remain pinned and executable under Task 05.5 rules even if their BOM is later deprecated. Pre-existing legacy work orders remain readable but cannot be mutated/adopted automatically under 05.5; deprecation does not authorize legacy execution or stock replay.
 - Nested BOM definitions are allowed, but this task validates acyclicity only; explosion, rounding and material demand are deferred.
 - No tenant column exists in BOM tables; the current configured organization boundary remains the deployment boundary, consistent with existing data tables.
 
@@ -103,6 +103,8 @@ Before repository/service behavior exists, every proposed handler method returns
 - Approve client-selected positive versions, DRAFT-only header mutation and no BOM delete/reactivation.
 - Approve atomic old-version deprecation, existing-work-order pinning, nested BOM support and cycle policy.
 - Approve numeric bounds, UOM semantics, server-derived component SKU, line uniqueness and repeatable line removal.
+- Approve one graph-mutation serialization strategy and cross-domain lock order before behavior integration. A shared transaction-scoped graph guard for all graph writers, or serializable transactions with bounded whole-command retries, are alternatives requiring design confirmation, not implemented helpers. Test transitive cross-product cycles and competing versions of the same product; direct-component product locks alone are insufficient.
+- Resolve recipe unit stability with catalog writers before activation/05.5 integration; any additional prerequisite slice must be explicit in the approved chunk plan.
 - Approve command-idempotency and actor/lifecycle-audit persistence, and decide whether all mutations require `Idempotency-Key`.
 - Confirm Task 05.3 completion or explicit permission to implement 05.4 independently, current migration head, proxy codegen conventions, disposable database and Python environment.
 
@@ -131,7 +133,7 @@ A proposed additive Alembic revision after the then-current head adds safe uniqu
 2. Validate UUIDs, enum/filter allowlists, positive bounded numbers, request fields and idempotency headers before dispatch. Reject server-owned/unknown fields.
 3. Pass trusted actor and organization separately from request JSON. Never trust client SKU, status, actor, timestamps or lifecycle event fields.
 4. Use parameterized SQL and allowlisted sort columns. List count and data predicates must match; order by product, version and BOM ID deterministically.
-5. For mutations, lock BOM before lines. When finished/component products are involved, lock all affected product rows in lexical product-ID order. Activation uses the same product lock ordering so concurrent candidates cannot create two active versions or a graph cycle.
+5. Use the approved common graph-mutation protocol before BOM/product locks on every path that can affect graph validity. Within that protocol, lock BOM/line and product rows in one documented order compatible with catalog, planning and posting writers. The original target-BOM → product → other-active-BOM sequence can deadlock between competing versions; sorted direct-product locks also fail to cover transitive concurrent cycles. Do not implement that sequence as a proven safety protocol. The final lock map is a Chunk 0 blocker, not an invented helper contract.
 6. Store mutation response/idempotency state and lifecycle event in the same transaction as domain changes. Roll back everything on validation, conflict or persistence failure.
 
 #### Create, read and draft update
@@ -148,10 +150,10 @@ A proposed additive Alembic revision after the then-current head adds safe uniqu
 
 #### Activation and deprecation
 
-1. Lock the target BOM and collect finished/component product IDs.
-2. Lock those product rows in deterministic order and recheck activity/type/SKU and all line constraints. Require at least one line.
+1. Enter the approved graph-mutation serialization boundary before locking candidate/active definitions; collect and lock affected rows in the agreed cross-domain order. Include deprecation and any other participating graph writer in the protocol.
+2. Recheck activity/type/SKU, stable unit interpretation and all line constraints after locks are held. Require at least one line.
 3. Run recursive cycle detection against the candidate edges plus currently ACTIVE BOM edges, excluding the active version that this candidate will replace for the same product. Any path returning to the finished product conflicts.
-4. Lock active BOM rows for the finished product. Deprecate prior active version(s), append events, activate target and append its event in one transaction. Database partial uniqueness remains the final race guard.
+4. Under the same approved lock protocol, deprecate the prior active version, append events, activate target and append its event in one transaction. Database partial uniqueness guards one active version; it does not enforce graph acyclicity.
 5. Deprecation locks the target. DRAFT or ACTIVE becomes DEPRECATED with an event; already DEPRECATED returns current data. It never deletes lines or changes referenced work orders.
 
 ### V. Failure Modes and Resilience
@@ -168,7 +170,7 @@ A proposed additive Alembic revision after the then-current head adds safe uniqu
 | Product validation | Finished/component product inactive or SERVICE | Reject definition/change | 409 `CONFLICT` |
 | Uniqueness | Duplicate product/version, component or sequence | Map database guard safely | 409 `CONFLICT` |
 | Activation | No lines, stale SKU, invalid component or direct/indirect cycle | Leave draft unchanged | 409 `CONFLICT` |
-| Concurrent activation | Two versions/products race | Ordered product/BOM locks plus unique active index serialize | One consistent winner; loser rechecks/conflicts |
+| Concurrent activation | Two versions/products or transitive graph edits race | Require approved graph serialization and cross-domain lock order; unique active index alone is insufficient | Block activation until protocol is implemented/tested; then recheck or retry safely |
 | Retry | Same key changed payload | Return no prior response | 409 `CONFLICT` |
 | Persistence | Timeout/deadlock/write failure | Roll back definition, command and event; bounded whole-transaction retry only with durable key | 503 `DB_TIMEOUT` or sanitized 500 |
 | Partial delivery | Behavior not implemented | Keep authenticated handler stub | 501 `NOT_IMPLEMENTED`, no mutation |
@@ -179,9 +181,9 @@ Use existing public error codes. Proposed typed manufacturing validation/scope/c
 
 - **Security:** all operations remain bearer-authenticated and deny-by-default. Organization-wide does not mean anonymous or cross-organization. Actor/organization come from the principal, and read does not imply write.
 - **Integrity:** database checks enforce positive versions/sequences/quantities, bounded scrap, unique product/version, unique line component/sequence and one active BOM per product. Application activation revalidates cross-table and graph invariants under locks.
-- **Historical stability:** ACTIVE/DEPRECATED BOMs and lines are immutable. Deprecation retains rows. Existing work orders keep exact BOM references; no cascade or replacement rewrites them.
+- **Historical stability:** ACTIVE/DEPRECATED recipe content is immutable; the explicit ACTIVE→DEPRECATED lifecycle transition is permitted and audited. Stable unit interpretation needs the approved catalog/snapshot prerequisite. Existing work orders keep exact BOM references; no cascade or replacement rewrites them. Legacy work orders remain read-only under 05.5.
 - **Idempotency:** approved command ledger keys include organization, actor, operation, target and normalized fingerprint. Authorization runs before replay. Create/add response and mutation commit together; deterministic PUT and repeatable DELETE semantics remain documented.
-- **Concurrency:** consistent BOM→line and sorted-product locking avoids deadlocks; activation concurrency tests use independent connections/barriers, not sleeps. Database uniqueness is mandatory even with application checks.
+- **Concurrency:** no deadlock-freedom or graph-serializability claim is made until the common protocol is approved and tested against activation, deprecation, catalog changes and work-order planning. Use independent connections/barriers, including cycles through pre-existing transitive paths and two target versions waiting on the same product. Database uniqueness alone cannot enforce an acyclic graph.
 - **Audit/privacy:** lifecycle events record safe actor, transition, target, key and timestamp. Do not log bearer tokens, request bodies, product metadata, SQL parameter dumps or full command responses.
 - **Cleanup/migration:** preflight legacy duplicates/invalid values and stop for explicit remediation; never delete seed/history automatically. Test cleanup removes only generated DRAFT records in FK-safe order. Once lifecycle data exists, prefer forward repair over destructive downgrade.
 - **Out of scope:** work-order execution, production runs, inventory movement, costing, substitutions, location-specific BOMs, effective dates, alternates, batch/lot rules, UOM conversion, bulk reorder, delete/restore and Task 05.5/05.6 behavior.
@@ -214,7 +216,7 @@ All new names/paths are proposed until Chunk 0 approval. Each chunk must remain 
 - **Files to read:** Phase 05 Task 05.4; this ADS; Task 05.3 status; structure/auth references; migration graph/schema/seed; loader/verifier/parity tests; product and transaction patterns.
 - **Commands:** `rtk git status --short --branch`; `rtk git log -1 --oneline`; `rtk grep -Rni 'bill_of_material\|bom_line\|work_order\|product_type' python src docs api_collections`.
 - **Evidence to confirm:** Explicit implementation authorization; operation matrix; lifecycle/version/nesting/UOM/idempotency decisions; migration head; codegen callers; approved database/Python environment.
-- **Stop condition:** Read-only report. Unresolved lifecycle or graph semantics block Chunk 1.
+- **Stop condition:** Read-only report. Unresolved lifecycle, graph serialization, cross-domain lock order or unit-stability contracts block Chunk 1.
 
 #### Chunk 1: Contracts and Compile-Safe Authenticated Stubs
 - **Goal:** Publish the nine-operation BOM contract without claiming behavior.
@@ -259,8 +261,8 @@ All new names/paths are proposed until Chunk 0 approval. Each chunk must remain 
 #### Chunk 6: Activation And Deprecation Lifecycle Slice
 - **Goal:** Safely activate one acyclic immutable BOM version and preserve history.
 - **Files to change:** Manufacturing repository/service/handler, lifecycle/concurrency tests and activation/deprecation OpenAPI/Bruno availability notes.
-- **Symbols to add/change:** `activateBillOfMaterial`, `deprecateBillOfMaterial`, deterministic product locks, readiness/cycle query, atomic previous-version deprecation and events.
-- **Implementation shape:** Revalidate under lock; recursive cycle detection; one transaction for old/new statuses, audit and response. Repeat-safe transitions; no reactivation.
+- **Symbols to add/change:** `activateBillOfMaterial`, `deprecateBillOfMaterial`, approved graph-serialization/lock contract, readiness/cycle query, atomic previous-version deprecation and events. Exact helper names are confirmed in Chunk 0.
+- **Implementation shape:** Implement the approved graph and unit-stability prerequisites before enabling activation; split an additional compile-safe prerequisite slice if needed. Revalidate under the common protocol; one transaction for old/new statuses, audit and response. Repeat-safe transitions; no reactivation.
 - **Validation:** Compile; direct/indirect/concurrent-cycle tests, simultaneous version activation, work-order-reference preservation, security/contract/pair regressions.
 - **Stop condition:** No BOM endpoint remains 501; database and application invariants agree.
 

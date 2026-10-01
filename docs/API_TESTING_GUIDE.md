@@ -39,9 +39,10 @@ DIR=pgsql make env-up
 
 ## Authentication
 
-All 41 registered business operations require an authorized bearer access
-token. Eight POS terminal and shift operations are implemented; the two receipt
-lookups remain authenticated `501 NOT_IMPLEMENTED` placeholders. Add
+All 43 registered business operations require an authorized bearer access
+token. Eight POS terminal/shift operations and both scoped receipt lookups are
+implemented; receipt-generation and refund writes remain authenticated
+`501 NOT_IMPLEMENTED` placeholders. Add
 `-H "Authorization: Bearer ${LITERP_ACCESS_TOKEN}"` to protected curl
 examples below. `GET /` and `GET /health/live` are the only public probes;
 `/metrics`, `/health/ready`, and `/health/db` require an operator or service

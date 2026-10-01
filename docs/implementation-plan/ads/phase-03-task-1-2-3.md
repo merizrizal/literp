@@ -6,6 +6,12 @@
 
 ---
 
+### Current-status and alignment note
+
+This is a historical design baseline. The [Phase 03 plan](../03-order-inventory-flow.md) records delivered command transactions, durable idempotency/audit and stock queries; old signatures, missing-file observations and proposed migrations below are not current implementation instructions. Do not replay completed chunks. Later authentication/POS contracts supersede the original unauthenticated caller assumptions. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
+
+The no-oversell requirement remains valid, but a transaction plus availability query does not prove safety across competing orders. Shared stock/reservation serialization and concurrent-writer validation are explicitly owned by the proposed [05.6 prerequisite](phase-05-task-6.md#shared-inventory-serialization-prerequisite), or a separately authorized earlier safety slice. Do not infer this guarantee from the Phase 03 completion checkmarks.
+
 ### I. Overview and Contract
 
 This ADS covers three ordered Phase 03 tasks:

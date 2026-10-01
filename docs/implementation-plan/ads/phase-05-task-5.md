@@ -12,7 +12,9 @@
 
 ### I. Overview and Contract
 
-Task 05.5 owns production execution records, not stock effects. Task 05.4 supplies versioned, immutable executable BOMs; Task 05.6 owns material consumption, finished-goods movements, made-to-stock, and later made-to-order integration. Completing a run here must not imply that stock was received or consumed.
+Task 05.5 owns production execution records, not stock effects. Task 05.4 must supply implemented, accepted immutable executable BOM and unit-interpretation contracts; its ADS alone is not that dependency. Task 05.6 owns material consumption, finished-goods movements, made-to-stock, and later made-to-order integration. Completing a run here must not imply that stock was received or consumed.
+
+**Aligned cross-task proposal:** 05.5 initially supports execution-only API work orders. If the separate-posting design in [05.6](phase-05-task-6.md) is approved and enabled, new policy-1 orders expose independent run-completion and inventory-posting states and cannot close until every completed run is POSTED. Existing policy-null execution-only orders retain their original closure semantics; legacy records remain read-only. This is a proposed compatibility contract, not approval to enable posting. Atomic complete-and-post would require revising both ADSs before implementation.
 
 #### Proposed operation matrix
 
@@ -42,7 +44,7 @@ Read endpoints are a supporting scope addition: clients need IDs/current state a
 - **Numbers:** exact decimal JSON values; maximum three fractional digits and `NUMERIC(12,3)` range, through `999999999.999`. Planned quantity must be positive; output and scrap nonnegative with a strictly positive sum. Reject nonfinite, overflow and excess precision rather than silently round. Use decimal-safe parsing/BigDecimal and proxy-compatible decimal strings internally, not floating-point arithmetic.
 - **Times:** planning timestamps are RFC 3339 with explicit offset, normalized to UTC; `plannedEnd >= plannedStart`. Past plans are allowed. Actual start/end/run date are server-derived UTC values. Existing timestamp-without-time-zone columns are interpreted as UTC, subject to legacy confirmation in Chunk 0.
 - **Read work order:** IDs, number, pinned BOM/version/product/base-UOM snapshot, location, quantities, lifecycle, planned/actual timestamps, notes, nullable legacy attribution, `recordOrigin`, and aggregate output/scrap/yield summary. Do not embed an unbounded runs array.
-- **Read run:** `runId`, parent ID, status, run date, operator subject/issuer, start/completion attribution and times, good output, scrap, and yield. New IN_PROGRESS rows store zero output/scrap as required by existing NOT NULL columns; return null yield until completion.
+- **Read run:** `runId`, parent ID, status, run date, operator subject/issuer, start/completion attribution and times, good output, scrap, and yield. New IN_PROGRESS rows store zero output/scrap as required by existing NOT NULL columns; return null yield until completion. When 05.6 is enabled, work-order/run reads add its policy/posting state and compact summary. COMPLETED never means POSTED; excluded history is HISTORICAL_UNMANAGED, not an automatic UNPOSTED backlog.
 - **Lists:** `page` default 0, `size` default 20/max 100; work-order filters `locationId`, `productId`, `status`; run filter `status`. Allowlist sorting and add ID tie-breakers. Count and row queries use identical location/filter predicates.
 
 #### Proposed lifecycle and yield rules
@@ -55,7 +57,7 @@ Read endpoints are a supporting scope addition: clients need IDs/current state a
 | IN_PROGRESS work order | Cancel | No runs, including no completed runs | CANCELLED; preserve start and record end/event |
 | IN_PROGRESS work order | Start run | No open run; product/location still eligible | One IN_PROGRESS run; parent unchanged |
 | IN_PROGRESS run | Complete run | Parent IN_PROGRESS; positive total attempted output | COMPLETED; immutable good/scrap results |
-| IN_PROGRESS work order | Complete | At least one completed run and no open run | COMPLETED; actual quantity = sum of completed good output |
+| IN_PROGRESS work order | Complete | At least one completed run and no open run; under 05.6 stock policy, all completed runs must also be POSTED | COMPLETED; actual quantity = sum of completed good output |
 | COMPLETED/CANCELLED work order | Any new transition | Terminal state | Conflict; durable replay and identical no-op repeats described below remain allowed |
 
 - At most one IN_PROGRESS run per work order; multiple sequential completed runs are allowed.
@@ -141,7 +143,7 @@ Create a revision after the then-current single Alembic head, not necessarily th
 - Add append-only manufacturing execution events with target IDs, transition, server timestamp, subject/issuer/organization, command reference and safe cancellation reason. Use database append-only protection following established migration conventions; no public event mutation route.
 - Add a manufacturing execution command ledger with unique organization/issuer/subject/operation/target/key scope, canonical request fingerprint, persisted response status/body and completion timestamps. If Task 05.4 already introduced a compatible manufacturing ledger, reuse it only after verifying its identity/locking/schema contract; otherwise keep an execution-specific ledger, not a second contradictory definition of the same table.
 - Preserve `operator_id` legacy labels. Store authenticated subjects separately without truncating them to the existing 36-character column; new-run attribution must never depend on that legacy label.
-- Keep legacy `material_consumed` unchanged and null for new runs. It does not prove inventory posting. No movement, reservation, order linkage or stock-rollup write belongs in this migration/API.
+- Keep legacy `material_consumed` unchanged and null for new 05.5 runs. It does not prove inventory posting. Completed result quantities, recipe snapshot and execution attribution remain immutable; do not implement a whole-row guard that accidentally prevents the proposed 05.6 posting-owned enrichment. Under that separately approved task only, allow one transactional null-to-versioned `material_consumed` projection linked to immutable posting lines, without changing execution facts. No movement, reservation, order linkage or stock-rollup write belongs in this migration/API.
 
 **Legacy safety proposal:** expose historical work orders/runs read-only with nullable provenance. Reject mutations of `LEGACY` orders with 409 and a documented remediation requirement; no silent adoption. Validate all rows before adding global checks/indexes, report offending IDs/counts without configuration, and stop on inconsistent history. Adoption of existing planned/in-progress orders requires a separately approved audited procedure. Existing completed seed records, material JSON, references and movement history must survive unchanged.
 
@@ -169,7 +171,7 @@ Create a revision after the then-current single Alembic head, not necessarily th
 - Lock scoped parent, claim command, then lock run. After authorization, handle saved replay or identical completed-result no-op before requiring an IN_PROGRESS parent/run; this permits safe completion retries after parent closure. For a new transition enforce parent ownership, current state, exact decimals and total > 0. Allow recording/closing already-started work even if product/location was later deactivated; otherwise deactivation could strand history. New starts remain blocked.
 - Calculate prospective completed good total under the parent lock; reject overflow before writing. Persist immutable output/scrap, completion actor/time, event and command response atomically.
 - Scoped read summaries aggregate completed runs only in one consistent SQL statement/snapshot. A live unfinished run contributes neither zero-quality output nor an undefined percentage disguised as zero.
-- Work-order completion separately requires at least one completed run and none open, recomputes totals under the same lock, stores actual quantity and actual end, and records closure. Do not automatically complete when the plan is reached.
+- Work-order completion separately requires at least one completed run and none open, recomputes totals under the same lock, stores actual quantity and actual end, and records closure. Do not automatically complete when the plan is reached. Once 05.6 enables policy-1 orders, recheck all completed-run postings under this parent lock before closure; a shortage leaves the order IN_PROGRESS and the physical run COMPLETED/UNPOSTED. Execution-only policy-null closure is unchanged. Posting has its own actor/event/command and must not rewrite completion events or cached completion responses.
 
 #### Cancel and retry
 
@@ -203,13 +205,13 @@ Use existing public codes; `NOT_IMPLEMENTED` is the existing placeholder convent
 ### VI. Security, Integrity, Idempotency, and Cleanup
 
 - **Security:** enforce grants in repository SQL as well as middleware; no unscoped lookup or cached-response bypass. Keep principal identity separate from request JSON. Test wrong issuer/organization, missing capability, service/non-operator run attempts, and guessed parent/run combinations.
-- **Integrity:** immutable pinned recipe and finished/base-UOM interpretation; immutable completed results; parent-serialized lifecycle; database open-run uniqueness; event and domain changes commit together. Summary arithmetic uses exact completed quantities.
+- **Integrity:** immutable pinned recipe and finished/base-UOM interpretation require actual 05.4/catalog safeguards, not just immutable BOM rows. Completed result quantities and execution provenance are immutable; the only proposed later enrichment is 05.6's posting-owned material projection. Parent-serialized lifecycle, database open-run uniqueness, and transactional event/command writes remain mandatory. Summary arithmetic uses exact completed quantities.
 - **Lock order:** agree cross-domain BOM/product/location ordering with actual Task 05.4 code before planning implementation. Use work-order → command → run for existing execution records; avoid a command-first/parent-first inversion between endpoints. Parentless plan locking must not introduce a reverse dependency into BOM activation.
 - **Idempotency:** all six commands require durable keys; scope includes issuer as well as subject/organization. Normalize semantic payload; don't include request ID, generated timestamp or authorization grants in fingerprints. Recheck current grants before replay. Preserve original body/status, but emit the current HTTP request ID.
 - **Audit/privacy:** track starter and completer independently; do not fabricate historical identities or truncate subjects. Log safe IDs/outcomes, never credentials, command response bodies, operator metadata dumps or raw notes.
 - **Migration/cleanup:** use an approved disposable test database and user-approved Python environment. Never reset a previously migrated target. Cleanup only test-created records in FK-safe order using approved fixture conventions; append-only event cleanup may require transaction rollback or an explicitly isolated database, not disabled production protections.
 - **Rollback:** prefer forward corrective migrations after real execution history exists. Do not delete production history to roll back a feature. Disabling routes does not undo completed runs.
-- **Task 05.6 boundary:** stable run/parent IDs, immutable results and recipe snapshot are integration inputs only. No current event/material JSON proves stock posting. Task 05.6 must design separate exactly-once posting/reconciliation and an explicit cutover policy for pre-existing completed runs; never replay all completed history into inventory automatically.
+- **Task 05.6 boundary:** stable run/parent IDs, immutable execution results and recipe snapshot are integration inputs only. Its proposed separate posting ledger, policy marker, closure gate and posting-owned material projection are the aligned extension, subject to approval and a common lock order. Only that immutable posting/line linkage proves managed posting. Never replay completed history or reinterpret old completion retries as stock commands.
 - **Deferred:** costing, lots/serial allocation, scheduling resources, reservations, quality disposition, abort/correct/reopen, recursive BOM explosion, UOM conversion, order linkage and deployment acceptance.
 
 ### VII. Validation Strategy
@@ -301,7 +303,7 @@ Every chunk requires formatter/style checks, targeted validation, symbol checks,
 - **Symbols to add/change:** `completeProductionRun`, `completeWorkOrder`, exact result validation and prospective aggregate checks.
 - **Implementation shape:** Record immutable run quantities/completer, then allow explicit work-order closure only with completed runs/no open run. Reuse read summary arithmetic; preserve no-inventory boundary. All newly called helpers exist in this slice.
 - **Validation:** Compile; focused arithmetic/state/replay/rollback repository and HTTP tests; weighted yield, all-scrap/partial/over-plan, duplicate/different result, overflow, complete/start races and inactive-after-start closure.
-- **Stop condition:** Entire execution loop works with consistent history and no stock posting; all six writes leave no 501 business placeholders.
+- **Stop condition:** Entire execution-only loop works with consistent history and no stock posting; all six writes leave no 501 business placeholders. No stock-policy marker is enabled here. When 05.6 is integrated, retain tests distinguishing policy-null closure from policy-1 POSTED-before-close, and immutable execution facts from posting-owned enrichment.
 
 #### Chunk 8: Integrated Acceptance And Documentation
 - **Goal:** Prove the Task 05.5 done-when criteria and explicitly record deferred inventory/external acceptance.
