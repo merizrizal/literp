@@ -137,10 +137,10 @@ It also exposes five utility routes outside `/api/v1`:
 
 - `GET /pos/receipts/by-number/{receiptNumber}` — implemented, scoped through the receipt's sales-order location.
 - `GET /pos/orders/{salesOrderId}/receipts` — implemented, bounded scoped list; legacy receipts remain readable.
-- `POST /pos/orders/{salesOrderId}/receipts` — authenticated `501 NOT_IMPLEMENTED`.
-- `POST /pos/receipts/{receiptId}/refunds` — authenticated `501 NOT_IMPLEMENTED`.
+- `POST /pos/orders/{salesOrderId}/receipts` — implemented human-only issuance with exact settlement, persisted order-location scope, immutable snapshot, durable replay and one API-issued receipt per order; original shift may be closed.
+- `POST /pos/receipts/{receiptId}/refunds` — implemented human-owner refund into an open matching-location/currency shift; payment/receipt caps, CASH availability and durable replay are enforced. Local ledger only, not external settlement.
 
-Implemented API operations: `41` (`43` registered, including two write placeholders). Receipt/refund persistence is present, but neither write workflow is enabled.
+Implemented API operations: `43` (all registered operations). Issuance and append-only refunds are enabled; reconciliation retains original CASH captures, including fully refunded payments, and subtracts CASH outflows by refund shift exactly once. Closed snapshots are not recalculated.
 
 ## Database and Seed Data
 
@@ -462,7 +462,6 @@ Order-process commands return a single envelope:
 - `404` not found (including hidden scoped resources)
 - `409` conflict or invalid state transition
 - `500` internal failure
-- `501` registered receipt-generation/refund behavior not implemented
 - `503` dependency timeout or database health failure
 
 ## Delete Strategy
@@ -491,6 +490,6 @@ Important distinction:
 - confirm, fulfill, and cancel are transactional, but shared stock-writer concurrency protection remains a proposed cross-domain follow-up
 - order-process lists use top-level `data` and `pagination`; response normalization is no longer an open gap
 - order fulfillment writes `from_location_id` as the source location and leaves `to_location_id` null for sales `OUT` movements
-- receipt persistence and scoped lookup are implemented in Phase 05.3; receipt generation remains an authenticated 501 placeholder
+- receipt persistence, scoped lookup and immutable issuance are implemented in Phase 05.3; issuance rejects underpayment/excess tender and requires a human with the persisted location grant
 - refunds are owned by Phase 05 (`05.3 Receipt And Refund API`)
 - partial fulfillment remains deferred until a later phase

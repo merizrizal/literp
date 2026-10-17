@@ -17,7 +17,10 @@ headers {
 docs {
   operationId: generatePosReceipt
   request: POST /api/v1/pos/orders/{salesOrderId}/receipts
-  status: Authenticated placeholder (501 NOT_IMPLEMENTED); fulfilled POS receipt issuance is not implemented yet.
+  status: Implemented (201); issues one immutable receipt for a fulfilled attributed POS order.
+  Requires a human issuer, the order-location grant, and exact payment settlement; the original shift may be closed.
+  The same key replays the original response. A different key after issuance returns 409.
+  Internal local receipt only; no tax/fiscal document, printing or external delivery is claimed.
 }
 
 settings {

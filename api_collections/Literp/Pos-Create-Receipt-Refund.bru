@@ -26,7 +26,9 @@ body:json {
 docs {
   operationId: createPosReceiptRefund
   request: POST /api/v1/pos/receipts/{receiptId}/refunds
-  status: Authenticated placeholder (501 NOT_IMPLEMENTED); receipt refunds are not implemented yet.
+  status: Implemented (201); append-only local refund with an original API-issued receipt payment.
+  Requires the human owner of an open matching-location/currency refund shift; amount is bounded by payment, receipt and CASH drawer availability.
+  Same-key retries replay after close; changed payload conflicts. No inventory return or external processor settlement is performed.
 }
 
 settings {

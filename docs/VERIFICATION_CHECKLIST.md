@@ -81,16 +81,16 @@ Use this checklist to validate the current implementation, docs, and testing ass
 - [x] `GET /api/v1/pos/terminals/{terminalId}/current-shift`
 - [x] `POST /api/v1/pos/shifts/{shiftId}/close`
 
-### POS Receipt Reads and Write Placeholders
+### POS Receipt Reads, Issuance and Refunds
 
-Source/contract inventory below reflects Task 05.3 Chunks 1–3, not a fresh runtime smoke:
+Current source/contract inventory includes issuance, refunds and reconciliation. Production-router and repository tests passed; external Bruno smoke is not claimed:
 
 - [x] `GET /api/v1/pos/receipts/by-number/{receiptNumber}` implements scoped lookup
 - [x] `GET /api/v1/pos/orders/{salesOrderId}/receipts` implements scoped pagination
-- [x] `POST /api/v1/pos/orders/{salesOrderId}/receipts` remains authenticated `501 NOT_IMPLEMENTED`
-- [x] `POST /api/v1/pos/receipts/{receiptId}/refunds` remains authenticated `501 NOT_IMPLEMENTED`
+- [x] `POST /api/v1/pos/orders/{salesOrderId}/receipts` implements scoped, human-only immutable issuance with exact settlement and durable replay
+- [x] `POST /api/v1/pos/receipts/{receiptId}/refunds` implements scoped human-owner local refunds with caps, drawer availability and reconciliation
 
-Total API operations to verify: `43` (`41` implemented; `2` write placeholders)
+Total API operations to verify: `43` (all implemented)
 
 ## Data and Lifecycle Rules
 
@@ -148,7 +148,7 @@ Total API operations to verify: `43` (`41` implemented; `2` write placeholders)
 - [ ] `MasterDataHttpIntegrationTest` covers all master-data endpoints
 - [ ] `MasterDataHttpIntegrationTest` covers master-data error and validation behavior
 - [x] `AuthenticationHttpIntegrationTest` covers authenticated terminal-to-order-to-close and post-close fulfillment
-- [x] `PosOperationsContractTest` defines 501 expectations only for receipt generation and refund writes
+- [x] `PosOperationsContractTest` verifies no POS operation advertises 501 and write handlers deny missing authorization context
 
 ## Seed Data Verification
 
@@ -176,7 +176,7 @@ Total API operations to verify: `43` (`41` implemented; `2` write placeholders)
 - [ ] `docs/QUICK_START.md` matches current startup flow
 - [x] `docs/API_IMPLEMENTATION.md` reflects actual handler behavior
 - [x] `docs/API_TESTING_GUIDE.md` includes order-process testing
-- [x] `docs/ENDPOINTS_OVERVIEW.md` lists 43 registered operations (41 implemented; 2 write placeholders)
+- [x] `docs/ENDPOINTS_OVERVIEW.md` lists 43 registered and implemented operations
 - [ ] `docs/CI_VERIFICATION.md` documents required CI checks
 - [ ] `docs/LOCAL_RESET.md` separates non-destructive and destructive reset paths
 - [ ] `docs/IMPLEMENTATION_SUMMARY.md` reflects seed data and Bruno assets
@@ -186,9 +186,10 @@ Total API operations to verify: `43` (`41` implemented; `2` write placeholders)
 ## Known Gaps to Keep in Mind
 
 - [ ] Verify shared stock/reservation concurrency safeguards before manufacturing posting
-- [ ] Finish receipt issuance/refund behavior and integrated acceptance
+- [x] Receipt/refund/reconciliation local integrated acceptance passed; external provider/deployment acceptance is separate
 - [ ] Resolve manufacturing policy, catalog unit stability, BOM graph serialization, and historical cutover
-- [ ] Complete repository request correlation and externally verified CI required checks
+- [x] Repository request correlation verified through concurrent HTTP/proxy and direct scope paths
+- [ ] Externally verify CI required-check enforcement
 - [ ] Obtain provider/deployment and authenticated external smoke evidence
 
 The old envelope/transaction/non-null OUT caveats were superseded by Phase 03/04 work. See the [coverage review](implementation-plan/ADS_COVERAGE_REVIEW.md); this checklist is not proof that a new test run passed.

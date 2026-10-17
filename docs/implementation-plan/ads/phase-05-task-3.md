@@ -2,9 +2,33 @@
 
 **Source:** [Phase 05, task 05.3](../05-pos-manufacturing-expansion.md#053-receipt-and-refund-api), following [05.2 POS Terminal And Shift API](phase-05-task-2.md).
 
-**Status:** Partially implemented: Chunks 1–3 supplied write contracts/stubs, receipt/refund persistence and both scoped receipt reads at `1ed2617`. Receipt issuance and refund writes remain authenticated `501 NOT_IMPLEMENTED`. This documentation review does not approve remaining financial decisions or deployment. Original proposal/evidence text below is retained as drafting history where superseded by these completed slices; confirm current code before continuation.
+**Status:** Local receipt/refund delivery implemented and verified: scoped reads, immutable issuance, append-only refunds and refund-aware reconciliation are enabled. All 43 registered operations are implemented; no POS write remains a 501. Full verification evidence is recorded in the review repair ledger. External provider/deployment/Bruno acceptance is not claimed. Original proposal/evidence below remains historical where superseded by the approved decisions and completed implementation.
 
-**Continuation boundary:** Do not recreate migration `c7a8e2f4d6b1_pos_receipt_refund_foundation.py`, duplicate registered operations, or rerun completed chunks. Reconcile remaining decisions, then authorize the next unfinished chunk separately. See [coverage and requirements review](../ADS_COVERAGE_REVIEW.md).
+**Continuation boundary:** Do not recreate migration `c7a8e2f4d6b1_pos_receipt_refund_foundation.py`, duplicate registered operations, or rerun completed chunks. The maintainer has approved the recommended remaining financial decisions and continuation of the review repairs. The remaining local financial slices are implemented in the working tree. Obtain independent review; stop before 05.4. No manufacturing or external-provider work is authorized by this continuation. See [review repair status](../REVIEW_REPAIR_STATUS.md).
+
+### Approved financial decisions for continuation
+
+The maintainer approved applying the best recommendations during review repair. These decisions supersede conflicting historical proposal/open-confirmation text below:
+
+- Keep the published paths, capabilities and schemas; issuance and refunds are human-only. Issuance needs `pos.receipt.write` and the persisted order-location grant, not ownership of the original sale shift. No service-principal issuance or supervisor override is enabled.
+- One API-issued receipt per fulfilled, attributed POS order. Use `RCPT-YYYYMMDD-<sequence>` in UTC, zero tax, exact line totals, fractional summed `totalItems`, immutable order/line/payment/shift/actor snapshots and legacy-compatible metadata already provided by migration `c7a8e2f4d6b1`.
+- Require **exact settlement** before issuance: captured payments must equal the sale total. Reject underpayment and noncash overcapture with 409, preserving all existing payments. Do not silently allocate excess tender, clamp receipt balances, or imply that excess-tender recovery exists. A later dedicated recovery contract is needed for an overcaptured legacy sale.
+- New refund writes operate only on API-issued receipts with trusted currency/snapshot metadata. Historical receipts remain readable; no guessed historical attribution is introduced. Refunds are bounded by both the selected payment's remaining capture and the receipt's remaining sale value, so receipt `netAmount` cannot become negative.
+- Require a mandatory bounded nonblank reason and the human owner of an open reconcilable refund shift, including noncash refunds. The shift must match sale location/currency. A later shift is allowed; already-closed reconciliation snapshots never change.
+- Preserve terminal → shift → order → payment → receipt → command-ledger lock ordering. Issuance also locks the original terminal/shift before the order: otherwise inserting the receipt's shift foreign key could invert capture/close lock ordering. Cash refunds cannot exceed available drawer cash. Reconciliation counts original captures even after `REFUNDED` status and subtracts refunds on the refund shift exactly once.
+- Refunds are append-only local financial records, not evidence of external processor settlement. No restock, order cancellation, paid-unfulfilled-order recovery, fiscal credit note, tax engine or external gateway integration is included.
+- Every retry rechecks current principal eligibility and persisted resource scope before replay. An already completed refund may replay after its shift closes, but no new refund may write to a closed shift.
+
+### Remaining implementation ladder and acceptance
+
+| Slice | Behavior | Verification / stop condition |
+|---|---|---|
+| 4 (implemented) | Immutable receipt issuance through the existing repository/proxy/handler | Scoped HTTP issuance after shift close; exact settlement, fractional/split-payment snapshots, replay, concurrent duplicate prevention, rollback; generation alone loses 501 |
+| 5 (implemented) | Payment/receipt-bounded refund transaction | Partial/full/excess, actor/scope/currency/snapshot guards, CASH availability, independent-connection races, append-only enforcement and rollback passed |
+| 6 (implemented) | Refund API plus reconciliation | Production-router sell/fulfill/issue/partial/full refund flow, same/later-shift reconciliation, unchanged closed snapshots and refund-versus-close tests passed; refund 501 removed |
+| 7 (local verification complete) | Delivery-wide acceptance and documentation | Full Gradle/migration/OpenAPI checks, skip inspection, asset parity and diff review passed; fresh independent review and external acceptance remain separate |
+
+Slices 4–6 and local delivery verification are complete in the current working tree. Refund cleanup tests use only isolated test databases and transaction-local privileged fixture cleanup; production append-only triggers remain unchanged and normal DELETE rejection is asserted.
 
 **Evidence revision:** `f3c7e15`, branch `phase-05-task-3`, tracking `origin/phase-05-task-3`; working tree was clean before ADS creation. No fetch was performed.
 
@@ -25,9 +49,9 @@ Task 05.3 extends the existing POS adapter rather than creating a second order l
 
 The existing `PosReceipt` contract exposes the persisted receipt columns, permits a nullable historical `shiftId` and `receiptData`, bounds receipt numbers to 50 characters, and specifies paginated deterministic order lookup. These names and paths are concrete. Implementation must remove `501` only from operations that have working scoped behavior.
 
-#### Registered write contracts; behavior still pending
+#### Registered write contracts; both implemented locally
 
-The following paths, operation IDs and capabilities were published in Chunk 1. Remaining behavior/financial decisions require confirmation before replacing their 501 responses.
+The following paths, operation IDs and capabilities were published in Chunk 1. The approved financial decisions above govern continuation. Generation and refunds are implemented and locally tested with reconciliation.
 
 | Method/path | Registered operationId | Registered capability | Resource boundary |
 |---|---|---|---|
@@ -49,7 +73,7 @@ The following paths, operation IDs and capabilities were published in Chunk 1. R
 
 **Function Signature Contract (Concrete):**
 
-- `PosOperationsHandler.getPosReceiptByNumber(RoutingContext)` and `listPosReceiptsBySalesOrder(RoutingContext)` now delegate through `PosOperationsService` to scoped repository SQL. Only `generatePosReceipt` and `createPosReceiptRefund` call `respondNotImplemented`.
+- `PosOperationsHandler.getPosReceiptByNumber(RoutingContext)` and `listPosReceiptsBySalesOrder(RoutingContext)` now delegate through `PosOperationsService` to scoped repository SQL. `generatePosReceipt` now delegates through the same service boundary. `createPosReceiptRefund` also delegates through the proxy; no POS write handler is a stub.
 - `PosOperationsRepository.closePosShift(shiftId, closingBalance, idempotencyKey, actorSubject, organizationId, authorizedLocationIds): Single<JsonObject>` locks terminal then shift and snapshots expected cash.
 - `PosOperationsService` is a Vert.x Java proxy returning `Future<JsonObject>`; `PosOperationsServiceImpl` adapts repository `Single<JsonObject>` values.
 - `OrderProcessRepository.fulfillSalesOrder(orderId, createdBy, notes, idempotencyKey): Single<JsonObject>` requires `CONFIRMED`, fully captured value and fulfillable lines, then writes order/inventory state atomically.
@@ -125,15 +149,15 @@ Proposed additive persistence is one Alembic revision after the confirmed head. 
 1. Authenticate and require the exact operation capability. Empty location grants deny. Pass a defensive copy of authorized location IDs and handler-derived principal identity; never accept actor, organization, refund status, receipt number or generated totals from the body.
 2. Resolve receipt/order scope through persisted `sales_order.location_id`. Missing and out-of-scope IDs share the same 404. Apply authorization before returning an idempotent replay.
 3. Receipt reads parameterize identifiers and apply location grants in SQL. Order-list count and data queries use identical predicates and deterministic `receipt_date, receipt_id` ordering.
-4. Receipt issuance locks the sales order, verifies POS attribution/fulfilled state and snapshot consistency, then claims command idempotency, allocates the number, writes receipt/issuance metadata and stores the original response in one transaction.
+4. Receipt issuance locks the original terminal, shift and then sales order, verifies POS attribution/fulfilled state and snapshot consistency, then claims command idempotency, allocates the number, writes receipt/issuance metadata and stores the original response in one transaction.
 5. Refund lock order is terminal → refund shift → sales order → payment → receipt → POS command-ledger record. Recheck location, currency, owner, open state, payment ownership and remaining refundable amount under those locks. This preserves the 05.2 terminal/shift/order order and serializes refund versus close.
 6. Shift close uses terminal → shift locking and aggregates original attributed CASH captures with status `CAPTURED` or `REFUNDED`, then subtracts completed CASH refunds whose refund shift is the closing shift. A refund and close cannot both win after the same shift-state observation.
 
 #### Receipt issuance
 
 1. Validate `salesOrderId` and bounded `Idempotency-Key`; derive actor/organization/grants.
-2. In one transaction, lock the order and load `pos_order_context`, lines, payments and original shift metadata.
-3. Require `FULFILLED`, `POS`, trusted attribution, nonempty fully fulfilled lines, exact order/line total consistency, and captured-or-refunded original payments covering the sale total.
+2. In one transaction, scope the order, lock the original terminal/shift before the order, recheck persisted attribution, and load lines, payments and original shift metadata.
+3. Require `FULFILLED`, `POS`, trusted attribution, nonempty fully fulfilled lines, exact order/line total consistency, and attributed captured payments exactly equal to the sale total. Refuse underpayment and excess tender without rewriting payment history.
 4. Resolve matching command replay before attempting a second issuance. A changed request/key collision returns 409; a separately keyed second issue returns 409 under the API-issued uniqueness invariant.
 5. Allocate the number from the sequence; snapshot exact decimal values and server timestamps; insert the receipt and issuance marker.
 6. Store the same 201 payload in the POS command ledger and commit. A rollback leaves neither receipt nor completed command response.
@@ -147,9 +171,9 @@ Proposed additive persistence is one Alembic revision after the confirmed head. 
 #### Refund and adjustment
 
 1. Validate IDs, positive two-decimal amount, reason length and idempotency key; require an eligible human principal.
-2. Lock and verify the refund terminal/shift first, then the receipt order, selected payment and receipt. Require matching order, location and currency; source payment must represent a prior capture and have sufficient unrefunded amount.
-3. Resolve authorized replay only after all current authorization/scope checks. Changed normalized payload conflicts.
-4. For CASH, compute available drawer cash from original attributed captures minus prior refund outflows on this refund shift. Reject insufficient cash. Noncash records do not alter drawer totals and make no external-settlement claim.
+2. Lock and verify the refund terminal/shift first, then the receipt order, selected payment and receipt. Recheck human ownership, resource scope, matching order/location/currency before replay.
+3. Resolve authorized replay only after those current checks, including after shift close. Changed normalized payload conflicts.
+4. For a new refund, require an open reconcilable shift, trusted API-issued receipt and original captured payment; enforce payment and receipt remaining-value caps. For CASH, compute available drawer cash from original attributed captures minus prior refund outflows on this refund shift. Reject insufficient cash. Noncash records do not alter drawer totals and make no external-settlement claim.
 5. Insert the append-only refund row. If cumulative refunds equal the payment amount, update payment status to `REFUNDED`; partial refunds retain `CAPTURED`.
 6. Return the immutable refund plus the receipt's newly derived adjustment summary; store the response atomically in the POS command ledger.
 7. Never alter order/line fulfillment, reservations, inventory movements, original receipt totals, original shift attribution, or a closed shift snapshot.
@@ -205,7 +229,7 @@ Use Java 25 and an explicitly approved disposable PostgreSQL database. Before ex
 
 The implementation must proceed through `chunked-implementation`. Do not implement the full feature in one pass.
 
-Chunks 1–3 are recorded implemented; their former proposed paths/contracts must be reconciled with current code, not recreated. Remaining behavior symbols and decisions require explicit approval. Each behavior chunk includes its direct tests and ends compile-safe. Multi-file exceptions are called out where Vert.x proxy codegen, OpenAPI registration and route-policy parity make an atomic slice necessary.
+The following is the historical execution ladder. The local delivery is now implemented and verified in the working tree under the maintainer's approval; do not replay completed chunks. Each implementation slice included focused tests before full verification. The multi-file exceptions below explain the generated proxy/contract boundary, not permission to begin later manufacturing work.
 
 #### Chunk 0: Discovery and Integration Confirmation
 - **Goal:** Confirm task authorization and settle the receipt/refund business contract before edits.
@@ -272,7 +296,7 @@ Chunks 1–3 are recorded implemented; their former proposed paths/contracts mus
 
 ### IX. Handoff to `chunked-implementation`
 
-**Historical prompts:** Chunks 1–3 are now implemented. Use these only as the original design record; continuation must inspect the current boundary and obtain authorization for the next unfinished chunk, not execute Chunk 1 again.
+**Historical prompts:** Local receipt/refund delivery is now implemented. Use these only as the original design record; do not replay completed work or reinterpret these old prompts as a new approval gate. Current next actions are independent review and the separate external acceptance evidence recorded in the repair ledger.
 
 Original agent prompt:
 
@@ -303,4 +327,4 @@ After editing, run targeted validation and show git diff. Report risks/skips and
 
 This design makes receipt issuance a snapshot of the existing fulfilled POS order and makes refunds append-only adjustments instead of destructive receipt/order rewrites. It closes the 05.2 reconciliation gap by attributing cash outflow to the shift performing the refund while preserving already-closed snapshots.
 
-Reconfirm the recorded Chunks 1–3 boundary and settle remaining issuance/refund financial decisions before authorizing the next unfinished chunk. Do not use the original Chunk 1 handoff above to replay completed work. Implementation must stop after Task 05.3 acceptance. Task 05.4 BOM work and any deployment/external-provider acceptance require separate authorization.
+The approved local issuance/refund/reconciliation delivery is complete in the current candidate; obtain fresh independent review and retain explicit external acceptance limitations. Do not replay the historical chunk prompts above. Task 05.4 BOM work and any deployment/external-provider acceptance require separate authorization.

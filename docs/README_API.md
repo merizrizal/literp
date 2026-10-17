@@ -73,8 +73,7 @@ This directory documents the current implementation on this branch.
 - Vert.x `5.2.1`
 - Java `25`
 - SCRAM client `3.4` for PostgreSQL SASL/SCRAM authentication
-- 41 implemented API endpoints across 6 API domains, including scoped receipt lookups
-- 2 authenticated POS receipt-generation/refund write placeholders (`501 NOT_IMPLEMENTED`), for 43 registered operations
+- 43 implemented API operations across 6 API domains, including scoped receipt lookups, immutable issuance, and audited local refunds with shift reconciliation
 - 5 utility endpoints (two public probes and three restricted operational routes)
 - deterministic seed data through Alembic
 - synchronized authenticated Bruno collection and OpenAPI contracts

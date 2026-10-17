@@ -14,7 +14,7 @@ class UnitOfMeasureHandler(private val uomService: UnitOfMeasureService) : BaseH
 
         uomService.listUnitOfMeasures(query.page, query.size, query.sort)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM: ${error.message}", error) }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list UOM", error) }
     }
 
     fun createUnitOfMeasure(context: RoutingContext) {

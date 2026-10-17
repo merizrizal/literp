@@ -477,18 +477,8 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
                                         Single.error<JsonObject>(PosOperationsConflict("POS shift is not reconciliable"))
                                     shiftRow.getString("status") != "OPEN" ->
                                         Single.error<JsonObject>(PosOperationsConflict("POS shift is not open"))
-                                    else -> connection.preparedQuery(
-                                        """
-                                        SELECT COALESCE(SUM(p.amount), 0) AS captured_cash
-                                        FROM pos_payment_context c
-                                        JOIN payment p ON p.payment_id = c.payment_id
-                                        WHERE c.shift_id = $1
-                                          AND p.status = 'CAPTURED'
-                                          AND p.payment_method = 'CASH'
-                                        """.trimIndent()
-                                    ).rxExecute(Tuple.of(normalizedShiftId)).flatMap { cashResult ->
-                                        val capturedCash = cashResult.first().getBigDecimal("captured_cash")
-                                        val expectedCash = shiftRow.getBigDecimal("opening_balance").add(capturedCash)
+                                    else -> shiftCashMovement(connection, normalizedShiftId).flatMap { cashMovement ->
+                                        val expectedCash = shiftRow.getBigDecimal("opening_balance").add(cashMovement)
                                         if (expectedCash < BigDecimal.ZERO || expectedCash > BigDecimal("999999999999.99")) {
                                             Single.error<JsonObject>(PosOperationsConflict("Expected cash exceeds supported range"))
                                         } else {
@@ -567,6 +557,101 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
                     Single.just(mapTerminalRow(result.first()))
                 }
             }
+    }
+
+    fun generatePosReceipt(
+        salesOrderId: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        organizationId: String,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> = Single.defer {
+        val orderId = requiredUuid(salesOrderId, "salesOrderId")
+        val key = requiredValue(idempotencyKey, "Idempotency-Key", 128)
+        val actor = requiredValue(actorSubject, "actorSubject", 255)
+        val organization = requiredValue(organizationId, "organizationId", 255)
+        val locations = authorizedLocationIds.toSet()
+        validateScope(null, locations)
+        val fingerprint = requestFingerprint("generatePosReceipt", orderId)
+        inTransaction { connection ->
+            scopedReceiptOrder(connection, orderId, locations, false).flatMap { initial ->
+                val shiftId = initial.getString("shift_id")
+                    ?: return@flatMap Single.error<JsonObject>(PosOperationsConflict("Receipt requires an attributed POS order"))
+                // Match capture/close lock order, including the receipt's shift foreign key.
+                selectScopedTerminalByShiftForUpdate(connection, shiftId, locations)
+                    .flatMap { selectPosShiftForUpdate(connection, shiftId) }
+                    .flatMap { scopedReceiptOrder(connection, orderId, locations, true) }
+                    .flatMap { order ->
+                        if (order.getString("shift_id") != shiftId) {
+                            return@flatMap Single.error<JsonObject>(PosOperationsConflict("POS order attribution changed"))
+                        }
+                        claimPosCommand(connection, organization, actor, "generatePosReceipt", orderId, key, fingerprint)
+                            .flatMap { command ->
+                                command.responsePayload?.let { Single.just(it) }
+                                    ?: insertIssuedReceipt(connection, order, actor).flatMap { receipt ->
+                                        storePosCommand(connection, organization, actor, "generatePosReceipt", orderId,
+                                            key, fingerprint, 201, receipt)
+                                    }
+                            }
+                    }
+            }
+        }.onErrorResumeNext { error ->
+            Single.error(if (isUniqueViolation(error)) PosOperationsConflict("Receipt already issued or receipt number conflict") else error)
+        }
+    }
+
+    fun createPosReceiptRefund(
+        receiptId: String, paymentId: String, amount: String, shiftId: String, reason: String,
+        idempotencyKey: String, actorSubject: String, organizationId: String,
+        authorizedLocationIds: Set<String>
+    ): Single<JsonObject> = Single.defer {
+        val request = RefundCommand(
+            requiredUuid(receiptId, "receiptId"), requiredUuid(paymentId, "paymentId"), parseMoney(amount, "amount"),
+            requiredUuid(shiftId, "shiftId"), requiredValue(reason, "reason", 500),
+            requiredValue(idempotencyKey, "Idempotency-Key", 128), requiredValue(actorSubject, "actorSubject", 255),
+            requiredValue(organizationId, "organizationId", 255), authorizedLocationIds.toSet()
+        )
+        if (request.amount.signum() <= 0) throw PosOperationsValidation("amount must be positive")
+        validateScope(null, request.locations)
+        inTransaction { connection ->
+            selectScopedTerminalByShiftForUpdate(connection, request.shiftId, request.locations).flatMap { terminal ->
+                selectPosShiftForUpdate(connection, request.shiftId).flatMap { shift ->
+                    if (shift.getString("operator_id") != request.actor) {
+                        return@flatMap Single.error<JsonObject>(PosOperationsScopeViolation("POS shift owner mismatch"))
+                    }
+                    scopedRefundReceipt(connection, request.receiptId, request.locations, false).flatMap { initial ->
+                        scopedReceiptOrder(connection, initial.getString("sales_order_id"), request.locations, true).flatMap { order ->
+                            connection.preparedQuery("SELECT payment_id, sales_order_id, payment_method, amount, status FROM payment WHERE payment_id = $1 FOR NO KEY UPDATE")
+                                .rxExecute(Tuple.of(request.paymentId)).flatMap { payments ->
+                                    if (payments.size() == 0 || payments.first().getString("sales_order_id") != order.getString("sales_order_id")) {
+                                        return@flatMap Single.error<JsonObject>(Exception(ErrorCodes.fromStatus(404)))
+                                    }
+                                    scopedRefundReceipt(connection, request.receiptId, request.locations, true).flatMap { receipt ->
+                                        if (receipt.getString("sales_order_id") != order.getString("sales_order_id")) {
+                                            return@flatMap Single.error<JsonObject>(PosOperationsConflict("Receipt order changed"))
+                                        }
+                                        if (terminal.getString("location_id") != order.getString("location_id") ||
+                                            shift.getString("currency") != receipt.getString("currency") ||
+                                            order.getString("currency") != receipt.getString("currency") ||
+                                            order.getString("status") != "FULFILLED" || order.getString("sales_channel") != "POS") {
+                                            return@flatMap Single.error<JsonObject>(PosOperationsConflict("Refund shift location or currency mismatch"))
+                                        }
+                                        val fingerprint = requestFingerprint(request.paymentId, request.amount.toPlainString(), request.shiftId, request.reason)
+                                        claimPosCommand(connection, request.organization, request.actor, "createPosReceiptRefund", request.receiptId, request.key, fingerprint)
+                                            .flatMap { command ->
+                                                command.responsePayload?.let { Single.just(it) }
+                                                    ?: refundLockedReceipt(connection, request, shift, receipt, payments.first()).flatMap { response ->
+                                                        storePosCommand(connection, request.organization, request.actor, "createPosReceiptRefund",
+                                                            request.receiptId, request.key, fingerprint, 201, response)
+                                                    }
+                                            }
+                                    }
+                                }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun getPosReceiptByNumber(
@@ -700,7 +785,7 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
             "$${index + 2}"
         }
         val query = """
-            SELECT t.terminal_id
+            SELECT t.terminal_id, t.location_id
             FROM pos_terminal t
             JOIN pos_shift s ON s.terminal_id = t.terminal_id
             WHERE s.shift_id = $1 AND t.location_id IN (${locationPlaceholders.joinToString(", ")})
@@ -720,7 +805,7 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
 
     private fun selectPosShiftForUpdate(connection: SqlConnection, shiftId: String): Single<Row> = connection.preparedQuery(
         """
-        SELECT shift_id, operator_id, opening_balance, status, is_reconcilable
+        SELECT shift_id, operator_id, opening_balance, status, is_reconcilable, currency
         FROM pos_shift
         WHERE shift_id = $1
         FOR UPDATE
@@ -935,6 +1020,209 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
             }
     }
 
+    private data class RefundCommand(
+        val receiptId: String, val paymentId: String, val amount: BigDecimal, val shiftId: String, val reason: String,
+        val key: String, val actor: String, val organization: String, val locations: Set<String>
+    )
+
+    private fun scopedRefundReceipt(connection: SqlConnection, receiptId: String, locations: Set<String>, lock: Boolean): Single<Row> {
+        val placeholders = locations.indices.joinToString(", ") { "$${it + 2}" }
+        return connection.preparedQuery("""
+            SELECT r.receipt_id, r.sales_order_id, r.currency, r.total_amount, r.is_api_issued, r.receipt_data
+            FROM receipt r JOIN sales_order o ON o.sales_order_id = r.sales_order_id
+            WHERE r.receipt_id = $1 AND o.location_id IN ($placeholders)
+            ${if (lock) "FOR NO KEY UPDATE OF r" else ""}
+        """.trimIndent()).rxExecute(Tuple.from(listOf(receiptId) + locations.sorted())).flatMap { rows ->
+            if (rows.size() == 0) Single.error<Row>(Exception(ErrorCodes.fromStatus(404))) else Single.just(rows.first())
+        }
+    }
+
+    private fun shiftCashMovement(connection: SqlConnection, shiftId: String): Single<BigDecimal> = connection.preparedQuery("""
+        SELECT COALESCE((SELECT SUM(p.amount) FROM payment p JOIN pos_payment_context c ON c.payment_id = p.payment_id
+            WHERE c.shift_id = $1 AND p.payment_method = 'CASH' AND p.status IN ('CAPTURED', 'REFUNDED')), 0)
+            - COALESCE((SELECT SUM(r.amount) FROM pos_receipt_refund r JOIN payment p ON p.payment_id = r.payment_id
+                WHERE r.refund_shift_id = $1 AND p.payment_method = 'CASH'), 0) AS cash_movement
+    """.trimIndent()).rxExecute(Tuple.of(shiftId)).map { it.first().getBigDecimal("cash_movement") }
+
+    private fun refundLockedReceipt(
+        connection: SqlConnection, request: RefundCommand, shift: Row, receipt: Row, payment: Row
+    ): Single<JsonObject> {
+        if (shift.getString("status") != "OPEN" || shift.getBoolean("is_reconcilable") != true) {
+            return Single.error(PosOperationsConflict("POS shift is not open or reconciliable"))
+        }
+        val captured = receipt.getJsonObject("receipt_data")?.getJsonArray("payments")
+            ?.filterIsInstance<JsonObject>()?.singleOrNull { it.getString("paymentId") == request.paymentId }
+        val capturedAmount = captured?.getValue("amount")?.toString()?.toBigDecimalOrNull()
+        if (receipt.getBoolean("is_api_issued") != true || captured == null || capturedAmount == null ||
+            capturedAmount.compareTo(payment.getBigDecimal("amount")) != 0 ||
+            captured.getString("paymentMethod") != payment.getString("payment_method") ||
+            payment.getString("status") !in setOf("CAPTURED", "REFUNDED")) {
+            return Single.error(PosOperationsConflict("Refund requires an API-issued receipt and its original captured payment"))
+        }
+        return connection.preparedQuery("""
+            SELECT COALESCE((SELECT SUM(amount) FROM pos_receipt_refund WHERE payment_id = $1), 0) AS payment_refunded,
+                COALESCE((SELECT SUM(amount) FROM pos_receipt_refund WHERE receipt_id = $2), 0) AS receipt_refunded
+        """.trimIndent()).rxExecute(Tuple.of(request.paymentId, request.receiptId)).flatMap { totals ->
+            val refunded = totals.first().getBigDecimal("payment_refunded")
+            if (request.amount > payment.getBigDecimal("amount").subtract(refunded) ||
+                request.amount > receipt.getBigDecimal("total_amount").subtract(totals.first().getBigDecimal("receipt_refunded"))) {
+                return@flatMap Single.error<JsonObject>(PosOperationsConflict("Refund exceeds remaining payment or receipt value"))
+            }
+            val available = if (payment.getString("payment_method") == "CASH") {
+                shiftCashMovement(connection, request.shiftId).map { it.add(shift.getBigDecimal("opening_balance")) >= request.amount }
+            } else Single.just(true)
+            available.flatMap { sufficient ->
+                if (!sufficient) Single.error<JsonObject>(PosOperationsConflict("Insufficient available drawer cash"))
+                else persistReceiptRefund(connection, request, receipt.getString("currency"),
+                    refunded.add(request.amount).compareTo(payment.getBigDecimal("amount")) == 0)
+            }
+        }
+    }
+
+    private fun persistReceiptRefund(connection: SqlConnection, request: RefundCommand, currency: String, fullyRefunded: Boolean): Single<JsonObject> =
+        connection.preparedQuery("""
+            INSERT INTO pos_receipt_refund (refund_id, receipt_id, payment_id, refund_shift_id, actor_subject, reason, amount, currency)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING json_build_object('refundId', refund_id, 'receiptId', receipt_id, 'paymentId', payment_id,
+                'refundShiftId', refund_shift_id, 'actorSubject', actor_subject, 'reason', reason, 'amount', amount,
+                'currency', currency, 'createdAt', created_at) AS refund
+        """.trimIndent()).rxExecute(Tuple.tuple().addString(UUID.randomUUID().toString()).addString(request.receiptId)
+            .addString(request.paymentId).addString(request.shiftId).addString(request.actor).addString(request.reason)
+            .addValue(request.amount).addString(currency)).flatMap { inserted ->
+                val update = if (fullyRefunded) connection.preparedQuery("UPDATE payment SET status = 'REFUNDED', updated_at = NOW() WHERE payment_id = $1")
+                    .rxExecute(Tuple.of(request.paymentId)).map { Unit } else Single.just(Unit)
+                update.flatMap {
+                    connection.preparedQuery(receiptRowsQuery("r.receipt_id = $1")).rxExecute(Tuple.of(request.receiptId)).map { rows ->
+                        val receipt = mapReceiptRow(rows.first())
+                        val summary = JsonObject()
+                        listOf("refundedAmount", "netAmount", "adjustmentStatus", "adjustments").forEach { summary.put(it, receipt.getValue(it)) }
+                        JsonObject().put("refund", inserted.first().getJsonObject("refund")).put("receiptAdjustment", summary)
+                    }
+                }
+            }
+
+    private fun scopedReceiptOrder(
+        connection: SqlConnection,
+        orderId: String,
+        locations: Set<String>,
+        lock: Boolean
+    ): Single<Row> {
+        val params = listOf(orderId) + locations.sorted()
+        val placeholders = locations.indices.map { "$${it + 2}" }.joinToString(", ")
+        val query = """
+            SELECT o.sales_order_id, o.order_number, o.location_id, o.status, o.sales_channel,
+                o.currency, o.total_amount, c.shift_id, c.draft_operator_id,
+                s.currency AS shift_currency, s.is_reconcilable,
+                json_build_object('shiftId', s.shift_id, 'operatorId', s.operator_id,
+                    'status', s.status, 'openedAt', s.opened_at, 'closedAt', s.closed_at,
+                    'currency', s.currency, 'terminalId', s.terminal_id) AS shift_snapshot
+            FROM sales_order o
+            LEFT JOIN pos_order_context c ON c.sales_order_id = o.sales_order_id
+            LEFT JOIN pos_shift s ON s.shift_id = c.shift_id
+            WHERE o.sales_order_id = $1 AND o.location_id IN ($placeholders)
+            ${if (lock) "FOR NO KEY UPDATE OF o" else ""}
+        """.trimIndent()
+        return connection.preparedQuery(query).rxExecute(Tuple.from(params)).flatMap { rows ->
+            if (rows.size() == 0) Single.error<Row>(Exception(ErrorCodes.fromStatus(404))) else Single.just(rows.first())
+        }
+    }
+
+    private fun insertIssuedReceipt(connection: SqlConnection, order: Row, actor: String): Single<JsonObject> {
+        val orderId = order.getString("sales_order_id")
+        if (order.getString("status") != "FULFILLED" || order.getString("sales_channel") != "POS" ||
+            order.getBoolean("is_reconcilable") != true || order.getString("currency") != order.getString("shift_currency")) {
+            return Single.error(PosOperationsConflict("Receipt requires a fulfilled attributed POS order with trusted currency"))
+        }
+        return connection.preparedQuery("SELECT 1 FROM receipt WHERE sales_order_id = $1 AND is_api_issued")
+            .rxExecute(Tuple.of(orderId)).flatMap { existing ->
+                if (existing.size() != 0) return@flatMap Single.error<JsonObject>(PosOperationsConflict("Receipt already issued"))
+                connection.preparedQuery(
+                    """
+                    SELECT COUNT(*) AS line_count, COALESCE(SUM(quantity_ordered), 0) AS total_items,
+                        COALESCE(SUM(line_total), 0) AS subtotal,
+                        BOOL_AND(status = 'FULFILLED' AND quantity_ordered > 0
+                            AND quantity_fulfilled = quantity_ordered
+                            AND line_total = ROUND(quantity_ordered * unit_price, 2)) AS consistent,
+                        json_agg(json_build_object('lineId', line_id, 'productId', product_id, 'sku', sku,
+                            'quantity', quantity_ordered, 'unitPrice', unit_price, 'lineTotal', line_total)
+                            ORDER BY created_at, line_id) AS lines
+                    FROM sales_order_line WHERE sales_order_id = $1
+                    """.trimIndent()
+                ).rxExecute(Tuple.of(orderId)).flatMap { lines ->
+                    val summary = lines.first()
+                    val total = order.getBigDecimal("total_amount")
+                    val items = summary.getBigDecimal("total_items")
+                    if (summary.getLong("line_count") == 0L || summary.getBoolean("consistent") != true ||
+                        summary.getBigDecimal("subtotal").compareTo(total) != 0 ||
+                        items > BigDecimal("999999999.999") || total < BigDecimal.ZERO) {
+                        return@flatMap Single.error<JsonObject>(PosOperationsConflict("Receipt order lines or totals are inconsistent"))
+                    }
+                    connection.preparedQuery(
+                        """
+                        SELECT COALESCE(SUM(p.amount), 0) AS captured,
+                            COALESCE(BOOL_AND(c.shift_id = $2 AND c.capture_operator_id IS NOT NULL
+                                AND p.amount > 0), true) AS attributed,
+                            COALESCE(json_agg(json_build_object('paymentId', p.payment_id,
+                                'paymentMethod', p.payment_method, 'amount', p.amount, 'status', p.status,
+                                'transactionRef', p.transaction_ref, 'shiftId', c.shift_id,
+                                'captureOperatorId', c.capture_operator_id) ORDER BY p.created_at, p.payment_id), '[]'::json) AS payments
+                        FROM payment p LEFT JOIN pos_payment_context c ON c.payment_id = p.payment_id
+                        WHERE p.sales_order_id = $1 AND p.status = 'CAPTURED'
+                        """.trimIndent()
+                    ).rxExecute(Tuple.of(orderId, order.getString("shift_id"))).flatMap { payments ->
+                        val paymentSummary = payments.first()
+                        if (paymentSummary.getBoolean("attributed") != true || paymentSummary.getBigDecimal("captured").compareTo(total) != 0) {
+                            return@flatMap Single.error<JsonObject>(PosOperationsConflict("Receipt requires exact attributed payment settlement"))
+                        }
+                        persistIssuedReceipt(connection, order, actor, summary, paymentSummary)
+                    }
+                }
+            }
+    }
+
+    private fun persistIssuedReceipt(
+        connection: SqlConnection, order: Row, actor: String, lines: Row, payments: Row
+    ): Single<JsonObject> = connection.query(
+        """
+        SELECT nextval('pos_receipt_number_seq') AS sequence,
+            to_char(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') AS date_part,
+            CURRENT_TIMESTAMP AT TIME ZONE 'UTC' AS issued_at
+        """.trimIndent()
+    ).rxExecute().flatMap { allocation ->
+        val number = allocation.first()
+        val receiptId = UUID.randomUUID().toString()
+        val snapshot = JsonObject()
+            .put("orderNumber", order.getString("order_number"))
+            .put("salesOrderId", order.getString("sales_order_id"))
+            .put("locationId", order.getString("location_id"))
+            .put("currency", order.getString("currency"))
+            .put("draftOperatorId", order.getString("draft_operator_id"))
+            .put("issuerSubject", actor)
+            .put("issuedAt", number.getLocalDateTime("issued_at").toString() + "Z")
+            .put("shift", order.getJsonObject("shift_snapshot"))
+            .put("lines", lines.getJsonArray("lines"))
+            .put("payments", payments.getJsonArray("payments"))
+            .put("subtotal", order.getBigDecimal("total_amount"))
+            .put("taxAmount", BigDecimal.ZERO)
+            .put("totalAmount", order.getBigDecimal("total_amount"))
+        connection.preparedQuery(
+            """
+            INSERT INTO receipt (receipt_id, sales_order_id, shift_id, receipt_number, receipt_date,
+                total_items, subtotal, tax_amount, total_amount, receipt_data, currency, issued_by, is_api_issued)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $7, $8, $9, $10, true)
+            """.trimIndent()
+        ).rxExecute(Tuple.tuple()
+            .addString(receiptId).addString(order.getString("sales_order_id")).addString(order.getString("shift_id"))
+            .addString("RCPT-${number.getString("date_part")}-${number.getLong("sequence")}")
+            .addLocalDateTime(number.getLocalDateTime("issued_at")).addValue(lines.getBigDecimal("total_items"))
+            .addValue(order.getBigDecimal("total_amount")).addJsonObject(snapshot)
+            .addString(order.getString("currency")).addString(actor)
+        ).flatMap {
+            connection.preparedQuery(receiptRowsQuery("r.receipt_id = $1"))
+                .rxExecute(Tuple.of(receiptId)).map { mapReceiptRow(it.first()) }
+        }
+    }
+
     private fun receiptRowsQuery(
         whereClause: String,
         orderByClause: String = "",
@@ -958,7 +1246,7 @@ class PosOperationsRepository(pool: Pool) : BaseRepository(pool, PosOperationsRe
                 r.receipt_data,
                 r.created_at,
                 refund_summary.refunded_amount,
-                GREATEST(r.total_amount - refund_summary.refunded_amount, 0)::numeric(14, 2) AS net_amount,
+                (r.total_amount - refund_summary.refunded_amount)::numeric(14, 2) AS net_amount,
                 CASE
                     WHEN refund_summary.refunded_amount = 0 THEN 'ISSUED'
                     WHEN refund_summary.refunded_amount >= r.total_amount THEN 'REFUNDED'

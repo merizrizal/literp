@@ -156,7 +156,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove only the shift invariants introduced by this revision."""
+    """Allow rollback only when no trusted shift history would be lost."""
+    bind = op.get_bind()
+    bind.execute(sa.text("LOCK TABLE pos_shift IN ACCESS EXCLUSIVE MODE"))
+    history = bind.execute(sa.text("""
+            SELECT 1 FROM pos_shift
+            WHERE currency IS NOT NULL OR expected_cash IS NOT NULL
+                OR cash_variance IS NOT NULL OR closed_by IS NOT NULL
+                OR is_reconcilable IS TRUE OR length(operator_id) > 36
+            LIMIT 1
+            """)).first()
+    if history:
+        raise RuntimeError(
+            "Cannot downgrade: trusted POS shift history must be preserved"
+        )
     op.drop_index("uq_pos_shift_terminal_date_number", table_name="pos_shift")
     op.drop_index("uq_pos_shift_open_terminal", table_name="pos_shift")
     op.drop_constraint(

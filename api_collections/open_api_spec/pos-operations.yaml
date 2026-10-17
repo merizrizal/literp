@@ -3,9 +3,8 @@ info:
   title: Literp POS Operations API
   description: |
     Location-scoped POS terminal, shift, and receipt operations.
-    The eight terminal and shift operations and both receipt lookup operations
-    are implemented; receipt generation and refunds remain authenticated
-    placeholders that return 501.
+    Terminal/shift operations, receipt lookup and receipt issuance are implemented.
+    Refunds are audited local ledger records with refund-shift cash reconciliation; no external settlement is claimed.
   version: 0.0.1
 
 servers:
@@ -373,11 +372,21 @@ paths:
       description: |
         Issue one immutable receipt for a fulfilled, attributed POS order.
         This is an internal record, not a fiscal/tax document; no tax is
-        calculated. This authenticated operation currently returns 501 and
-        does not create a receipt or claim an idempotency key.
+        calculated. Requires a human issuer with the persisted order-location grant
+        and exact captured settlement (underpayment and excess tender conflict).
+        The original sale shift may be closed. Same-key retries return the original
+        201 response after authorization; a different key after issuance conflicts.
       operationId: generatePosReceipt
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              description: No client-owned issuance fields; issuer and totals are server-derived.
       responses:
         '201':
           description: POS receipt issued.
@@ -395,8 +404,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 
@@ -409,7 +416,10 @@ paths:
       description: |
         Record an audited, payment-specific refund against a receipt. Refunds
         are local ledger records and do not contact an external payment
-        provider. This authenticated operation currently returns 501.
+        provider. Requires a human owner of an open reconcilable refund shift,
+        matching sale location/currency, an API-issued receipt and its original
+        captured payment. Payment and receipt caps and available drawer cash are
+        enforced transactionally. Authorized same-key retries replay after close.
       operationId: createPosReceiptRefund
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -441,8 +451,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-        '501':
-          $ref: '#/components/responses/NotImplemented'
         '500':
           $ref: '#/components/responses/InternalServerError'
 

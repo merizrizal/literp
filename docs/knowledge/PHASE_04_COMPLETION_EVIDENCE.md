@@ -1,5 +1,7 @@
 # Phase 04 Completion Evidence
 
+**Review-repair addendum:** The original audited revision and its 31-operation inventory/test counts below are historical. Current local verification covers all 43 operations; repository correlation is now evidenced in the criteria table. See the [current repair ledger](../implementation-plan/REVIEW_REPAIR_STATUS.md) for the uncommitted candidate and full verification results. Phase 04 is not declared complete: external required-check enforcement is still unconfirmed.
+
 > **Record status:** Open evidence inventory; this document does not declare Phase 04 complete.
 >
 > **Revision audited:** `c4ad200411c7a0efb5d54c18de5285cd55626470` (`c4ad200`)
@@ -126,12 +128,12 @@ These statuses are evidence states, and the corresponding Definition-of-Done che
 | CI blocks broken build, broken tests, and invalid OpenAPI contracts | **Open — external evidence required** | Workflow jobs and local checks are present; merge-blocking rules are not locally verifiable. |
 | Public API behavior is covered by HTTP integration tests | **Evidenced** | All 31 business operation IDs map to HTTP integration suites, and the production router has direct utility/global-failure smoke coverage. |
 | Error responses are stable and documented | **Evidenced** | Handler/test-router contracts, production global-failure behavior, request IDs, and documentation are covered. |
-| Logs are useful for tracing a single request through handler and repository work | **Open — implementation/evidence gap** | Handler request correlation exists; repository logs do not currently show request correlation. |
+| Logs are useful for tracing a single request through handler and repository work | **Locally evidenced by review repair** | Request-scoped proxy headers and direct scope gateways emit repository lifecycle logs. The concurrent HTTP/log-capture regression asserts isolation, asynchronous follow-up calls, reads/errors, safe-ID replacement and no payload disclosure. |
 | Documentation updates accompany each API behavior change | **Evidenced for the audited change set** | The audited route/utility inventory and response documentation now match the current contract. |
 
 ## Remaining work
 
-1. **Repository traceability:** Add or evidence request-correlated repository logging before closing the logging criterion.
+1. **Repository traceability:** Locally implemented and verified in the current uncommitted review-repair candidate; obtain fresh independent review. The original audited revision/inventory above remains historical. See [current repair evidence](../implementation-plan/REVIEW_REPAIR_STATUS.md).
 2. **CI governance status:** Required-check enforcement remains externally blocked; no local repository change can prove merge blocking.
 3. **Optional Bruno linting:** Select a stable repository-native lint command only if manual collection linting is required.
 

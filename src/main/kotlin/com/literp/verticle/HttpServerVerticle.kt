@@ -4,6 +4,8 @@ import com.literp.common.ErrorCodes
 import com.literp.config.Config
 import com.literp.db.DatabaseConnection
 import com.literp.observability.HttpMetrics
+import com.literp.observability.RequestCorrelation
+import com.literp.service.RepositoryServiceTracing
 import com.literp.repository.LocationRepository
 import com.literp.repository.OrderProcessRepository
 import com.literp.repository.OrderScopeRepository
@@ -80,18 +82,17 @@ class HttpServerVerticle(
     private lateinit var posScopeHandler: PosScopeHandler
     private lateinit var actorAdapter: AuthenticatedActorAdapter
 
-    private lateinit var uomService: UnitOfMeasureService
-    private lateinit var productService: ProductService
-    private lateinit var variantService: ProductVariantService
-    private lateinit var locationService: LocationService
-    private lateinit var orderProcessService: OrderProcessService
-    private lateinit var posOperationsService: PosOperationsService
+    private fun <T> requestProxy(context: RoutingContext, type: Class<T>, address: String): T =
+        RepositoryServiceTracing.proxy(vertx.delegate, type, address, resolveRequestId(context))
 
-    private lateinit var productHandler: ProductHandler
-    private lateinit var locationHandler: LocationHandler
-    private lateinit var uomHandler: UnitOfMeasureHandler
-    private lateinit var orderProcessHandler: OrderProcessHandler
-    private lateinit var posOperationsHandler: PosOperationsHandler
+    private fun productHandler(context: RoutingContext) = ProductHandler(
+        requestProxy(context, ProductService::class.java, ProductService.ADDRESS),
+        requestProxy(context, ProductVariantService::class.java, ProductVariantService.ADDRESS)
+    )
+    private fun locationHandler(context: RoutingContext) = LocationHandler(requestProxy(context, LocationService::class.java, LocationService.ADDRESS))
+    private fun uomHandler(context: RoutingContext) = UnitOfMeasureHandler(requestProxy(context, UnitOfMeasureService::class.java, UnitOfMeasureService.ADDRESS))
+    private fun orderProcessHandler(context: RoutingContext) = OrderProcessHandler(requestProxy(context, OrderProcessService::class.java, OrderProcessService.ADDRESS), actorAdapter)
+    private fun posOperationsHandler(context: RoutingContext) = PosOperationsHandler(requestProxy(context, PosOperationsService::class.java, PosOperationsService.ADDRESS))
     private val metrics = HttpMetrics()
 
     private data class ApiRouterBuilders(
@@ -104,7 +105,6 @@ class HttpServerVerticle(
     private companion object {
         const val METRICS_START_NANOS_KEY = "metricsStartNanos"
         const val REQUEST_ID_HEADER = "X-Request-ID"
-        const val REQUEST_ID_CONTEXT_KEY = "requestId"
     }
 
     override fun start(startFuture: Promise<Void>?) {
@@ -126,28 +126,16 @@ class HttpServerVerticle(
         orderProcessRepository = OrderProcessRepository(pool)
         posOperationsRepository = PosOperationsRepository(pool)
 
-        UnitOfMeasureService.register(coreVertx, UnitOfMeasureServiceImpl(uomRepository))
-        ProductService.register(coreVertx, ProductServiceImpl(productRepository))
-        ProductVariantService.register(coreVertx, ProductVariantServiceImpl(variantRepository))
-        LocationService.register(coreVertx, LocationServiceImpl(locationRepository))
-        OrderProcessService.register(coreVertx, OrderProcessServiceImpl(orderProcessRepository))
-        PosOperationsService.register(coreVertx, PosOperationsServiceImpl(posOperationsRepository))
+        RepositoryServiceTracing.register(coreVertx, UnitOfMeasureService::class.java, UnitOfMeasureService.ADDRESS, UnitOfMeasureServiceImpl(uomRepository), uomRepository)
+        RepositoryServiceTracing.register(coreVertx, ProductService::class.java, ProductService.ADDRESS, ProductServiceImpl(productRepository), productRepository)
+        RepositoryServiceTracing.register(coreVertx, ProductVariantService::class.java, ProductVariantService.ADDRESS, ProductVariantServiceImpl(variantRepository), variantRepository)
+        RepositoryServiceTracing.register(coreVertx, LocationService::class.java, LocationService.ADDRESS, LocationServiceImpl(locationRepository), locationRepository)
+        RepositoryServiceTracing.register(coreVertx, OrderProcessService::class.java, OrderProcessService.ADDRESS, OrderProcessServiceImpl(orderProcessRepository), orderProcessRepository)
+        RepositoryServiceTracing.register(coreVertx, PosOperationsService::class.java, PosOperationsService.ADDRESS, PosOperationsServiceImpl(posOperationsRepository), posOperationsRepository)
 
-        uomService = UnitOfMeasureService.createProxy(coreVertx)
-        productService = ProductService.createProxy(coreVertx)
-        variantService = ProductVariantService.createProxy(coreVertx)
-        locationService = LocationService.createProxy(coreVertx)
-        orderProcessService = OrderProcessService.createProxy(coreVertx)
-        posOperationsService = PosOperationsService.createProxy(coreVertx)
-
-        productHandler = ProductHandler(productService, variantService)
-        locationHandler = LocationHandler(locationService)
-        uomHandler = UnitOfMeasureHandler(uomService)
         actorAdapter = AuthenticatedActorAdapter()
         orderScopeHandler = OrderScopeHandler(OrderScopeRepository(pool), actorAdapter)
         posScopeHandler = PosScopeHandler()
-        orderProcessHandler = OrderProcessHandler(orderProcessService, actorAdapter)
-        posOperationsHandler = PosOperationsHandler(posOperationsService)
 
         loadApiContracts(startFuture)
     }
@@ -262,74 +250,74 @@ class HttpServerVerticle(
         // Unit of Measure handlers (delegated)
         routerBuilder.getRoute("listUnitOfMeasures")
             .addHandler(securityHandler.authorizeOperation("listUnitOfMeasures"))
-            .addHandler(uomHandler::listUnitOfMeasures)
+            .addHandler { uomHandler(it).listUnitOfMeasures(it) }
         routerBuilder.getRoute("createUnitOfMeasure")
             .addHandler(securityHandler.authorizeOperation("createUnitOfMeasure"))
-            .addHandler(uomHandler::createUnitOfMeasure)
+            .addHandler { uomHandler(it).createUnitOfMeasure(it) }
         routerBuilder.getRoute("getUnitOfMeasure")
             .addHandler(securityHandler.authorizeOperation("getUnitOfMeasure"))
-            .addHandler(uomHandler::getUnitOfMeasure)
+            .addHandler { uomHandler(it).getUnitOfMeasure(it) }
         routerBuilder.getRoute("updateUnitOfMeasure")
             .addHandler(securityHandler.authorizeOperation("updateUnitOfMeasure"))
-            .addHandler(uomHandler::updateUnitOfMeasure)
+            .addHandler { uomHandler(it).updateUnitOfMeasure(it) }
         routerBuilder.getRoute("deleteUnitOfMeasure")
             .addHandler(securityHandler.authorizeOperation("deleteUnitOfMeasure"))
-            .addHandler(uomHandler::deleteUnitOfMeasure)
+            .addHandler { uomHandler(it).deleteUnitOfMeasure(it) }
 
         // Product handlers (delegated)
         routerBuilder.getRoute("listProducts")
             .addHandler(securityHandler.authorizeOperation("listProducts"))
-            .addHandler(productHandler::listProducts)
+            .addHandler { productHandler(it).listProducts(it) }
         routerBuilder.getRoute("createProduct")
             .addHandler(securityHandler.authorizeOperation("createProduct"))
-            .addHandler(productHandler::createProduct)
+            .addHandler { productHandler(it).createProduct(it) }
         routerBuilder.getRoute("getProduct")
             .addHandler(securityHandler.authorizeOperation("getProduct"))
-            .addHandler(productHandler::getProduct)
+            .addHandler { productHandler(it).getProduct(it) }
         routerBuilder.getRoute("updateProduct")
             .addHandler(securityHandler.authorizeOperation("updateProduct"))
-            .addHandler(productHandler::updateProduct)
+            .addHandler { productHandler(it).updateProduct(it) }
         routerBuilder.getRoute("deleteProduct")
             .addHandler(securityHandler.authorizeOperation("deleteProduct"))
-            .addHandler(productHandler::deleteProduct)
+            .addHandler { productHandler(it).deleteProduct(it) }
 
         // Product Variant handlers (delegated)
         routerBuilder.getRoute("listProductVariants")
             .addHandler(securityHandler.authorizeOperation("listProductVariants"))
-            .addHandler(productHandler::listProductVariants)
+            .addHandler { productHandler(it).listProductVariants(it) }
         routerBuilder.getRoute("createProductVariant")
             .addHandler(securityHandler.authorizeOperation("createProductVariant"))
-            .addHandler(productHandler::createProductVariant)
+            .addHandler { productHandler(it).createProductVariant(it) }
         routerBuilder.getRoute("getProductVariant")
             .addHandler(securityHandler.authorizeOperation("getProductVariant"))
-            .addHandler(productHandler::getProductVariant)
+            .addHandler { productHandler(it).getProductVariant(it) }
         routerBuilder.getRoute("updateProductVariant")
             .addHandler(securityHandler.authorizeOperation("updateProductVariant"))
-            .addHandler(productHandler::updateProductVariant)
+            .addHandler { productHandler(it).updateProductVariant(it) }
         routerBuilder.getRoute("deleteProductVariant")
             .addHandler(securityHandler.authorizeOperation("deleteProductVariant"))
-            .addHandler(productHandler::deleteProductVariant)
+            .addHandler { productHandler(it).deleteProductVariant(it) }
     }
 
     private fun registerLocationHandlers(routerBuilder: RouterBuilder) {
         routerBuilder.getRoute("listLocations")
             .addHandler(securityHandler.authorizeOperation("listLocations"))
-            .addHandler(locationHandler::listLocations)
+            .addHandler { locationHandler(it).listLocations(it) }
         routerBuilder.getRoute("createLocation")
             .addHandler(securityHandler.authorizeOperation("createLocation"))
-            .addHandler(locationHandler::createLocation)
+            .addHandler { locationHandler(it).createLocation(it) }
         routerBuilder.getRoute("getLocation")
             .addHandler(securityHandler.authorizeOperation("getLocation"))
-            .addHandler(locationHandler::getLocation)
+            .addHandler { locationHandler(it).getLocation(it) }
         routerBuilder.getRoute("getLocationByCode")
             .addHandler(securityHandler.authorizeOperation("getLocationByCode"))
-            .addHandler(locationHandler::getLocationByCode)
+            .addHandler { locationHandler(it).getLocationByCode(it) }
         routerBuilder.getRoute("updateLocation")
             .addHandler(securityHandler.authorizeOperation("updateLocation"))
-            .addHandler(locationHandler::updateLocation)
+            .addHandler { locationHandler(it).updateLocation(it) }
         routerBuilder.getRoute("deleteLocation")
             .addHandler(securityHandler.authorizeOperation("deleteLocation"))
-            .addHandler(locationHandler::deleteLocation)
+            .addHandler { locationHandler(it).deleteLocation(it) }
     }
 
     private fun registerOrderProcessHandlers(routerBuilder: RouterBuilder) {
@@ -339,90 +327,90 @@ class HttpServerVerticle(
         routerBuilder.getRoute("createSalesOrderDraft")
             .addHandler(securityHandler.authorizeOperation("createSalesOrderDraft"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::createSalesOrderDraft)
+            .addHandler { orderProcessHandler(it).createSalesOrderDraft(it) }
         routerBuilder.getRoute("getSalesOrder")
             .addHandler(securityHandler.authorizeOperation("getSalesOrder"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::getSalesOrder)
+            .addHandler { orderProcessHandler(it).getSalesOrder(it) }
         routerBuilder.getRoute("getCurrentStock")
             .addHandler(securityHandler.authorizeOperation("getCurrentStock"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::getCurrentStock)
+            .addHandler { orderProcessHandler(it).getCurrentStock(it) }
         routerBuilder.getRoute("getAvailableStock")
             .addHandler(securityHandler.authorizeOperation("getAvailableStock"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::getAvailableStock)
+            .addHandler { orderProcessHandler(it).getAvailableStock(it) }
         routerBuilder.getRoute("addSalesOrderLine")
             .addHandler(securityHandler.authorizeOperation("addSalesOrderLine"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::addSalesOrderLine)
+            .addHandler { orderProcessHandler(it).addSalesOrderLine(it) }
         routerBuilder.getRoute("confirmSalesOrder")
             .addHandler(securityHandler.authorizeOperation("confirmSalesOrder"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::confirmSalesOrder)
+            .addHandler { orderProcessHandler(it).confirmSalesOrder(it) }
         routerBuilder.getRoute("capturePayment")
             .addHandler(securityHandler.authorizeOperation("capturePayment"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::capturePayment)
+            .addHandler { orderProcessHandler(it).capturePayment(it) }
         routerBuilder.getRoute("fulfillSalesOrder")
             .addHandler(securityHandler.authorizeOperation("fulfillSalesOrder"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::fulfillSalesOrder)
+            .addHandler { orderProcessHandler(it).fulfillSalesOrder(it) }
         routerBuilder.getRoute("cancelSalesOrder")
             .addHandler(securityHandler.authorizeOperation("cancelSalesOrder"))
             .addHandler(orderScopeHandler::authorize)
-            .addHandler(orderProcessHandler::cancelSalesOrder)
+            .addHandler { orderProcessHandler(it).cancelSalesOrder(it) }
     }
 
     private fun registerPosOperationsHandlers(routerBuilder: RouterBuilder) {
         routerBuilder.getRoute("listPosTerminals")
             .addHandler(securityHandler.authorizeOperation("listPosTerminals"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::listPosTerminals)
+            .addHandler { posOperationsHandler(it).listPosTerminals(it) }
         routerBuilder.getRoute("createPosTerminal")
             .addHandler(securityHandler.authorizeOperation("createPosTerminal"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::createPosTerminal)
+            .addHandler { posOperationsHandler(it).createPosTerminal(it) }
         routerBuilder.getRoute("getPosTerminal")
             .addHandler(securityHandler.authorizeOperation("getPosTerminal"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::getPosTerminal)
+            .addHandler { posOperationsHandler(it).getPosTerminal(it) }
         routerBuilder.getRoute("updatePosTerminal")
             .addHandler(securityHandler.authorizeOperation("updatePosTerminal"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::updatePosTerminal)
+            .addHandler { posOperationsHandler(it).updatePosTerminal(it) }
         routerBuilder.getRoute("deactivatePosTerminal")
             .addHandler(securityHandler.authorizeOperation("deactivatePosTerminal"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::deactivatePosTerminal)
+            .addHandler { posOperationsHandler(it).deactivatePosTerminal(it) }
         routerBuilder.getRoute("openPosShift")
             .addHandler(securityHandler.authorizeOperation("openPosShift"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::openPosShift)
+            .addHandler { posOperationsHandler(it).openPosShift(it) }
         routerBuilder.getRoute("getCurrentPosShift")
             .addHandler(securityHandler.authorizeOperation("getCurrentPosShift"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::getCurrentPosShift)
+            .addHandler { posOperationsHandler(it).getCurrentPosShift(it) }
         routerBuilder.getRoute("closePosShift")
             .addHandler(securityHandler.authorizeOperation("closePosShift"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::closePosShift)
+            .addHandler { posOperationsHandler(it).closePosShift(it) }
         routerBuilder.getRoute("getPosReceiptByNumber")
             .addHandler(securityHandler.authorizeOperation("getPosReceiptByNumber"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::getPosReceiptByNumber)
+            .addHandler { posOperationsHandler(it).getPosReceiptByNumber(it) }
         routerBuilder.getRoute("listPosReceiptsBySalesOrder")
             .addHandler(securityHandler.authorizeOperation("listPosReceiptsBySalesOrder"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::listPosReceiptsBySalesOrder)
+            .addHandler { posOperationsHandler(it).listPosReceiptsBySalesOrder(it) }
         routerBuilder.getRoute("generatePosReceipt")
             .addHandler(securityHandler.authorizeOperation("generatePosReceipt"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::generatePosReceipt)
+            .addHandler { posOperationsHandler(it).generatePosReceipt(it) }
         routerBuilder.getRoute("createPosReceiptRefund")
             .addHandler(securityHandler.authorizeOperation("createPosReceiptRefund"))
             .addHandler(posScopeHandler::authorize)
-            .addHandler(posOperationsHandler::createPosReceiptRefund)
+            .addHandler { posOperationsHandler(it).createPosReceiptRefund(it) }
     }
 
     private fun getIndex(context: RoutingContext) {
@@ -560,18 +548,7 @@ class HttpServerVerticle(
         context.response().end(response.encode())
     }
 
-    private fun resolveRequestId(context: RoutingContext): String {
-        val existingRequestId = context.get<String>(REQUEST_ID_CONTEXT_KEY)
-        if (!existingRequestId.isNullOrBlank()) {
-            return existingRequestId
-        }
-
-        val requestId = context.request()?.getHeader(REQUEST_ID_HEADER)?.trim().orEmpty().ifBlank {
-            UUID.randomUUID().toString()
-        }
-        context.put(REQUEST_ID_CONTEXT_KEY, requestId)
-        return requestId
-    }
+    private fun resolveRequestId(context: RoutingContext): String = RequestCorrelation.id(context)
 
     private fun putErrorResponse(context: RoutingContext, statusCode: Int, message: String) {
         val errorResponse = JsonObject()

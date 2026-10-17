@@ -79,21 +79,30 @@ API base:
 - `GET /pos/receipts/by-number/{receiptNumber}`
 - `GET /pos/orders/{salesOrderId}/receipts`
 
-### POS Receipt and Refund Writes (authenticated placeholders)
+### POS Receipt Issuance (implemented)
 
 - `POST /pos/orders/{salesOrderId}/receipts`
+
+Human-only, scoped, idempotent issuance from exactly settled fulfilled attributed
+POS orders, including after the original shift closes. One immutable API-issued
+receipt per order; this is not a fiscal document or external delivery service.
+
+### POS Refund Write (implemented)
+
 - `POST /pos/receipts/{receiptId}/refunds`
 
-Only these writes remain `501 NOT_IMPLEMENTED`. Receipt reads enforce persisted
-order-location scope; write-contract publication and refund storage do not mean
-issuance or refund behavior is available.
+Append-only local refunds require the human owner of an open reconcilable
+matching-location/currency shift and an original API-issued receipt payment.
+Payment/receipt limits and CASH availability are enforced transactionally.
+Authorized retries replay after close; original closed snapshots never change.
+No external settlement, inventory return or order cancellation is performed.
 
 ## Totals
 
 | Area | Count |
 |---|---:|
 | Utility endpoints | 5 |
-| API endpoints | 43 (41 implemented; 2 receipt/refund write placeholders) |
+| API endpoints | 43 (all implemented) |
 | API domains | 6 |
 
 ## Architecture Path

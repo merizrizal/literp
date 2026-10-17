@@ -21,7 +21,7 @@ class ProductHandler(
 
         productService.listProducts(query.page, query.size, query.sort, sku, productType, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list products: ${error.message}", error) }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list products", error) }
     }
 
     fun createProduct(context: RoutingContext) {

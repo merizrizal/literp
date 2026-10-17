@@ -8,7 +8,20 @@
 
 ### Current-status and alignment note
 
-Historical design baseline; health/metrics, response request IDs and asset verification were subsequently delivered. The [closure evidence](../../knowledge/PHASE_04_COMPLETION_EVIDENCE.md) supersedes the original missing-file/version observations below. Repository request correlation and external CI required-check enforcement remain open. Workflow failure does not itself prove merge blocking. The accepted [authentication baseline](../../knowledge/AUTHENTICATION_BASELINE.md) now protects operational endpoints; no anonymous operational release is permitted by this earlier ADS. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
+Historical design baseline; health/metrics, response request IDs and asset verification were subsequently delivered. The [closure evidence](../../knowledge/PHASE_04_COMPLETION_EVIDENCE.md) supersedes the original missing-file/version observations below. Repository request correlation is now locally implemented/verified; external CI required-check enforcement remains unconfirmed. Workflow failure does not itself prove merge blocking. The accepted [authentication baseline](../../knowledge/AUTHENTICATION_BASELINE.md) now protects operational endpoints; no anonymous operational release is permitted by this earlier ADS. See the [coverage review](../ADS_COVERAGE_REVIEW.md).
+
+### Approved repository-correlation continuation decision
+
+During review repair, the maintainer approved the recommended B7 implementation approach:
+
+- Pass an explicit immutable request ID through request-scoped service proxies using delivery headers, and explicitly into direct scope-repository paths. Keep the ID in the response header; do not change business JSON envelopes or treat it as an authorization claim.
+- Generate an ID when absent. Accept only 1–128 ASCII letters/digits or `._:-` in supplied IDs before logging/propagation; use a generated replacement for malformed input rather than echoing log-control characters.
+- Log repository operation start/completion/failure with that ID and a safe operation name. Never log bearer tokens, request bodies, refund reasons, receipt snapshots, SQL parameters, or financial response payloads.
+- Capture correlation per invocation; no shared mutable current-request field or event-loop ThreadLocal may carry state across asynchronous work.
+- Preserve correlation through asynchronous follow-up calls and errors. Tests must prove overlapping requests cannot cross-contaminate IDs and must cover proxy and direct scope paths.
+- Retain the accepted layer-based structure and existing logging/runtime dependencies; no distributed tracing backend or new telemetry infrastructure is included.
+
+B7 is implemented locally. Request-scoped handler/proxy instances carry immutable delivery headers; `RepositoryServiceTracing` intercepts each service invocation and logs start/completion/failure through its repository logger without inspecting payloads. Direct scope gateways use the same repository lifecycle logging around Rx subscriptions. A PostgreSQL lock-barrier HTTP test proves two overlapping writes retain separate IDs through `checkCodeExists` and its asynchronous `createLocation` callback; reads, failures, direct scope queries and malformed-ID replacement are also asserted. Only external CI enforcement remains open; see the review repair ledger. These are operation-boundary logs, not per-SQL tracing or a distributed tracing backend.
 
 ### I. Overview and Contract
 

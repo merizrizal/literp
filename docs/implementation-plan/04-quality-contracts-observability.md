@@ -99,7 +99,7 @@ Tasks:
 
 - [x] Add structured logs or a clear log format for production use
 - [x] Propagate incoming `X-Request-ID` into handler logs and responses
-- [ ] Propagate request correlation through repository work; end-to-end traceability remains open
+- [x] Propagate request correlation through repository work; concurrent proxy callbacks and direct scope paths are locally verified
 - [x] Add readiness and liveness semantics beyond database health if needed
 - [x] Add metrics for request count, latency, error count, and database failures
 
@@ -159,7 +159,7 @@ Done when:
 - [ ] CI blocks broken build, broken tests, and invalid OpenAPI contracts
 - [x] Public API behavior is covered by HTTP integration tests
 - [x] Error responses are stable and documented
-- [ ] Logs are useful for tracing a single request through handler and repository work
+- [x] Logs are useful for tracing a single request through handler and repository work
 - [x] Documentation updates are part of each API behavior change
 - [x] Project structure is confirmed sufficient for Phase 05 by the accepted [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md)
 
@@ -171,4 +171,4 @@ Done when:
 - The production-router smoke test verifies utility routes, unmatched-route `404`, normalized global failure responses, and `X-Request-ID` propagation.
 - Bruno collection paths and the three added utility request assets are structurally verified. Bruno linting remains an explicitly deferred optional task until a stable command is selected.
 
-The two planning gates are complete. Do not mark all of Phase 04 complete: CI required-check enforcement and request-correlated repository logging remain open.
+The two planning gates and local repository request-correlation criterion are complete. Do not mark all of Phase 04 complete: external CI required-check enforcement remains unconfirmed. See the current review-repair ledger for HTTP/log-isolation evidence and the read-only GitHub inspection limitations.

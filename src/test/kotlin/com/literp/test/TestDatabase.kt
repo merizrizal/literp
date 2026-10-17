@@ -29,6 +29,20 @@ object TestDatabase {
         }
     }
 
+    // Test-only cleanup on one transaction-local connection. Never disables triggers globally.
+    // The production append-only invariant is separately exercised through normal connections.
+    fun deleteRefundFixtures(pool: Pool, orderId: String) {
+        pool.rxWithTransaction { connection ->
+            connection.query("SELECT current_database() AS name").rxExecute().flatMap { rows ->
+                check(rows.first().getString("name") == env("LITERP_TEST_PG_DATABASE", "literp_test"))
+                connection.query("SET LOCAL session_replication_role = replica").rxExecute()
+            }.flatMap {
+                connection.preparedQuery("DELETE FROM pos_receipt_refund WHERE receipt_id IN (SELECT receipt_id FROM receipt WHERE sales_order_id = $1)")
+                    .rxExecute(io.vertx.rxjava3.sqlclient.Tuple.of(orderId))
+            }.toMaybe()
+        }.blockingGet()
+    }
+
     private fun env(name: String, defaultValue: String): String {
         return System.getenv(name)?.takeIf { it.isNotBlank() } ?: defaultValue
     }

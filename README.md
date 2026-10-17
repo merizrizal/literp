@@ -3,7 +3,7 @@
 Lightweight ERP core built with Vert.x, Kotlin, and PostgreSQL.
 
 The current branch implements a POS-first sales and inventory backend with:
-- 31 REST API endpoints across 5 domains
+- 43 implemented business API operations across 6 domains
 - movement-based inventory and reservation-backed order fulfillment
 - deterministic Alembic seed data for local testing
 - OpenAPI contracts and a synchronized Bruno collection
@@ -16,6 +16,7 @@ Implemented API domains:
 - Product Variant: 5 endpoints
 - Location: 6 endpoints
 - Order Process: 10 endpoints
+- POS: 12 implemented operations (terminal/shift workflows, scoped receipt reads, immutable issuance, and audited local refunds with cash reconciliation)
 
 Utility endpoints:
 - `GET /`
@@ -68,7 +69,17 @@ DIR=pgsql make env-up
 
 The migration container applies both schema and seed data automatically.
 
-### 2. Build and run the server
+### 2. Configure authentication before starting the server
+
+Follow the [authentication runtime contract](docs/knowledge/AUTHENTICATION_BASELINE.md#runtime-configuration)
+and provision the provider's public JWKS file. Set `LITERP_AUTH_ISSUER`,
+`LITERP_AUTH_AUDIENCE`, `LITERP_AUTH_ORGANIZATION_ID`, and `LITERP_AUTH_JWKS_PATH`
+in your local environment. Startup fails closed if these are absent or invalid.
+For isolated local provider setup, follow [docker/keycloak/README.md](docker/keycloak/README.md).
+Never commit tokens, private keys, or deployment configuration. Local setup does
+not authorize public exposure or close external provider/deployment acceptance.
+
+### 3. Build and run the server
 
 ```bash
 ./gradlew build
@@ -81,7 +92,7 @@ Base URL:
 http://localhost:8010/api/v1
 ```
 
-### 3. Verify the service
+### 4. Verify the service
 
 ```bash
 # Public probes
@@ -139,7 +150,8 @@ literp/
 ├── python/database/migration/  # Alembic schema + seed data
 ├── src/main/java/com/literp/service/
 │   ├── master/
-│   └── order/
+│   ├── order/
+│   └── pos/
 └── src/main/kotlin/com/literp/
     ├── db/
     ├── repository/
@@ -147,7 +159,7 @@ literp/
     └── verticle/
 ```
 
-The accepted [project structure decision](docs/knowledge/PROJECT_STRUCTURE_DECISION.md) retains this layer-based layout and the current API asset roots through Phase 05. Catalog, location, and order continue in their current layers; inventory remains with order-process behavior. When implemented, POS and manufacturing follow the same handler/repository/service layers, with their proposed Java proxy service groups created only for concrete services.
+The accepted [project structure decision](docs/knowledge/PROJECT_STRUCTURE_DECISION.md) retains this layer-based layout and the current API asset roots through Phase 05. Catalog, location, and order continue in their current layers; inventory remains with order-process behavior. POS uses those same handler/repository/service layers and the concrete `service/pos` proxy group. Manufacturing remains design-only; no future proxy groups are scaffolded.
 
 The application-side 05.0 authentication and authorization baseline is implemented and locally regression-tested. Provider-token, key-rotation, deployment/network, and maintainer acceptance evidence remains pending; keep the service isolated from untrusted networks until those gates are complete. See [AUTHENTICATION_BASELINE.md](docs/knowledge/AUTHENTICATION_BASELINE.md) for the runtime contract and acceptance ledger.
 
@@ -162,5 +174,7 @@ Current implementation caveats:
 - Master-data responses use top-level `data` and `pagination`.
 - Order-process list responses still use the older outer `data` envelope.
 - Master-data OpenAPI contracts are aligned with the implemented handler fields for catalog and location APIs.
-- Order fulfillment writes `inventory_movement.to_location_id` with the same location as `from_location_id` because the schema requires a non-null destination.
-- Confirm, fulfill, and cancel flows are multi-step operations and are not yet wrapped in explicit database transactions.
+- Fulfillment writes `OUT` movements from the order location with `to_location_id = NULL`; a sale has no internal destination.
+- Confirm, payment capture, fulfill, and cancel mutations run in explicit database transactions. Same-order fulfillment is serialized; this does not establish cross-order stock serialization.
+- Payment captures must be positive, fit `numeric(14,2)`, and have at most two fractional digits; invalid amounts are rejected rather than rounded.
+- Receipt issuance is implemented for human issuers on exactly settled, fulfilled attributed POS orders, including after shift close. Refunds are append-only local records with payment/receipt caps, owner-controlled refund shifts and drawer-cash reconciliation; no external settlement or inventory return is claimed. See the [review repair status](docs/implementation-plan/REVIEW_REPAIR_STATUS.md) for outstanding findings.

@@ -145,8 +145,8 @@ Done when:
   is claimed.
 
 At the 05.2 acceptance boundary, receipt lookups were placeholders. Task 05.3
-has since implemented both scoped reads; receipt generation and refund writes
-remain authenticated `501 NOT_IMPLEMENTED`. The test counts above are historical
+has since implemented scoped reads, receipt issuance and local audited refunds
+with refund-shift cash reconciliation. No POS operation remains a 501. The test counts above are historical
 05.2 acceptance evidence, not current-suite results.
 
 ### 05.3 Receipt And Refund API
@@ -155,20 +155,20 @@ Estimate: 4-7 engineer-days
 
 Tasks:
 
-- [ ] Add receipt generation from fulfilled POS order
+- [x] Add receipt generation from fulfilled POS order
 - [x] Add receipt lookup by receipt number
 - [x] Add receipt lookup by sales order
-- [ ] Add refund endpoint and receipt adjustment behavior
-- [ ] Add POS integration tests
-- [ ] Complete Bruno requests for POS operations
+- [x] Add refund endpoint and receipt adjustment behavior
+- [x] Add POS integration tests
+- [x] Complete Bruno requests for POS operations (asset parity verified; external authenticated Bruno smoke remains separate)
 
 Done when:
 
-- [ ] Fulfilled POS orders can produce receipts
+- [x] Fulfilled POS orders can produce receipts
 - [x] Receipts can be retrieved by receipt number and sales order
-- [ ] Refund behavior is explicit, auditable, and tested
+- [x] Refund behavior is explicit, auditable, and tested
 
-**Current implementation boundary:** [05.3 ADS](ads/phase-05-task-3.md) Chunks 1–3 have contracts, additive receipt/refund persistence, and scoped receipt reads at `1ed2617`. Only `generatePosReceipt` and `createPosReceiptRefund` remain 501. Existing read/contract tests do not complete issuance/refund integration acceptance. No new tests or database checks were run by the documentation review.
+**Current implementation boundary:** [05.3 ADS](ads/phase-05-task-3.md) receipt issuance, append-only refunds and refund-aware reconciliation are implemented through the production proxy/router. Local acceptance covers owner/capability/location guards, after-close issuance/replay, exact settlement, fractional/split payment snapshots, payment/receipt caps, CASH availability, same/later-shift refunds, unchanged original closed snapshots, concurrent duplicates/refund-versus-close, rollback and preserved fulfillment movements. All 43 operations are implemented. See [review repair status](REVIEW_REPAIR_STATUS.md) for current full-suite and verifier evidence. No external-provider settlement, fiscal compliance, inventory return, deployment or external Bruno acceptance is claimed; stop before 05.4.
 
 ### 05.4 BOM API
 
