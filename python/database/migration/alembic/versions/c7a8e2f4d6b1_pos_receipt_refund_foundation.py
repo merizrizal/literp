@@ -34,6 +34,13 @@ def _assert_legacy_receipt_totals_are_safe() -> None:
 
 def _assert_downgrade_preserves_financial_history() -> None:
     bind = op.get_context().bind
+    # Exclude receipt/refund writers from the checks through transactional DDL.
+    bind.execute(
+        sa.text(
+            "LOCK TABLE receipt, pos_receipt_refund "
+            "IN ACCESS EXCLUSIVE MODE"
+        )
+    )
     if bind.execute(
         sa.text("SELECT EXISTS (SELECT 1 FROM pos_receipt_refund)")
     ).scalar():

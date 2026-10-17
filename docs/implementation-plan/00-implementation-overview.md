@@ -19,21 +19,20 @@ processing, payment capture, fulfillment, and movement-based inventory writes.
 Current completed runtime scope:
 
 - [x] 5 utility endpoints: root, liveness, readiness, database health, and metrics
-- [x] 43 registered business operations across 6 API domains: 41 implemented and 2 authenticated receipt/refund write placeholders
+- [x] 43 registered business operations across 6 API domains: all 43 implemented
 - [x] PostgreSQL schema for catalog, inventory, sales, POS, and manufacturing
 - [x] deterministic Alembic seed data
 - [x] OpenAPI contracts for product catalog, locations, order process, and POS operations
-- [x] Application-side authentication, scoped POS terminals/shifts, and receipt lookups
+- [x] Application-side authentication, request-correlated repository logging, scoped POS terminals/shifts, receipt issuance, and audited refunds
 - [x] Bruno collection aligned to the implemented handlers
 - [x] developer documentation for setup, testing, endpoints, and implementation
 
 Current important gaps:
 
-- [ ] receipt generation and refund writes remain authenticated `501 NOT_IMPLEMENTED`
-- [ ] manufacturing APIs are proposed, not implemented; partial fulfillment remains deferred
+- [ ] manufacturing APIs for tasks 05.4–05.6 remain design-only; partial fulfillment remains deferred
 - [ ] shared stock-writer serialization and catalog unit/type stability need the cross-domain safeguards proposed in 05.6
-- [ ] Phase 04 request-correlated repository logging and external CI required-check enforcement remain open
-- [ ] provider, deployment, authenticated external smoke, and related operational acceptance remain pending
+- [ ] Phase 04 external CI required-check enforcement remains open; request-correlated repository logging is implemented and locally verified
+- [ ] provider, deployment, authenticated external smoke, timed JWKS rotation, and related operational acceptance remain pending
 
 ## 00.2 Directory Name
 
@@ -70,8 +69,8 @@ deployment approval delays.
 | 01 | `01-foundation.md` | Stabilize runtime, schema, config, and data foundation | Complete | 0 remaining engineer-days |
 | 02 | `02-master-data-api.md` | Complete catalog and location API parity | Complete | 0 remaining engineer-days |
 | 03 | `03-order-inventory-flow.md` | Harden order, payment, reservation, and fulfillment flows | Recorded complete; shared-writer concurrency caveat remains | Re-estimate follow-up separately |
-| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Gates complete; logging and CI governance criteria open | Re-estimate remaining criteria |
-| 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | 05.0–05.2 locally accepted; 05.3 partial; 05.4–05.6 design only | Re-estimate after design approval |
+| 04 | `04-quality-contracts-observability.md` | Add verification, contract safety, structure readiness, and operational readiness | Local gates complete; external CI enforcement remains unverified | Re-estimate remaining criteria |
+| 05 | `05-pos-manufacturing-expansion.md` | Expose POS and manufacturing capabilities beyond the MVP slice | 05.0–05.2 locally accepted; 05.3 locally implemented (independent review and external acceptance remain open); 05.4–05.6 design only | Re-estimate after design approval |
 
 The original 19–34 engineer-day MVP estimate predates completed Phase 03 and
 much of Phase 04; it is not a current remaining-work estimate. Re-estimate open
@@ -100,7 +99,7 @@ Phase discipline:
 - [x] Complete the Phase 04 project structure gate before starting Phase 05 implementation
 - [x] Complete the Phase 05.0 authentication and authorization baseline before Phase 05 expansion implementation, under the maintainer-approved deferred-deployment exception
 
-The [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) is accepted and 04.6 is complete. The remaining Phase 04 Definition-of-Done criteria for request-correlated repository logging and external CI required-check enforcement remain separately tracked; they do not reopen the project-structure gate. Phase 05 development remains subject to the 05.0 deferred-deployment restrictions.
+The [project structure decision](../knowledge/PROJECT_STRUCTURE_DECISION.md) is accepted and 04.6 is complete. Request-correlated repository logging is implemented and locally verified; external CI required-check enforcement remains unverified, so full Phase 04 acceptance remains open. The external CI criterion does not reopen the project-structure gate. Phase 05 development remains subject to the 05.0 deferred-deployment restrictions.
 
 Later phase files may be used for planning and context. Do not build IAM before
 the platform proves its order-to-inventory workflow:

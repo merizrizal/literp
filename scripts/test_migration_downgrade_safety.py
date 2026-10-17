@@ -8,6 +8,8 @@ postgres database. No existing application database is migrated or dropped.
 from __future__ import annotations
 
 import os
+import threading
+import time
 from pathlib import Path
 import unittest
 from urllib.parse import urlsplit, urlunsplit
@@ -144,6 +146,81 @@ class PosDowngradeSafetyTest(unittest.TestCase):
         command.upgrade(self.config, "f4b8d2e6c1a9")
         self.execute("UPDATE pos_shift SET operator_id = repeat('a', 100)")
         self.assert_refused("f4b8d2e6c1a9", "SELECT * FROM pos_shift ORDER BY shift_id")
+
+    def test_concurrent_refund_write_is_not_erased_by_downgrade(self) -> None:
+        command.upgrade(self.config, "head")
+        fixture = self.query(
+            """
+            SELECT r.receipt_id, p.payment_id, s.shift_id
+            FROM receipt r
+            JOIN payment p ON p.sales_order_id = r.sales_order_id
+            CROSS JOIN pos_shift s
+            LIMIT 1
+            """
+        )
+        self.assertTrue(fixture, "A refund race requires seeded receipt/payment/shift")
+        receipt_id, payment_id, shift_id = fixture[0]
+        refund_id = str(uuid4())
+        writer = psycopg.connect(self.db_url)
+        writer.execute(
+            """
+            INSERT INTO pos_receipt_refund (
+                refund_id, receipt_id, payment_id, refund_shift_id,
+                actor_subject, reason, amount, currency
+            ) VALUES (%s, %s, %s, %s, 'race-test', 'downgrade race', 0.01, 'USD')
+            """,
+            (refund_id, receipt_id, payment_id, shift_id),
+        )
+        downgrade_errors: list[Exception] = []
+
+        def downgrade() -> None:
+            try:
+                command.downgrade(self.config, "b2d6f8a1c4e3")
+            except Exception as error:
+                downgrade_errors.append(error)
+
+        downgrade_thread = threading.Thread(target=downgrade)
+        try:
+            downgrade_thread.start()
+            deadline = time.monotonic() + 10
+            waiting = []
+            while time.monotonic() < deadline:
+                waiting = self.query(
+                    """
+                    SELECT query FROM pg_stat_activity
+                    WHERE datname = current_database()
+                        AND pid <> pg_backend_pid()
+                        AND wait_event_type = 'Lock'
+                    """
+                )
+                if waiting or not downgrade_thread.is_alive():
+                    break
+                time.sleep(0.02)
+            self.assertTrue(
+                waiting, "Downgrade must wait for the in-flight refund transaction"
+            )
+            writer.commit()
+            downgrade_thread.join(timeout=10)
+            self.assertFalse(downgrade_thread.is_alive(), "Downgrade did not finish")
+            self.assertEqual(1, len(downgrade_errors))
+            self.assertIsInstance(downgrade_errors[0], RuntimeError)
+            self.assertIn(
+                "Cannot downgrade receipt/refund storage",
+                str(downgrade_errors[0]),
+            )
+            self.assertEqual(
+                [("c7a8e2f4d6b1",)],
+                self.query("SELECT version_num FROM alembic_version"),
+            )
+            self.assertEqual(
+                [(refund_id,)],
+                self.query("SELECT refund_id FROM pos_receipt_refund"),
+            )
+        finally:
+            if downgrade_thread.is_alive():
+                writer.rollback()
+                downgrade_thread.join(timeout=10)
+            writer.close()
 
     def test_legacy_only_database_can_downgrade_and_upgrade(self) -> None:
         command.upgrade(self.config, "b2d6f8a1c4e3")
