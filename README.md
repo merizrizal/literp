@@ -35,11 +35,11 @@ The order process API supports:
 
 ## Stack
 
-- Kotlin `2.4.20`
-- Vert.x `5.2.0`
+- Kotlin `2.4.21`
+- Vert.x `5.2.1`
 - Java `25`
 - RxJava3
-- PostgreSQL
+- PostgreSQL with SCRAM client `3.4` for SASL/SCRAM authentication
 - OpenAPI 3.0
 - Alembic migrations
 

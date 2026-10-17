@@ -69,9 +69,10 @@ This directory documents the current implementation on this branch.
 
 ## Current Implementation Snapshot
 
-- Kotlin `2.4.20`
-- Vert.x `5.2.0`
+- Kotlin `2.4.21`
+- Vert.x `5.2.1`
 - Java `25`
+- SCRAM client `3.4` for PostgreSQL SASL/SCRAM authentication
 - 41 implemented API endpoints across 6 API domains, including scoped receipt lookups
 - 2 authenticated POS receipt-generation/refund write placeholders (`501 NOT_IMPLEMENTED`), for 43 registered operations
 - 5 utility endpoints (two public probes and three restricted operational routes)

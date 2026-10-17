@@ -4,11 +4,11 @@ This document describes the implementation that exists on the current branch, no
 
 ## Stack
 
-- Kotlin `2.4.20`
-- Vert.x `5.2.0`
+- Kotlin `2.4.21`
+- Vert.x `5.2.1`
 - Java `25`
 - RxJava3
-- PostgreSQL
+- PostgreSQL with SCRAM client `3.4` for SASL/SCRAM authentication
 - Vert.x OpenAPI RouterBuilder
 - Vert.x service proxies
 - Alembic for schema and seed migrations
