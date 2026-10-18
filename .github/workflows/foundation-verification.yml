@@ -161,3 +161,8 @@ jobs:
         env:
           ROOT_DIR: ${{ github.workspace }}
           DB_URL: postgresql://root:pgdevpassword@localhost:5432/literp_ci
+
+      - name: Verify POS downgrade safety in temporary databases
+        run: python -B scripts/test_migration_downgrade_safety.py
+        env:
+          LITERP_MIGRATION_TEST_ADMIN_URL: postgresql://root:pgdevpassword@127.0.0.1:5432/postgres

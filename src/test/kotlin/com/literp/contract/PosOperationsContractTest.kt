@@ -51,8 +51,8 @@ class PosOperationsContractTest {
     }
 
     @Test
-    fun remainingPosWritePlaceholdersReturnNotImplementedWithoutSuccessData() {
-        placeholderRequests().forEach { request ->
+    fun posWriteHandlersDenyMissingAuthorizedContextWithoutSuccessData() {
+        writeRequests().forEach { request ->
             val requestId = "request-${request.operationId}"
             val result = http.request(
                 method = request.method,
@@ -60,11 +60,11 @@ class PosOperationsContractTest {
                 headers = mapOf("X-Request-ID" to requestId)
             )
 
-            assertEquals(501, result.status, "Unexpected status for ${request.operationId}")
+            assertEquals(403, result.status, "Unexpected status for ${request.operationId}")
             assertEquals(requestId, result.header("X-Request-ID"))
             val json = requireNotNull(result.json)
-            assertErrorEnvelope(json, 501, "NOT_IMPLEMENTED")
-            assertFalse(json.containsKey("data"), "Placeholder reported successful data for ${request.operationId}")
+            assertErrorEnvelope(json, 403, "FORBIDDEN")
+            assertFalse(json.containsKey("data"), "Denied write reported successful data for ${request.operationId}")
         }
     }
 
@@ -119,7 +119,7 @@ class PosOperationsContractTest {
         assertEquals(expectedFiles, actualFiles, "POS Bruno request inventory must match the contract")
         assertEquals(12, actualFiles.size, "Every POS operation must have one Bruno request")
 
-        val placeholderOperationIds = placeholderRequests().map { it.operationId }.toSet()
+        val placeholderOperationIds = emptySet<String>()
         val openApiPaths = requireNotNull(
             JsonObject(Files.readString(Path.of("api_collections/open_api_spec/pos-operations.json"))).getJsonObject("paths")
         )
@@ -192,6 +192,19 @@ class PosOperationsContractTest {
             terminalId: String,
             authorizedLocationIds: JsonArray
         ): Future<io.vertx.core.json.JsonObject> = Future.failedFuture("Terminal reads are not exercised by this placeholder test")
+
+        override fun generatePosReceipt(
+            salesOrderId: String,
+            idempotencyKey: String,
+            actorSubject: String,
+            organizationId: String,
+            authorizedLocationIds: JsonArray
+        ): Future<JsonObject> = Future.failedFuture("Issuance is exercised by production HTTP tests")
+
+        override fun createPosReceiptRefund(
+            receiptId: String, paymentId: String, amount: String, shiftId: String, reason: String,
+            idempotencyKey: String, actorSubject: String, organizationId: String, authorizedLocationIds: JsonArray
+        ): Future<JsonObject> = Future.failedFuture("Refunds are exercised by production HTTP tests")
 
         override fun getPosReceiptByNumber(
             receiptNumber: String,
@@ -297,7 +310,7 @@ class PosOperationsContractTest {
         post("/api/v1/pos/receipts/:receiptId/refunds").handler(handler::createPosReceiptRefund)
     }
 
-    private fun placeholderRequests(): List<PlaceholderRequest> = listOf(
+    private fun writeRequests(): List<PlaceholderRequest> = listOf(
         PlaceholderRequest("generatePosReceipt", "POST", "/api/v1/pos/orders/order-1/receipts"),
         PlaceholderRequest("createPosReceiptRefund", "POST", "/api/v1/pos/receipts/receipt-1/refunds")
     )

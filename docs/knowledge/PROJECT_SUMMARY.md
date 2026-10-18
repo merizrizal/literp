@@ -4,22 +4,22 @@ Literp is currently a Kotlin and Vert.x backend that implements a lightweight ER
 
 ### Current runtime characteristics
 
-- Kotlin `2.4.20` on Java `25`
-- Vert.x `5.2.0`
-- PostgreSQL via Vert.x PG client
+- Kotlin `2.4.21` on Java `25`
+- Vert.x `5.2.1`
+- PostgreSQL via Vert.x PG client with SCRAM client `3.4` for SASL/SCRAM authentication
 - RxJava3 for asynchronous repository flows
 - OpenAPI-based routing
 
 ### What is implemented
 
 - utility endpoints for index, metrics, liveness, readiness, and database health
-- 43 registered API operations: 41 implemented and two authenticated receipt/refund write placeholders, across:
+- 43 registered and implemented API operations, across:
   - Unit of Measure
   - Product
   - Product Variant
   - Location
   - Order Process
-  - POS Operations (terminals, shifts and scoped receipt reads)
+  - POS Operations (terminals, shifts, scoped receipt reads, immutable issuance and local audited refunds)
 - application-side authentication and authorization; provider/deployment acceptance remains pending
 
 ### Data model currently present
@@ -41,8 +41,8 @@ Literp is currently a Kotlin and Vert.x backend that implements a lightweight ER
 
 ### Current implementation caveats
 
-- receipt generation and refund writes remain authenticated 501 placeholders
+- refunds are local financial records only; no payment-provider settlement, inventory return or fiscal compliance is claimed
 - manufacturing APIs are design only; partial fulfillment and offline synchronization remain deferred
 - shared stock-writer serialization and stable catalog unit/type guards are proposed prerequisites, not implemented guarantees
-- Phase 04 repository request correlation and external CI required-check enforcement remain open
+- repository request correlation is locally verified; external CI required-check enforcement remains unconfirmed
 - see the [ADS coverage review](../implementation-plan/ADS_COVERAGE_REVIEW.md) for requirement gaps and current evidence boundaries

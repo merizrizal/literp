@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Literp POS Operations API",
-    "description": "Location-scoped POS terminal, shift, and receipt operations.\nThe eight terminal and shift operations and both receipt lookup operations\nare implemented; receipt generation and refunds remain authenticated\nplaceholders that return 501.\n",
+    "description": "Location-scoped POS terminal, shift, and receipt operations.\nTerminal/shift operations, receipt lookup and receipt issuance are implemented.\nRefunds are audited local ledger records with refund-shift cash reconciliation; no external settlement is claimed.\n",
     "version": "0.0.1"
   },
   "servers": [
@@ -584,13 +584,25 @@
           "POS Receipts"
         ],
         "summary": "Generate a POS receipt for a fulfilled sales order",
-        "description": "Issue one immutable receipt for a fulfilled, attributed POS order.\nThis is an internal record, not a fiscal/tax document; no tax is\ncalculated. This authenticated operation currently returns 501 and\ndoes not create a receipt or claim an idempotency key.\n",
+        "description": "Issue one immutable receipt for a fulfilled, attributed POS order.\nThis is an internal record, not a fiscal/tax document; no tax is\ncalculated. Requires a human issuer with the persisted order-location grant\nand exact captured settlement (underpayment and excess tender conflict).\nThe original sale shift may be closed. Same-key retries return the original\n201 response after authorization; a different key after issuance conflicts.\n",
         "operationId": "generatePosReceipt",
         "parameters": [
           {
             "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "description": "No client-owned issuance fields; issuer and totals are server-derived."
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "POS receipt issued.",
@@ -617,9 +629,6 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
-          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -637,7 +646,7 @@
           "POS Receipts"
         ],
         "summary": "Create a refund adjustment for a POS receipt",
-        "description": "Record an audited, payment-specific refund against a receipt. Refunds\nare local ledger records and do not contact an external payment\nprovider. This authenticated operation currently returns 501.\n",
+        "description": "Record an audited, payment-specific refund against a receipt. Refunds\nare local ledger records and do not contact an external payment\nprovider. Requires a human owner of an open reconcilable refund shift,\nmatching sale location/currency, an API-issued receipt and its original\ncaptured payment. Payment and receipt caps and available drawer cash are\nenforced transactionally. Authorized same-key retries replay after close.\n",
         "operationId": "createPosReceiptRefund",
         "parameters": [
           {
@@ -685,9 +694,6 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
-          },
-          "501": {
-            "$ref": "#/components/responses/NotImplemented"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"

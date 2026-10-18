@@ -24,6 +24,19 @@ public interface PosOperationsService {
 
     Future<JsonObject> getPosTerminal(String terminalId, JsonArray authorizedLocationIds);
 
+    Future<JsonObject> generatePosReceipt(
+        String salesOrderId,
+        String idempotencyKey,
+        String actorSubject,
+        String organizationId,
+        JsonArray authorizedLocationIds
+    );
+
+    Future<JsonObject> createPosReceiptRefund(
+        String receiptId, String paymentId, String amount, String shiftId, String reason,
+        String idempotencyKey, String actorSubject, String organizationId, JsonArray authorizedLocationIds
+    );
+
     Future<JsonObject> getPosReceiptByNumber(String receiptNumber, JsonArray authorizedLocationIds);
 
     Future<JsonObject> listPosReceiptsBySalesOrder(

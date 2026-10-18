@@ -35,6 +35,24 @@ class PosOperationsServiceImpl(
         authorizedLocationIds = authorizedLocationIds.toAuthorizedLocationIds()
     ).toVertxFuture()
 
+    override fun generatePosReceipt(
+        salesOrderId: String,
+        idempotencyKey: String,
+        actorSubject: String,
+        organizationId: String,
+        authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.generatePosReceipt(
+        salesOrderId, idempotencyKey, actorSubject, organizationId, authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
+    override fun createPosReceiptRefund(
+        receiptId: String, paymentId: String, amount: String, shiftId: String, reason: String,
+        idempotencyKey: String, actorSubject: String, organizationId: String, authorizedLocationIds: JsonArray
+    ): Future<JsonObject> = repository.createPosReceiptRefund(
+        receiptId, paymentId, amount, shiftId, reason, idempotencyKey, actorSubject, organizationId,
+        authorizedLocationIds.toAuthorizedLocationIds()
+    ).toVertxFuture()
+
     override fun getPosReceiptByNumber(
         receiptNumber: String,
         authorizedLocationIds: JsonArray

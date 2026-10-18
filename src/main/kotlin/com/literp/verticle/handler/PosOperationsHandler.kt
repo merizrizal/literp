@@ -3,6 +3,7 @@ package com.literp.verticle.handler
 import com.literp.repository.PosOperationsScopeViolation
 import com.literp.repository.PosOperationsValidation
 import com.literp.security.AuthenticatedPrincipal
+import com.literp.security.PrincipalKind
 import com.literp.service.pos.PosOperationsService
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -346,11 +347,37 @@ class PosOperationsHandler(
     }
 
     fun generatePosReceipt(context: RoutingContext) {
-        respondNotImplemented(context)
+        val locations = authorizedLocationIds(context) ?: return
+        val principal = authenticatedPrincipal(context) ?: return
+        if (principal.principalKind != PrincipalKind.HUMAN) {
+            putErrorResponse(context, 403, "Forbidden", SecurityFailureCodes.FORBIDDEN)
+            return
+        }
+        if (hasUnsupportedFields(context, requestBody(context), emptySet())) return
+        val orderId = context.pathParam("salesOrderId")?.trim().orEmpty()
+        val key = context.request().getHeader("Idempotency-Key")?.trim().orEmpty()
+        posOperationsService.generatePosReceipt(
+            orderId, key, principal.subject, principal.organizationId, JsonArray(locations.toList())
+        ).onSuccess { putSuccessResponse(context, 201, it) }
+            .onFailure { putMappedErrorResponse(context, it, "Failed to issue POS receipt", "POS order not found") }
     }
 
     fun createPosReceiptRefund(context: RoutingContext) {
-        respondNotImplemented(context)
+        val locations = authorizedLocationIds(context) ?: return
+        val principal = authenticatedPrincipal(context) ?: return
+        if (principal.principalKind != PrincipalKind.HUMAN) {
+            putErrorResponse(context, 403, "Forbidden", SecurityFailureCodes.FORBIDDEN)
+            return
+        }
+        val body = requestBody(context)
+        if (hasUnsupportedFields(context, body, setOf("paymentId", "amount", "shiftId", "reason"))) return
+        posOperationsService.createPosReceiptRefund(
+            context.pathParam("receiptId").orEmpty(), bodyString(body, "paymentId").orEmpty(),
+            body?.getValue("amount")?.toString().orEmpty(), bodyString(body, "shiftId").orEmpty(),
+            bodyString(body, "reason").orEmpty(), context.request().getHeader("Idempotency-Key").orEmpty(),
+            principal.subject, principal.organizationId, JsonArray(locations.toList())
+        ).onSuccess { putSuccessResponse(context, 201, it) }
+            .onFailure { putMappedErrorResponse(context, it, "Failed to record POS refund", "POS refund resource not found") }
     }
 
     private fun putReceiptReadErrorResponse(
@@ -409,17 +436,7 @@ class PosOperationsHandler(
         return principal
     }
 
-    private fun respondNotImplemented(context: RoutingContext) {
-        putErrorResponse(
-            context = context,
-            statusCode = 501,
-            message = "POS operation is not implemented",
-            errorCode = NOT_IMPLEMENTED_ERROR_CODE
-        )
-    }
-
     private companion object {
-        const val NOT_IMPLEMENTED_ERROR_CODE = "NOT_IMPLEMENTED"
         val TERMINAL_SORT_FIELDS = setOf("terminalCode", "createdAt")
         val CREATE_TERMINAL_FIELDS = setOf("locationId", "terminalCode", "deviceName")
         val UPDATE_TERMINAL_FIELDS = setOf("terminalCode", "deviceName")

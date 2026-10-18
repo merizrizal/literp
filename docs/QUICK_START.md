@@ -1,7 +1,7 @@
 # Quick Start
 
 This guide matches the current branch state:
-- 43 authenticated business operations: 41 implemented, two receipt/refund write placeholders
+- 43 authenticated business operations, all implemented
 - 5 utility endpoints: two public probes and three restricted operational routes
 - schema + seed data via Alembic
 - Bruno collection in `api_collections/Literp` with bearer inheritance
@@ -72,6 +72,23 @@ source python/database/envrc.test
 Because runtime config supports `DB_*` overrides, values from
 `python/database/envrc.test` take precedence over `cfg.properties`.
 
+## Configure Authentication Before Running
+
+Startup requires `LITERP_AUTH_ISSUER`, `LITERP_AUTH_AUDIENCE`,
+`LITERP_AUTH_ORGANIZATION_ID`, and `LITERP_AUTH_JWKS_PATH`. Provision the
+provider's public JWKS file and configure these environment variables before
+`./gradlew run`; missing/invalid configuration fails startup even if PostgreSQL
+is healthy. Follow the [runtime authentication contract](knowledge/AUTHENTICATION_BASELINE.md#runtime-configuration).
+Keep tokens, private keys, and local deployment configuration out of Git.
+
+### Local Keycloak provider integration
+
+For a disposable real Keycloak environment with the exact local issuer,
+capabilities, seeded location IDs, service-client smoke, JWKS provisioning, and
+PKCE boundary guidance, see [docker/keycloak/README.md](../docker/keycloak/README.md).
+This local provider proves integration behavior only and does not replace
+non-production provider or deployment acceptance.
+
 ## Build and Run
 
 ```bash
@@ -84,14 +101,6 @@ Server URLs:
 - liveness: `http://localhost:8010/health/live` (public)
 - operational health: `http://localhost:8010/health/db` (requires an authorized operator/service token)
 - API base: `http://localhost:8010/api/v1` (requires an authorized bearer token)
-
-## Local Keycloak provider integration
-
-For a disposable real Keycloak environment with the exact local issuer,
-capabilities, seeded location IDs, service-client smoke, JWKS provisioning, and
-PKCE boundary guidance, see [docker/keycloak/README.md](../docker/keycloak/README.md).
-This local provider proves integration behavior only and does not replace
-non-production provider or deployment acceptance.
 
 ## First Checks
 
@@ -129,7 +138,7 @@ Useful collection variables are already defined in [`collection.bru`](../api_col
 The collection includes:
 - public probes (`/`, `/health/live`) with `auth: none`
 - restricted operational endpoints (`/metrics`, `/health/ready`, `/health/db`)
-- all 43 authenticated business API operations, with receipt-generation/refund writes explicitly marked as placeholders
+- all 43 authenticated business API operations, including immutable receipt issuance and local audited refunds
 - request bodies aligned to the actual handlers
 
 Protected requests inherit the bearer token configured at collection level.
@@ -178,8 +187,8 @@ DB_URL=postgresql://root:pgdevpassword@localhost:55432/literp_test alembic upgra
 | Product Variant | 5 |
 | Location | 6 |
 | Order Process (including stock queries) | 10 |
-| POS Operations | 12 (10 implemented, 2 write placeholders) |
-| Total | 43 registered (41 implemented) |
+| POS Operations | 12 (all implemented) |
+| Total | 43 registered (all implemented) |
 
 ## Current Behavior Notes
 

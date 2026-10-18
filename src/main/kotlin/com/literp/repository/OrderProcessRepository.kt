@@ -707,8 +707,11 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             WHERE sales_order_id = $1 AND status = 'CAPTURED'
         """.trimIndent()
 
-        if (amount <= BigDecimal.ZERO) {
-            return Single.error(Exception("amount must be > 0"))
+        if (amount <= BigDecimal.ZERO || amount > BigDecimal("999999999999.99")) {
+            return Single.error(PosOrderValidation("amount must be > 0 and at most 999999999999.99"))
+        }
+        if (amount.scale() > 2) {
+            return Single.error(PosOrderValidation("amount must have at most two decimal places"))
         }
         if (idempotencyKeyValue.isBlank()) {
             return Single.error(Exception("Idempotency-Key is required"))
@@ -821,6 +824,7 @@ class OrderProcessRepository(pool: Pool) : BaseRepository(pool, OrderProcessRepo
             SELECT sales_order_id, status, location_id, total_amount
             FROM sales_order
             WHERE sales_order_id = $1
+            FOR NO KEY UPDATE
         """.trimIndent()
         val capturedTotalQuery = """
             SELECT COALESCE(SUM(amount), 0) AS total_captured

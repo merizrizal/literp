@@ -808,6 +808,85 @@ class OrderProcessRepositoryTransactionTest {
     }
 
     @Test
+    fun captureRejectsInvalidMoneyBeforeDatabaseWork() {
+        listOf("0", "-1", "0.004", "1.999", "1.000", "1000000000000.00").forEach { amount ->
+            orderRepository.capturePayment(UUID.randomUUID().toString(), "CARD", amount.toBigDecimal(), null, "invalid-money")
+                .test().assertError { it is PosOrderValidation }
+        }
+    }
+
+    @Test
+    fun concurrentFulfillmentWithDifferentKeysWritesMovementsOnlyOnce() {
+        val seed = createSeedOrder("FULRACE")
+        val commands = mutableListOf<java.util.concurrent.CompletableFuture<Result<JsonObject>>>()
+        try {
+            orderRepository.confirmSalesOrder(seed.orderId, "CONFIRM-${seed.suffix}").blockingGet()
+            orderRepository.capturePayment(seed.orderId, "CARD", 30.toBigDecimal(), null, "PAY-${seed.suffix}").blockingGet()
+
+            val blocker = pool.rxGetConnection().blockingGet()
+            try {
+                val transaction = blocker.rxBegin().blockingGet()
+                try {
+                    val blockerPid = blocker.query("SELECT pg_backend_pid() AS pid").rxExecute()
+                        .blockingGet().first().getInteger("pid")
+                    blocker.preparedQuery("SELECT line_id FROM sales_order_line WHERE sales_order_id = $1 FOR UPDATE")
+                        .rxExecute(Tuple.of(seed.orderId)).blockingGet()
+                    (1..2).forEach { attempt ->
+                        commands += java.util.concurrent.CompletableFuture.supplyAsync {
+                            runCatching {
+                                orderRepository.fulfillSalesOrder(
+                                    seed.orderId, "tester", "concurrent shipment", "FULRACE-${seed.suffix}-$attempt"
+                                ).blockingGet()
+                            }
+                        }
+                    }
+
+                    // Both commands must reach the locked lines (or queue behind the order lock).
+                    // Without order serialization, both have already read the unfulfilled quantities.
+                    val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10)
+                    var waiting = 0L
+                    while (waiting < 2 && System.nanoTime() < deadline) {
+                        waiting = pool.preparedQuery(
+                            """
+                            WITH RECURSIVE blocked(pid) AS (
+                                SELECT pid FROM pg_stat_activity WHERE $1::integer = ANY(pg_blocking_pids(pid))
+                                UNION
+                                SELECT a.pid FROM pg_stat_activity a
+                                JOIN blocked b ON b.pid = ANY(pg_blocking_pids(a.pid))
+                            )
+                            SELECT COUNT(*) AS cnt FROM blocked
+                            """.trimIndent()
+                        ).rxExecute(Tuple.of(blockerPid)).blockingGet().first().getLong("cnt")
+                        if (waiting < 2) Thread.sleep(10)
+                    }
+                    assertEquals(2L, waiting, "Both fulfillment commands must be blocked before releasing the fixture")
+                } finally {
+                    transaction.rxRollback().blockingAwait()
+                }
+            } finally {
+                blocker.rxClose().blockingAwait()
+            }
+
+            val results = commands.map { it.get(10, java.util.concurrent.TimeUnit.SECONDS) }
+            assertEquals(1, results.count { it.isSuccess })
+            assertEquals(1, results.count { it.isFailure })
+            assertTrue(results.single { it.isFailure }.exceptionOrNull()?.message.orEmpty().contains("Only CONFIRMED orders"))
+            assertEquals("FULFILLED", results.single { it.isSuccess }.getOrThrow().getString("status"))
+            assertEquals(2L, countLong("SELECT COUNT(*) AS cnt FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId))
+            assertTrue(queryDecimal("SELECT SUM(quantity) AS quantity FROM inventory_movement WHERE reference_type = 'SALES_ORDER' AND reference_id = $1", seed.orderId, "quantity").compareTo(2.toBigDecimal()) == 0)
+            assertLineStatuses(seed.orderId, listOf("FULFILLED", "FULFILLED"))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM sales_order_event WHERE sales_order_id = $1 AND event_type = 'ORDER_FULFILLED'", seed.orderId))
+            assertEquals(1L, countLong("SELECT COUNT(*) AS cnt FROM order_command_idempotency WHERE sales_order_id = $1 AND command_name = 'fulfillSalesOrder'", seed.orderId))
+        } finally {
+            commands.forEach { it.get(10, java.util.concurrent.TimeUnit.SECONDS) }
+            cleanupOrderGraph(seed.orderId)
+            deleteProduct(seed.product1Id)
+            deleteProduct(seed.product2Id)
+            deleteLocation(seed.locationId)
+        }
+    }
+
+    @Test
     fun draftSalesOrderCanBeCancelledWithoutReservationsOrMovements() {
         val seed = createSeedOrder("DRAFTCAN")
 

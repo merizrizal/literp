@@ -51,6 +51,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove immutable POS order-to-shift attribution."""
+    """Refuse to discard audited order attribution."""
+    bind = op.get_bind()
+    bind.execute(sa.text("LOCK TABLE pos_order_context IN ACCESS EXCLUSIVE MODE"))
+    if bind.execute(sa.text("SELECT 1 FROM pos_order_context LIMIT 1")).first():
+        raise RuntimeError("Cannot downgrade: POS order attribution must be preserved")
     delete_index_if_exists("idx_pos_order_context_shift", "pos_order_context")
     op.drop_table("pos_order_context")

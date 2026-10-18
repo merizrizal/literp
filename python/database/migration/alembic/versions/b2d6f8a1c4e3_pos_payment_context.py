@@ -51,6 +51,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove immutable payment-to-shift attribution storage."""
+    """Refuse to discard captured-payment attribution."""
+    bind = op.get_bind()
+    bind.execute(sa.text("LOCK TABLE pos_payment_context IN ACCESS EXCLUSIVE MODE"))
+    if bind.execute(sa.text("SELECT 1 FROM pos_payment_context LIMIT 1")).first():
+        raise RuntimeError(
+            "Cannot downgrade: POS payment attribution must be preserved"
+        )
     delete_index_if_exists("idx_pos_payment_context_shift", "pos_payment_context")
     op.drop_table("pos_payment_context")

@@ -1,8 +1,8 @@
 import org.gradle.jvm.tasks.Jar
 
 buildscript {
-    System.setProperty("kotlinVersion", "2.4.20")
-    System.setProperty("vertxVersion", "5.2.0")
+    System.setProperty("kotlinVersion", "2.4.21")
+    System.setProperty("vertxVersion", "5.2.1")
 }
 
 group = "com.literp"
@@ -18,7 +18,7 @@ plugins {
     kotlin("jvm").version(kotlinVersion)
     id("java")
     id("org.graalvm.buildtools.native").version("0.11.3")
-    kotlin("kapt") version "2.4.20"
+    kotlin("kapt") version kotlinVersion
 }
 
 repositories {
@@ -55,7 +55,7 @@ dependencies {
     // Vertx PostgreSQL
     implementation("io.vertx:vertx-pg-client:$vertxVersion")
     // Scram SASL SCRAM-SHA-256
-    implementation("com.ongres.scram:scram-client:3.2")
+    implementation("com.ongres.scram:scram-client:3.4")
 
     testImplementation(kotlin("test"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")

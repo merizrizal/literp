@@ -1,6 +1,7 @@
 package com.literp.verticle.handler
 
 import com.literp.common.ErrorCodes
+import com.literp.observability.RequestCorrelation
 import com.literp.repository.OrderScopeRepository
 import com.literp.repository.OrderScopeViolation
 import com.literp.security.AuthorizationDecision
@@ -30,13 +31,15 @@ interface OrderScopeGateway {
 
 class OrderScopeHandler(
     private val scopeGateway: OrderScopeGateway,
-    private val actorAdapter: AuthenticatedActorAdapter = AuthenticatedActorAdapter()
+    private val actorAdapter: AuthenticatedActorAdapter = AuthenticatedActorAdapter(),
+    private val scopeGatewayForRequest: (RoutingContext) -> OrderScopeGateway = { scopeGateway }
 ) : BaseHandler(OrderScopeHandler::class.java) {
 
     constructor(
         scopeRepository: OrderScopeRepository,
         actorAdapter: AuthenticatedActorAdapter = AuthenticatedActorAdapter()
-    ) : this(RepositoryOrderScopeGateway(scopeRepository), actorAdapter)
+    ) : this(RepositoryOrderScopeGateway(scopeRepository), actorAdapter,
+        { context -> RepositoryOrderScopeGateway(scopeRepository, RequestCorrelation.id(context)) })
 
     fun authorize(operationId: String): Handler<RoutingContext> {
         require(operationId.isNotBlank()) { "Operation ID must not be blank" }
@@ -120,7 +123,7 @@ class OrderScopeHandler(
         val status = context.queryParam("status").firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
         val salesChannel = context.queryParam("salesChannel").firstOrNull()?.trim()?.takeIf { it.isNotBlank() }
 
-        scopeGateway.listAuthorizedOrders(
+        scopeGatewayForRequest(context).listAuthorizedOrders(
             page = page,
             size = size,
             sort = sort,
@@ -146,7 +149,7 @@ class OrderScopeHandler(
             return
         }
 
-        scopeGateway.findLocation(orderId).subscribe(
+        scopeGatewayForRequest(context).findLocation(orderId).subscribe(
             { locationId ->
                 if (locationId.isNotBlank() && locationId in authorizedLocationIds) {
                     context.next()
@@ -224,9 +227,12 @@ class OrderScopeHandler(
 }
 
 private class RepositoryOrderScopeGateway(
-    private val repository: OrderScopeRepository
+    private val repository: OrderScopeRepository,
+    private val requestId: String = "internal"
 ) : OrderScopeGateway {
-    override fun findLocation(orderId: String): Maybe<String> = repository.findLocation(orderId)
+    override fun findLocation(orderId: String): Maybe<String> = repository.trace(
+        requestId, "findOrderLocation", Maybe.defer { repository.findLocation(orderId) }
+    )
 
     override fun listAuthorizedOrders(
         page: Int,
@@ -236,7 +242,7 @@ private class RepositoryOrderScopeGateway(
         salesChannel: String?,
         locationId: String?,
         authorizedLocationIds: Set<String>
-    ): Single<JsonObject> = repository.listAuthorizedOrders(
+    ): Single<JsonObject> = repository.trace(requestId, "listAuthorizedOrders", Single.defer { repository.listAuthorizedOrders(
         page,
         size,
         sort,
@@ -244,5 +250,5 @@ private class RepositoryOrderScopeGateway(
         salesChannel,
         locationId,
         authorizedLocationIds
-    )
+    ) })
 }

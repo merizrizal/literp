@@ -504,6 +504,11 @@ components:
           enum: [CASH, CARD, DIGITAL, GIFT_CARD, OTHER]
         amount:
           type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 999999999999.99
+          multipleOf: 0.01
+          description: Positive numeric(14,2) amount; extra fractional digits are rejected, never rounded.
         transactionRef:
           type: string
           nullable: true

@@ -1,6 +1,7 @@
 package com.literp.verticle.handler
 
 import com.literp.common.ErrorCodes
+import com.literp.observability.RequestCorrelation
 import com.literp.repository.PosOperationsConflict
 import com.literp.repository.PosOperationsScopeViolation
 import com.literp.repository.PosOperationsValidation
@@ -10,6 +11,7 @@ import com.literp.repository.PosOrderValidation
 import io.vertx.core.internal.logging.LoggerFactory
 import io.vertx.core.json.JsonObject
 import io.vertx.rxjava3.ext.web.RoutingContext
+import io.vertx.serviceproxy.ServiceException
 import java.util.UUID
 
 open class BaseHandler(clazz: Class<*>) {
@@ -18,7 +20,6 @@ open class BaseHandler(clazz: Class<*>) {
 
     private companion object {
         const val REQUEST_ID_HEADER = "X-Request-ID"
-        const val REQUEST_ID_CONTEXT_KEY = "requestId"
     }
 
     protected data class ListQueryParams(val page: Int, val size: Int, val sort: String)
@@ -31,18 +32,7 @@ open class BaseHandler(clazz: Class<*>) {
         context.response().end(response.encode())
     }
 
-    private fun resolveRequestId(context: RoutingContext): String {
-        val existingRequestId = context.get<String>(REQUEST_ID_CONTEXT_KEY)
-        if (!existingRequestId.isNullOrBlank()) {
-            return existingRequestId
-        }
-
-        val requestId = context.request()?.getHeader(REQUEST_ID_HEADER)?.trim().orEmpty().ifBlank {
-            UUID.randomUUID().toString()
-        }
-        context.put(REQUEST_ID_CONTEXT_KEY, requestId)
-        return requestId
-    }
+    private fun resolveRequestId(context: RoutingContext): String = RequestCorrelation.id(context)
 
     protected fun putSuccessResponse(context: RoutingContext, statusCode: Int, data: JsonObject) {
         logSuccess(context, statusCode)
@@ -151,6 +141,12 @@ open class BaseHandler(clazz: Class<*>) {
         conflictMessage: String? = null
     ) {
         when {
+            error is ServiceException && error.failureCode() == 403 ->
+                putErrorResponse(context, 403, "Forbidden", ErrorCodes.FORBIDDEN)
+            error is ServiceException && error.failureCode() == 400 ->
+                putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
+            error is ServiceException && error.failureCode() == 409 ->
+                putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
             error is PosOrderScopeViolation ||
                 error.message?.contains("pos.order.use", ignoreCase = true) == true ||
                 error.message?.contains("shift owner mismatch", ignoreCase = true) == true ||
@@ -169,7 +165,7 @@ open class BaseHandler(clazz: Class<*>) {
             isNotFoundError(error.message) -> putErrorResponse(context, 404, notFoundMessage)
             isValidationError(error.message) -> putErrorResponse(context, 400, validationMessage ?: error.message ?: "Bad request")
             isConflictError(error.message) -> putErrorResponse(context, 409, conflictMessage ?: error.message ?: "Conflict")
-            else -> putErrorResponse(context, 500, "$internalErrorMessage: ${error.message}", error)
+            else -> putErrorResponse(context, 500, internalErrorMessage, error)
         }
     }
 

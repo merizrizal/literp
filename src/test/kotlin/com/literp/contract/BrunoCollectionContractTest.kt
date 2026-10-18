@@ -40,6 +40,18 @@ class BrunoCollectionContractTest {
         }
     }
 
+    @Test
+    fun collectionCredentialsAreEmptyAndBearerUsesLocalVariable() {
+        val document = Files.readString(COLLECTION_DIRECTORY.resolve("collection.bru"))
+        val tokenValues = Regex("""(?m)^\s*accessToken:[ \t]*(.*)$""").findAll(document).toList()
+        assertEquals(1, tokenValues.size, "Expected one local accessToken variable")
+        assertTrue(tokenValues.single().groupValues[1].isBlank(), "Committed accessToken must be empty")
+        val bearerValues = Regex("""(?m)^\s*token:[ \t]*(.*)$""").findAll(document).toList()
+        assertEquals(listOf("{{accessToken}}"), bearerValues.map { it.groupValues[1].trim() })
+        assertFalse(Regex("""eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+""").containsMatchIn(document),
+            "Collection must not contain JWT literals")
+    }
+
     private fun openApiOperations(): List<OpenApiOperation> = OPEN_API_FILES.flatMap { specPath ->
         var currentPath: String? = null
         var currentMethod: String? = null

@@ -18,7 +18,7 @@ class LocationHandler(private val locationService: LocationService) : BaseHandle
 
         locationService.listLocations(query.page, query.size, query.sort, code, name, locationType, activeOnly)
             .onSuccess { result -> putSuccessEnvelopeResponse(context, 200, result) }
-            .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations: ${error.message}", error) }
+            .onFailure { error -> putErrorResponse(context, 500, "Failed to list locations", error) }
     }
 
     fun createLocation(context: RoutingContext) {

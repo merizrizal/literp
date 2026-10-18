@@ -26,13 +26,13 @@ Grouped ADSs count as coverage; each task does not need a duplicate file.
 | [03.1–03.3](03-order-inventory-flow.md) | [Order command hardening](ads/phase-03-task-1-2-3.md) | Covered; historical design, plan records completion. Shared stock concurrency remains a later safety gap, not proven by command atomicity |
 | [03.4–03.6](03-order-inventory-flow.md) | [Movement semantics and verification](ads/phase-03-task-4-5-6.md) | Covered; historical design. Receipts/refunds belong to 05.3; partial fulfillment is deferred without a scheduled implementation task |
 | [04.1–04.2](04-quality-contracts-observability.md) | [Test and contract foundation](ads/phase-04-task-1-2.md) | Covered; recorded local evidence, not a current test run |
-| [04.3–04.4](04-quality-contracts-observability.md) | [CI and observability](ads/phase-04-task-3-4.md) | Covered; required-check enforcement and repository request correlation remain open |
+| [04.3–04.4](04-quality-contracts-observability.md) | [CI and observability](ads/phase-04-task-3-4.md) | Covered; repository correlation is locally verified, external required-check enforcement remains unconfirmed |
 | [04.5–04.6](04-quality-contracts-observability.md) | [Security and structure gates](ads/phase-04-task-5-6.md) | Covered; accepted decisions supersede original proposal status; no layout migration |
 | Phase 04 closure | [Closure verification](ads/phase-04-closure-verification.md) | Supplemental ADS, not a replacement for task ADSs; does not close remaining criteria |
 | [05.0](05-pos-manufacturing-expansion.md#050-authentication-and-authorization-baseline) | [Authentication](ads/phase-05-task-0.md) | Covered; application baseline accepted for development, external/deployment acceptance pending |
 | [05.1](05-pos-manufacturing-expansion.md#051-pos-operations-contract) | [POS contracts](ads/phase-05-task-1.md) | Covered; contract-publication slice locally accepted, historical placeholders subsequently replaced |
 | [05.2](05-pos-manufacturing-expansion.md#052-pos-terminal-and-shift-api) | [Terminal and shift](ads/phase-05-task-2.md) | Covered; locally accepted per plan, external smoke pending |
-| [05.3](05-pos-manufacturing-expansion.md#053-receipt-and-refund-api) | [Receipt and refund](ads/phase-05-task-3.md) | Covered; contracts, persistence foundation and scoped reads present; both writes still 501 |
+| [05.3](05-pos-manufacturing-expansion.md#053-receipt-and-refund-api) | [Receipt and refund](ads/phase-05-task-3.md) | Covered; scoped reads, receipt issuance, append-only refunds and reconciliation locally verified |
 | [05.4](05-pos-manufacturing-expansion.md#054-bom-api) | [BOM](ads/phase-05-task-4.md) | Covered, proposed only; sequencing and graph-lock/unit-stability decisions block implementation |
 | [05.5](05-pos-manufacturing-expansion.md#055-work-order-and-production-run-api) | [Work orders and runs](ads/phase-05-task-5.md) | Covered, proposed only; depends on implemented/accepted BOM contract |
 | [05.6](05-pos-manufacturing-expansion.md#056-manufacturing-inventory-movements) | [Inventory posting](ads/phase-05-task-6.md) | Covered, proposed only; depends on runs/snapshots and all stock-writer compatibility |
@@ -59,9 +59,9 @@ The Phase 01/02 absence is recorded rather than obscured by an invented historic
 ## Current source evidence used for status corrections
 
 - Four tracked OpenAPI YAML bundles declare 43 operation IDs; `HttpServerVerticle.kt` registers the matching business routes. The original 31-operation security matrix is a historical baseline, not a cap on expansion.
-- `PosOperationsHandler.kt`, receipt methods: both GET operations call the service; `generatePosReceipt` and `createPosReceiptRefund` call `respondNotImplemented`.
+- `PosOperationsHandler.kt`, receipt methods: both GET operations and `generatePosReceipt` call the service; both write operations delegate through the proxy; no POS handler remains a 501.
 - `PosOperationsRepository.kt`, `getPosReceiptByNumber` / `listPosReceiptsBySalesOrder`: SQL filters persisted order location; order-list reads are bounded and distinguish missing/hidden orders from an authorized empty list.
-- `PosOperationsContractTest.kt`, `placeholderRequests`: only the two write operations remain placeholders. This is inspected test code, not a test result from this review.
+- `PosOperationsContractTest.kt` verifies that no POS operation advertises 501 and write handlers deny missing scope context. Current execution evidence is recorded in `REVIEW_REPAIR_STATUS.md`.
 - Migration `c7a8e2f4d6b1_pos_receipt_refund_foundation.py` supplies fractional receipt totals, issuance metadata, uniqueness and refund storage. Schema presence does not enable write APIs.
 - `OrderProcessRepository.kt`, stock queries: current stock includes IN/ADJUSTMENT at destination, TRANSFER destination/source and OUT at source; available stock subtracts RESERVED quantities. The model's old SQL referenced a nonexistent movement `location_id` and omitted ADJUSTMENT.
 - `ProductRepository.updateProduct` still writes `product_type` and `base_uom` without the proposed historical-reference guard.
@@ -72,7 +72,7 @@ The Phase 01/02 absence is recorded rather than obscured by an invented historic
 - Confirm whether an external approved PRD adds requirements absent from the repository narrative.
 - Decide whether retrospective Phase 01/02 ADSs are needed; no runtime work is required solely because they are absent.
 - Preserve normal 05.3 → 05.4 → 05.5 → 05.6 sequencing unless independently authorized.
-- Approve receipt issuance/refund eligibility and financial semantics before enabling writes; recorded persistence/read work does not approve every proposal in the original ADS. In particular, settle overcaptured-payment versus receipt net/refund totals; paid-but-unfulfilled cancellation remains a separate recovery gap.
+- The maintainer approved the recommended remaining receipt/refund financial semantics during review repair; the 05.3 ADS records concrete decisions. Issuance now requires exact settlement, refusing excess tender rather than fabricating allocation. Refund/reconciliation implementation is locally verified, including refund/close serialization and immutable prior closed snapshots. Paid-but-unfulfilled cancellation and excess-tender recovery remain separate, undelivered gaps.
 - Settle production location, backflush versus measured usage, scrap allowance/rounding, separate posting versus atomic completion, shortage handling, historical cutover and MTO allocation expectations.
 - Approve shared stock/catalog/BOM graph locking and rollout compatibility before manufacturing activation. Never auto-replay historical WORK_ORDER movements.
 - Assign later delivery ownership if partial fulfillment, offline synchronization, transfers, fiscal documents or exclusive MTO allocation are required. They have no complete implementation ADS in this plan.
